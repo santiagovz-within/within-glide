@@ -9,9 +9,10 @@ interface NodeWrapperProps {
   selected?: boolean;
   children: React.ReactNode;
   minWidth?: number;
+  width?: number;
 }
 
-export function NodeWrapper({ title, icon, status, selected, children, minWidth = 280 }: NodeWrapperProps) {
+export function NodeWrapper({ title, icon, status, selected, children, minWidth = 280, width }: NodeWrapperProps) {
   return (
     <div
       className={cn(
@@ -24,7 +25,7 @@ export function NodeWrapper({ title, icon, status, selected, children, minWidth 
         boxShadow: selected
           ? '0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px var(--color-accent-glow)'
           : 'var(--shadow-node)',
-        minWidth,
+        width: width ?? minWidth,
       }}
     >
       {/* Title bar */}
