@@ -144,7 +144,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           Prompt
         </label>
         <textarea
-          className="w-full text-xs resize-none rounded-lg p-2 outline-none nodrag"
+          className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
           rows={3}
           placeholder="Describe what you want to generate…"
           value={data.prompt ?? ''}
@@ -239,16 +239,21 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             return (
               <div
                 key={i}
-                className="flex items-center px-2 text-xs rounded mb-0.5"
+                className="flex items-center text-xs mb-0.5"
                 style={{
                   height: REF_ROW_HEIGHT,
-                  background: 'var(--color-bg-surface)',
-                  border: `1px solid ${hasImage ? 'var(--color-accent)' : 'rgba(255,255,255,0.08)'}`,
-                  color: hasImage ? 'var(--color-accent)' : 'var(--color-white-muted)',
-                  transition: 'border-color 0.15s, color 0.15s',
+                  marginLeft: -12,
+                  paddingLeft: 14,
+                  paddingRight: 8,
+                  borderRadius: '0 6px 6px 0',
+                  background: hasImage ? '#3a1a6a' : 'var(--color-bg-surface)',
+                  border: hasImage ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                  borderLeft: 'none',
+                  color: hasImage ? '#a855f7' : 'var(--color-white-muted)',
+                  transition: 'background 0.15s, color 0.15s',
                 }}
               >
-                {hasImage ? '✓' : '○'}&nbsp;Image {i + 1}
+                Image {i + 1}
               </div>
             );
           })}

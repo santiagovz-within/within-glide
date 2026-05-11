@@ -5,11 +5,26 @@ import { Zap, Play } from 'lucide-react';
 import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
-import type { UpscaleNodeData } from '@/types';
+import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
 import { UPSCALE_MODELS } from '@/lib/api/models';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleNodeData }) {
   const [isUpscaling, setIsUpscaling] = useState(false);
+  const storeEdges = useFlowStore(state => state.edges);
+  const storeNodes = useFlowStore(state => state.nodes);
+
+  // Derive input image directly from connected source node — more reliable than event propagation
+  const incomingEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'image');
+  const sourceNode = incomingEdge ? storeNodes.find(n => n.id === incomingEdge.source) : undefined;
+  let inputImageUrl: string | undefined;
+  if (sourceNode?.type === 'imageInputNode') {
+    inputImageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
+  } else if (sourceNode?.type === 'imageGenNode') {
+    inputImageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
+  } else if (sourceNode?.type === 'upscaleNode') {
+    inputImageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+  }
 
   function updateData(updates: Partial<UpscaleNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {
@@ -18,7 +33,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
   }
 
   async function handleUpscale() {
-    if (!data.inputImageUrl || isUpscaling) return;
+    if (!inputImageUrl || isUpscaling) return;
     setIsUpscaling(true);
     updateData({ status: 'processing' });
 
@@ -28,7 +43,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: data.model,
-          imageUrl: data.inputImageUrl,
+          imageUrl: inputImageUrl,
           scaleFactor: data.scaleFactor,
           sourceType: 'canvas',
           nodeId: id,
@@ -95,14 +110,14 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         </div>
       </div>
 
-      {(data.inputImageUrl || data.outputImageUrl) && (
+      {(inputImageUrl || data.outputImageUrl) && (
         <div className="grid grid-cols-2 gap-1 mb-3">
-          {data.inputImageUrl && (
+          {inputImageUrl && (
             <div>
               <p className="text-xs mb-1" style={{ color: 'var(--color-white-muted)' }}>Before</p>
               <div className="rounded-lg overflow-hidden" style={{ width: '100%', maxHeight: 200 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={data.inputImageUrl} alt="Before" className="w-full h-auto object-contain" style={{ maxHeight: 200, display: 'block' }} />
+                <img src={inputImageUrl} alt="Before" className="w-full h-auto" style={{ maxHeight: 200, display: 'block' }} />
               </div>
             </div>
           )}
@@ -120,7 +135,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
 
       <button
         onClick={handleUpscale}
-        disabled={isUpscaling || !data.inputImageUrl}
+        disabled={isUpscaling || !inputImageUrl}
         className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
         style={{ background: '#fff', color: '#000' }}
       >

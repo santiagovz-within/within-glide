@@ -400,6 +400,7 @@ export function FlowCanvas() {
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{ animated: true, type: 'default' }}
         fitView
         fitViewOptions={{ padding: 0.2 }}

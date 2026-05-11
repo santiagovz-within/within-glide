@@ -98,7 +98,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           Prompt
         </label>
         <textarea
-          className="w-full text-xs resize-none rounded-lg p-2 outline-none nodrag"
+          className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
           rows={3}
           placeholder="Describe the video you want to generate…"
           value={data.prompt ?? ''}
