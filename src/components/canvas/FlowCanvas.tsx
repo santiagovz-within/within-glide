@@ -26,7 +26,7 @@ import { OutputNode } from './nodes/OutputNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData } from '@/types';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -210,12 +210,9 @@ export function FlowCanvas() {
     } as Node<NodeData>);
   }
 
-  // Propagate image URL from a source ImageInputNode to all consuming nodes
+  // Propagate image URL from any image-producing node to all consuming nodes
   const propagateImageToTarget = useCallback(
     (sourceNodeId: string, targetEdge: Edge, imageUrl: string | null) => {
-      const sourceNode = nodes.find((n) => n.id === sourceNodeId);
-      if (sourceNode?.type !== 'imageInputNode') return;
-
       const targetNode = nodes.find((n) => n.id === targetEdge.target);
       if (!targetNode) return;
       const handle = targetEdge.targetHandle ?? '';
@@ -277,18 +274,22 @@ export function FlowCanvas() {
       // Image propagation — push existing imageUrl into the newly connected target
       if (connection.sourceHandle === 'image') {
         const sourceNode = nodes.find((n) => n.id === connection.source);
+        let imageUrl: string | undefined;
         if (sourceNode?.type === 'imageInputNode') {
-          const { imageUrl } = sourceNode.data as { imageUrl?: string };
-          if (imageUrl) {
-            // Build a synthetic edge object to reuse propagateImageToTarget
-            propagateImageToTarget(connection.source, {
-              id: '',
-              source: connection.source,
-              target: connection.target,
-              sourceHandle: connection.sourceHandle,
-              targetHandle: connection.targetHandle,
-            }, imageUrl);
-          }
+          imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
+        } else if (sourceNode?.type === 'imageGenNode') {
+          imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
+        } else if (sourceNode?.type === 'upscaleNode') {
+          imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+        }
+        if (imageUrl) {
+          propagateImageToTarget(connection.source, {
+            id: '',
+            source: connection.source,
+            target: connection.target,
+            sourceHandle: connection.sourceHandle,
+            targetHandle: connection.targetHandle,
+          }, imageUrl);
         }
       }
     },

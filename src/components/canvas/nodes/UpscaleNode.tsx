@@ -38,6 +38,9 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
 
       if (result.mediaUrls?.[0]) {
         updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        document.dispatchEvent(new CustomEvent('node:image-propagate', {
+          detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
+        }));
       } else {
         updateData({ status: 'error' });
       }

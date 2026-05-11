@@ -93,6 +93,9 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       if (result.mediaUrls?.length) {
         updateData({ generatedImages: result.mediaUrls, status: 'completed' });
+        document.dispatchEvent(new CustomEvent('node:image-propagate', {
+          detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
+        }));
       } else {
         updateData({ status: 'error' });
       }
