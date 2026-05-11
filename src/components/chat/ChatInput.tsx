@@ -201,8 +201,8 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
                 onClick={() => updateSettings({ numGenerations: n })}
                 className="w-7 h-7 rounded-lg text-xs font-medium transition-colors"
                 style={{
-                  background: settings.numGenerations === n ? 'var(--color-accent)' : 'var(--color-bg-surface)',
-                  color: settings.numGenerations === n ? '#fff' : 'var(--color-white-muted)',
+                  background: settings.numGenerations === n ? '#fff' : 'var(--color-bg-surface)',
+                  color: settings.numGenerations === n ? '#000' : 'var(--color-white-muted)',
                   border: 'var(--border-default)',
                 }}
               >
@@ -217,7 +217,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
           onClick={onSubmit}
           disabled={!prompt.trim() || isGenerating}
           className="ml-auto flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-opacity disabled:opacity-40"
-          style={{ background: 'var(--color-accent)', color: '#fff' }}
+          style={{ background: '#fff', color: '#000' }}
         >
           <Send size={14} />
           {isGenerating ? 'Generating...' : 'Generate'}

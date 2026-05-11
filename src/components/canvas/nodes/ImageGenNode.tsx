@@ -1,8 +1,9 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Wand2, Play, Download } from 'lucide-react';
+import { Wand2, Play } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { downloadFromUrl } from '@/lib/utils/download';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
@@ -11,7 +12,7 @@ import { ASPECT_RATIOS } from '@/lib/utils/constants';
 
 const RESOLUTIONS = ['1K', '2K', '4K'];
 const MAX_REF_IMAGES = 14;
-const REF_ROW_HEIGHT = 28;
+const REF_ROW_HEIGHT = 36;
 
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -90,8 +91,6 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   }
 
   const generatedImages = data.generatedImages ?? [];
-  const aspectCss = data.aspectRatio.replace(':', '/');
-  const isWide = data.aspectRatio.startsWith('16') || data.aspectRatio.startsWith('21');
 
   return (
     <NodeWrapper
@@ -230,23 +229,19 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {generatedImages.length > 0 && (
         <div
           className="mb-3 grid gap-1"
-          style={{ gridTemplateColumns: `repeat(${isWide ? 1 : Math.min(generatedImages.length, 2)}, 1fr)` }}
+          style={{ gridTemplateColumns: `repeat(${Math.min(generatedImages.length, 2)}, 1fr)` }}
         >
           {generatedImages.map((url, i) => (
-            <div
-              key={i}
-              className="relative rounded-lg overflow-hidden group"
-              style={{ width: '100%', aspectRatio: aspectCss, maxHeight: 240 }}
-            >
+            <div key={i} className="rounded-lg overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={`Generated ${i + 1}`} className="w-full h-full object-cover" />
-              <a
-                href={url} download
-                className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity nodrag"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Download size={14} style={{ color: 'var(--color-white)' }} />
-              </a>
+              <img
+                src={url}
+                alt={`Generated ${i + 1}`}
+                className="w-full h-auto block cursor-pointer nodrag"
+                style={{ maxHeight: 300, objectFit: 'contain' }}
+                onClick={() => downloadFromUrl(url)}
+                title="Click to download"
+              />
             </div>
           ))}
         </div>
@@ -257,7 +252,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         onClick={handleGenerate}
         disabled={isGenerating}
         className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: 'var(--color-accent)', color: '#fff' }}
+        style={{ background: '#fff', color: '#000' }}
       >
         <Play size={12} />
         {isGenerating ? 'Generating…' : 'Generate'}

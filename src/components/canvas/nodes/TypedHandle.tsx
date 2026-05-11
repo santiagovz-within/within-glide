@@ -6,9 +6,15 @@ import { ImageIcon, Film, Type } from 'lucide-react';
 export type PortType = 'text' | 'image' | 'video';
 
 export const PORT_COLORS: Record<PortType, string> = {
-  text:  '#3b9eff', // blue
-  image: '#a855f7', // purple
-  video: '#34d399', // green
+  text:  '#3b9eff',
+  image: '#a855f7',
+  video: '#34d399',
+};
+
+export const PORT_TINTS: Record<PortType, string> = {
+  text:  'rgba(59,158,255,0.15)',
+  image: 'rgba(168,85,247,0.15)',
+  video: 'rgba(52,211,153,0.15)',
 };
 
 // Registry: `nodeType:handleId:source|target` → PortType
@@ -49,6 +55,7 @@ interface TypedHandleProps extends Omit<HandleProps, 'style'> {
 
 export function TypedHandle({ portType, offset, position, badge, ...rest }: TypedHandleProps) {
   const color = PORT_COLORS[portType];
+  const tint  = PORT_TINTS[portType];
   const isLeft = position === Position.Left;
   const isRight = position === Position.Right;
 
@@ -66,8 +73,8 @@ export function TypedHandle({ portType, offset, position, badge, ...rest }: Type
         width: 24,
         height: 24,
         borderRadius: '50%',
-        background: 'var(--color-bg-elevated)',
-        border: `2px solid ${color}`,
+        background: tint,
+        border: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

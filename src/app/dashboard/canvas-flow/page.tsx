@@ -203,7 +203,7 @@ export default function CanvasFlowPage() {
           <button
             onClick={() => createNewFlow()}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
-            style={{ background: 'var(--color-accent)', color: '#fff' }}
+            style={{ background: '#fff', color: '#000' }}
           >
             <Plus size={14} />
             New Flow
@@ -255,7 +255,7 @@ export default function CanvasFlowPage() {
               <button
                 onClick={() => createNewFlow()}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
-                style={{ background: 'var(--color-accent)', color: '#fff' }}
+                style={{ background: '#fff', color: '#000' }}
               >
                 <Plus size={14} />
                 New Flow

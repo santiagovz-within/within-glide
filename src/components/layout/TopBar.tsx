@@ -133,8 +133,8 @@ export function TopBar({ flowId }: TopBarProps) {
           disabled={!isDirty || isSaving}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
           style={{
-            background: isDirty ? 'var(--color-accent)' : 'transparent',
-            color: isDirty ? '#fff' : 'var(--color-white-muted)',
+            background: isDirty ? '#fff' : 'transparent',
+            color: isDirty ? '#000' : 'var(--color-white-muted)',
             border: isDirty ? 'none' : 'var(--border-default)',
           }}
         >

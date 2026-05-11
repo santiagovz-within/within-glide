@@ -119,7 +119,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         onClick={handleUpscale}
         disabled={isUpscaling || !data.inputImageUrl}
         className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: 'var(--color-accent)', color: '#fff' }}
+        style={{ background: '#fff', color: '#000' }}
       >
         <Play size={12} />
         {isUpscaling ? 'Upscaling…' : 'Upscale'}

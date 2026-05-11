@@ -122,8 +122,8 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full py-2.5 rounded-lg text-sm font-medium transition-opacity disabled:opacity-60"
             style={{
-              background: 'var(--color-accent)',
-              color: '#ffffff',
+              background: '#fff',
+              color: '#000',
             }}
           >
             {loading ? 'Signing in...' : 'Sign In'}

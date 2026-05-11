@@ -1,10 +1,11 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { MonitorPlay, Download, ImageIcon } from 'lucide-react';
+import { MonitorPlay, ImageIcon } from 'lucide-react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
 import type { OutputNodeData } from '@/types';
+import { downloadFromUrl } from '@/lib/utils/download';
 
 export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeData }) {
   return (
@@ -13,25 +14,25 @@ export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeDat
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
       {data.mediaUrl ? (
-        <div
-          className="rounded-lg overflow-hidden relative group"
-          style={{ width: '100%', aspectRatio: data.mediaType === 'video' ? '16/9' : 'auto', maxHeight: 240 }}
-        >
+        <div className="rounded-lg overflow-hidden">
           {data.mediaType === 'video' ? (
-            <video src={data.mediaUrl} controls className="w-full h-full object-cover" />
+            <video
+              src={data.mediaUrl}
+              controls
+              className="w-full h-auto block"
+              style={{ maxHeight: 260 }}
+            />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.mediaUrl} alt="Output" className="w-full h-auto object-contain" style={{ maxHeight: 240, display: 'block' }} />
+            <img
+              src={data.mediaUrl}
+              alt="Output"
+              className="w-full h-auto block cursor-pointer"
+              style={{ maxHeight: 300, objectFit: 'contain' }}
+              onClick={() => downloadFromUrl(data.mediaUrl!)}
+              title="Click to download"
+            />
           )}
-          <a
-            href={data.mediaUrl}
-            download
-            className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ background: 'rgba(0,0,0,0.6)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Download size={12} style={{ color: 'var(--color-white)' }} />
-          </a>
         </div>
       ) : (
         <div

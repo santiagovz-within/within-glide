@@ -66,13 +66,20 @@ function InvalidConnectionToast({ visible }: { visible: boolean }) {
 }
 
 export function FlowCanvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData } = useFlowStore();
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, setNodes, setEdges } = useFlowStore();
   const { screenToFlowPosition } = useReactFlow();
   const [contextMenu, setContextMenu]         = useState<ContextMenu | null>(null);
   const [invalidToast, setInvalidToast]       = useState(false);
   const [isDragOver, setIsDragOver]           = useState(false);
   const reactFlowWrapper                       = useRef<HTMLDivElement>(null);
   const invalidToastTimer                      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clipboardRef                           = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] } | null>(null);
+  const nodesRef                               = useRef(nodes);
+  const edgesRef                               = useRef(edges);
+
+  // Keep refs in sync for use in stable keyboard handler
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+  useEffect(() => { edgesRef.current = edges; }, [edges]);
 
   // Listen for node data updates from child nodes
   useEffect(() => {
@@ -98,6 +105,64 @@ export function FlowCanvas() {
     document.addEventListener('node:prompt-propagate', handlePromptPropagate);
     return () => document.removeEventListener('node:prompt-propagate', handlePromptPropagate);
   }, [edges, updateNodeData]);
+
+  // Copy / paste selected nodes (Ctrl/Cmd+C, Ctrl/Cmd+V)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
+      const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
+      if (!ctrlOrCmd) return;
+
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+
+      if (e.key === 'c') {
+        const selected = nodesRef.current.filter((n) => n.selected);
+        if (selected.length === 0) return;
+        const selectedIds = new Set(selected.map((n) => n.id));
+        const copiedEdges = edgesRef.current.filter(
+          (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)
+        );
+        clipboardRef.current = { nodes: selected, edges: copiedEdges };
+        e.preventDefault();
+      }
+
+      if (e.key === 'v') {
+        const cb = clipboardRef.current;
+        if (!cb || cb.nodes.length === 0) return;
+        const ts = Date.now();
+        const idMap = new Map<string, string>();
+
+        const newNodes: Node<NodeData>[] = cb.nodes.map((n, i) => {
+          const newId = `${n.type}-${ts}-${i}`;
+          idMap.set(n.id, newId);
+          return {
+            ...n,
+            id: newId,
+            position: { x: n.position.x + 50, y: n.position.y + 50 },
+            data: { ...n.data },
+            selected: true,
+          } as Node<NodeData>;
+        });
+
+        const newEdges: Edge[] = cb.edges.map((edge, i) => ({
+          ...edge,
+          id: `edge-${ts}-${i}`,
+          source: idMap.get(edge.source) ?? edge.source,
+          target: idMap.get(edge.target) ?? edge.target,
+          animated: true,
+        }));
+
+        setNodes([...nodesRef.current.map((n) => ({ ...n, selected: false })), ...newNodes]);
+        setEdges([...edgesRef.current, ...newEdges]);
+        e.preventDefault();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setNodes, setEdges]);
 
   // Connection validation — only allow matching port types
   const isValidConnection = useCallback<IsValidConnection<Edge>>(
