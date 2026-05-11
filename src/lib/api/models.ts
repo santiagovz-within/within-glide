@@ -35,13 +35,13 @@ export const FAL_MODELS = {
     type: 'video' as const,
   },
   'seedvr2': {
-    endpoint: 'fal-ai/clarity-upscaler',
-    scaleParam: 'upscaling_factor',
+    endpoint: 'fal-ai/seedvr/upscale/image',
+    scaleParam: 'upscale_factor',
     type: 'upscale' as const,
   },
   'topaz': {
-    endpoint: 'fal-ai/topaz/upscale',
-    scaleParam: 'scale',
+    endpoint: 'fal-ai/topaz/upscale/image',
+    scaleParam: 'upscale_factor',
     type: 'upscale' as const,
   },
 } as const;
@@ -121,7 +121,7 @@ export const MODELS: Record<string, ModelConfig> = {
   },
   'seedvr2': {
     id: 'seedvr2',
-    name: 'Clarity',
+    name: 'SeedVR2',
     provider: 'fal',
     type: 'upscale',
     supportedAspectRatios: [],

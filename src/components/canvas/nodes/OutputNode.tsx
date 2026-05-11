@@ -14,21 +14,26 @@ export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeDat
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
       {data.mediaUrl ? (
-        <div className="-m-3">
+        <div className="-m-3 overflow-hidden">
           {data.mediaType === 'video' ? (
             <video
               src={data.mediaUrl}
               controls
-              className="w-full h-auto block"
-              style={{ maxHeight: 260 }}
+              className="w-full block"
+              style={{ height: 'auto', maxHeight: 300 }}
             />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={data.mediaUrl}
               alt="Output"
-              className="w-full h-auto block cursor-pointer"
-              style={{ objectFit: 'contain' }}
+              className="w-full block cursor-pointer nodrag"
+              style={{
+                height: 'auto',
+                maxHeight: 360,
+                objectFit: 'contain',
+                background: 'var(--color-bg-darkest)',
+              }}
               onClick={() => downloadFromUrl(data.mediaUrl!)}
               title="Click to download"
             />
