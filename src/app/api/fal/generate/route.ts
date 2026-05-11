@@ -83,18 +83,30 @@ export async function POST(request: NextRequest) {
     const useEditEndpoint = referenceImageUrls.length > 0 && 'editEndpoint' in modelConfig;
     const endpoint = useEditEndpoint ? modelConfig.editEndpoint : modelConfig.endpoint;
     const usesAspectRatio = 'usesAspectRatio' in modelConfig && modelConfig.usesAspectRatio;
+    const supportsResolution = 'supportsResolution' in modelConfig && (modelConfig as { supportsResolution: boolean }).supportsResolution;
+    const editImageParam = 'editImageParam' in modelConfig ? (modelConfig as { editImageParam: string }).editImageParam : null;
 
-    console.log('[fal/generate] endpoint:', endpoint, '| refs:', referenceImageUrls.length, '| prompt:', prompt.slice(0, 80));
+    console.log('[fal/generate] endpoint:', endpoint, '| refs:', referenceImageUrls.length, '| usesAspectRatio:', usesAspectRatio, '| editImageParam:', editImageParam);
 
     for (let i = 0; i < numImages; i++) {
-      const falInput = {
+      const baseInput: Record<string, unknown> = {
         prompt,
         ...(usesAspectRatio
-          ? { aspect_ratio: aspectRatio }
+          ? { aspect_ratio: aspectRatio, ...(supportsResolution ? { resolution } : {}) }
           : { image_size: { width, height }, num_inference_steps: body.quality === 'high' ? 40 : body.quality === 'low' ? 20 : 28 }),
         ...(body.negativePrompt ? { negative_prompt: body.negativePrompt } : {}),
-        ...(referenceImageUrls[0] ? { image_url: referenceImageUrls[0] } : {}),
       };
+
+      // Reference image: nano-banana edit uses image_urls[], other fal models use image_url
+      if (referenceImageUrls[0]) {
+        if (editImageParam === 'image_urls') {
+          baseInput.image_urls = referenceImageUrls.filter(Boolean);
+        } else {
+          baseInput.image_url = referenceImageUrls[0];
+        }
+      }
+
+      const falInput = baseInput;
       console.log(`[fal/generate] image ${i + 1}/${numImages} input:`, JSON.stringify(falInput));
       const result = await fal.subscribe(endpoint as string, { input: falInput });
 

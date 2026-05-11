@@ -7,11 +7,17 @@ export const FAL_MODELS = {
   'nano-banana-2': {
     endpoint: 'fal-ai/nano-banana-2',
     editEndpoint: 'fal-ai/nano-banana-2/edit',
+    usesAspectRatio: true,
+    supportsResolution: true,
+    editImageParam: 'image_urls',
     type: 'image' as const,
   },
   'nano-banana-pro': {
     endpoint: 'fal-ai/nano-banana-pro',
     editEndpoint: 'fal-ai/nano-banana-pro/edit',
+    usesAspectRatio: true,
+    supportsResolution: true,
+    editImageParam: 'image_urls',
     type: 'image' as const,
   },
   'flux-2-pro': {
