@@ -1,9 +1,10 @@
 'use client';
 
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Position, type NodeProps } from '@xyflow/react';
 import { Film, Play } from 'lucide-react';
 import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
+import { TypedHandle } from './TypedHandle';
 import type { VideoGenNodeData } from '@/types';
 import { VIDEO_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
@@ -12,14 +13,12 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const [isGenerating, setIsGenerating] = useState(false);
 
   function updateData(updates: Partial<VideoGenNodeData>) {
-    const event = new CustomEvent('node:update', {
+    document.dispatchEvent(new CustomEvent('node:update', {
       detail: { nodeId: id, data: updates },
-    });
-    document.dispatchEvent(event);
+    }));
   }
 
   async function handleGenerate() {
-    if (!data.prompt) return;
     if (isGenerating) return;
     setIsGenerating(true);
     updateData({ status: 'processing' });
@@ -31,7 +30,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: data.model,
-          prompt: data.prompt,
+          prompt: data.prompt ?? '',
           aspectRatio: data.aspectRatio,
           duration: data.duration,
           startFrameUrl: data.startFrameUrl,
@@ -45,7 +44,6 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       if (result.mediaUrls?.[0]) {
         updateData({ videoUrl: result.mediaUrls[0], status: 'completed' });
       } else if (result.requestId) {
-        // Poll for async result
         pollForResult(result.requestId);
       } else {
         updateData({ status: 'error' });
@@ -57,11 +55,10 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   }
 
   async function pollForResult(requestId: string) {
-    const maxAttempts = 100;
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
-      if (attempts > maxAttempts) {
+      if (attempts > 100) {
         clearInterval(interval);
         updateData({ status: 'error' });
         setIsGenerating(false);
@@ -79,9 +76,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           updateData({ status: 'error' });
           setIsGenerating(false);
         }
-      } catch {
-        // keep polling
-      }
+      } catch { /* keep polling */ }
     }, 3000);
   }
 
@@ -93,24 +88,28 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       selected={selected}
       minWidth={300}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="prompt"
-        style={{ top: '30%', background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="start_frame"
-        style={{ top: '55%', background: 'var(--color-white-muted)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="end_frame"
-        style={{ top: '75%', background: 'var(--color-white-muted)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
+      <TypedHandle type="target" position={Position.Left} id="prompt"      portType="text"  offset="28%" />
+      <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset="54%" />
+      <TypedHandle type="target" position={Position.Left} id="end_frame"   portType="image" offset="72%" />
+
+      {/* Inline prompt */}
+      <div className="mb-3">
+        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
+          Prompt
+        </label>
+        <textarea
+          className="w-full text-xs resize-none rounded-lg p-2 outline-none nodrag"
+          rows={3}
+          placeholder="Describe the video you want to generate…"
+          value={data.prompt ?? ''}
+          onChange={(e) => updateData({ prompt: e.target.value })}
+          style={{
+            background: 'var(--color-bg-surface)',
+            border: 'var(--border-default)',
+            color: 'var(--color-white)',
+          }}
+        />
+      </div>
 
       {/* Model selector */}
       <div className="mb-2">
@@ -157,7 +156,6 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         </div>
       </div>
 
-      {/* Video preview */}
       {data.videoUrl && (
         <div className="mb-3 rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
           <video src={data.videoUrl} controls className="w-full h-full object-cover" />
@@ -166,20 +164,15 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
       <button
         onClick={handleGenerate}
-        disabled={isGenerating || !data.prompt}
+        disabled={isGenerating}
         className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
         style={{ background: 'var(--color-accent)', color: '#fff' }}
       >
         <Play size={12} />
-        {isGenerating ? 'Generating...' : 'Generate'}
+        {isGenerating ? 'Generating…' : 'Generate'}
       </button>
 
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="video"
-        style={{ background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
+      <TypedHandle type="source" position={Position.Right} id="video" portType="video" />
     </NodeWrapper>
   );
 }

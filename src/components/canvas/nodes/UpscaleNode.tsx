@@ -1,9 +1,10 @@
 'use client';
 
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play } from 'lucide-react';
 import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
+import { TypedHandle } from './TypedHandle';
 import type { UpscaleNodeData } from '@/types';
 import { UPSCALE_MODELS } from '@/lib/api/models';
 
@@ -11,10 +12,9 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
   const [isUpscaling, setIsUpscaling] = useState(false);
 
   function updateData(updates: Partial<UpscaleNodeData>) {
-    const event = new CustomEvent('node:update', {
+    document.dispatchEvent(new CustomEvent('node:update', {
       detail: { nodeId: id, data: updates },
-    });
-    document.dispatchEvent(event);
+    }));
   }
 
   async function handleUpscale() {
@@ -56,12 +56,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       selected={selected}
       minWidth={260}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        style={{ background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
+      <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
 
       <div className="mb-2">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
@@ -97,7 +92,6 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         </div>
       </div>
 
-      {/* Before/after preview */}
       {(data.inputImageUrl || data.outputImageUrl) && (
         <div className="grid grid-cols-2 gap-1 mb-3">
           {data.inputImageUrl && (
@@ -128,15 +122,10 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         style={{ background: 'var(--color-accent)', color: '#fff' }}
       >
         <Play size={12} />
-        {isUpscaling ? 'Upscaling...' : 'Upscale'}
+        {isUpscaling ? 'Upscaling…' : 'Upscale'}
       </button>
 
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        style={{ background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
+      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
     </NodeWrapper>
   );
 }

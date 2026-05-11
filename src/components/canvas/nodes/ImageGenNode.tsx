@@ -1,9 +1,10 @@
 'use client';
 
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Position, type NodeProps } from '@xyflow/react';
 import { Wand2, Play, Download } from 'lucide-react';
 import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
+import { TypedHandle } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
 import { IMAGE_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
@@ -14,14 +15,12 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const [isGenerating, setIsGenerating] = useState(false);
 
   function updateData(updates: Partial<ImageGenNodeData>) {
-    const event = new CustomEvent('node:update', {
+    document.dispatchEvent(new CustomEvent('node:update', {
       detail: { nodeId: id, data: updates },
-    });
-    document.dispatchEvent(event);
+    }));
   }
 
   async function handleGenerate() {
-    if (!data.prompt && !data.referenceImageUrl) return;
     if (isGenerating) return;
     setIsGenerating(true);
     updateData({ status: 'processing' });
@@ -38,17 +37,13 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           numImages: data.numImages,
           referenceImageUrls: data.referenceImageUrl ? [data.referenceImageUrl] : [],
           sourceType: 'canvas',
-          sourceId: undefined,
           nodeId: id,
         }),
       });
       const result = await res.json();
 
       if (result.mediaUrls?.length) {
-        updateData({
-          generatedImages: result.mediaUrls,
-          status: 'completed',
-        });
+        updateData({ generatedImages: result.mediaUrls, status: 'completed' });
       } else {
         updateData({ status: 'error' });
       }
@@ -69,23 +64,32 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       selected={selected}
       minWidth={300}
     >
-      {/* Inputs */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="prompt"
-        style={{ top: '35%', background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="reference_image"
-        style={{ top: '65%', background: 'var(--color-white-muted)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
+      {/* Input handles — positioned relative to the node card */}
+      <TypedHandle type="target" position={Position.Left} id="prompt"           portType="text"  offset="30%" />
+      <TypedHandle type="target" position={Position.Left} id="reference_image"  portType="image" offset="58%" />
+
+      {/* Inline prompt — editable directly or populated by a connected PromptNode */}
+      <div className="mb-3">
+        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
+          Prompt
+        </label>
+        <textarea
+          className="w-full text-xs resize-none rounded-lg p-2 outline-none nodrag"
+          rows={3}
+          placeholder="Describe what you want to generate…"
+          value={data.prompt ?? ''}
+          onChange={(e) => updateData({ prompt: e.target.value })}
+          style={{
+            background: 'var(--color-bg-surface)',
+            border: 'var(--border-default)',
+            color: 'var(--color-white)',
+          }}
+        />
+      </div>
 
       {/* Model selector */}
-      <div className="space-y-2 mb-3">
-        <label className="text-xs font-medium" style={{ color: 'var(--color-white-muted)' }}>Model</label>
+      <div className="mb-3">
+        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
         <select
           className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
           value={data.model}
@@ -134,10 +138,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           Images: {data.numImages}
         </label>
         <input
-          type="range"
-          min={1}
-          max={4}
-          value={data.numImages}
+          type="range" min={1} max={4} value={data.numImages}
           onChange={(e) => updateData({ numImages: Number(e.target.value) })}
           className="w-full nodrag"
           style={{ accentColor: 'var(--color-accent)' }}
@@ -146,14 +147,16 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* Generated previews */}
       {generatedImages.length > 0 && (
-        <div className="mb-3 grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(generatedImages.length, 2)}, 1fr)` }}>
+        <div
+          className="mb-3 grid gap-1"
+          style={{ gridTemplateColumns: `repeat(${Math.min(generatedImages.length, 2)}, 1fr)` }}
+        >
           {generatedImages.map((url, i) => (
             <div key={i} className="relative rounded-lg overflow-hidden group" style={{ aspectRatio: '1' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt={`Generated ${i + 1}`} className="w-full h-full object-cover" />
               <a
-                href={url}
-                download
+                href={url} download
                 className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity nodrag"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -164,24 +167,18 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </div>
       )}
 
-      {/* Generate button */}
+      {/* Generate button — only disabled while a request is in-flight */}
       <button
         onClick={handleGenerate}
-        disabled={isGenerating || (!data.prompt && !data.referenceImageUrl)}
+        disabled={isGenerating}
         className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
         style={{ background: 'var(--color-accent)', color: '#fff' }}
       >
         <Play size={12} />
-        {isGenerating ? 'Generating...' : 'Generate'}
+        {isGenerating ? 'Generating…' : 'Generate'}
       </button>
 
-      {/* Output handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        style={{ background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
+      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
     </NodeWrapper>
   );
 }

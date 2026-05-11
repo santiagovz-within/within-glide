@@ -9,6 +9,9 @@ import {
   useReactFlow,
   Panel,
   type Node,
+  type Connection,
+  type IsValidConnection,
+  type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,6 +24,7 @@ import { UpscaleNode } from './nodes/UpscaleNode';
 import { OutputNode } from './nodes/OutputNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
+import { PORT_TYPE_MAP } from './nodes/TypedHandle';
 import type { NodeType, NodeData } from '@/types';
 
 const nodeTypes = {
@@ -37,33 +41,39 @@ const edgeTypes = {
 };
 
 const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
-  promptNode: { prompt: '' },
+  promptNode:    { prompt: '' },
   imageInputNode: {},
-  imageGenNode: { model: 'flux-2-pro', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle' },
-  videoGenNode: { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
-  upscaleNode: { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
-  outputNode: {},
+  imageGenNode:  { model: 'flux-2-pro', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle' },
+  videoGenNode:  { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
+  upscaleNode:   { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
+  outputNode:    {},
 };
 
-interface ContextMenu {
-  x: number;
-  y: number;
-  canvasX: number;
-  canvasY: number;
+interface ContextMenu { x: number; y: number; canvasX: number; canvasY: number; }
+
+// Toast shown when user tries to make an incompatible connection
+function InvalidConnectionToast({ visible }: { visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <div
+      className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-xs font-medium pointer-events-none transition-all"
+      style={{ background: 'var(--color-error)', color: '#fff', boxShadow: 'var(--shadow-node)' }}
+    >
+      Incompatible port types — check the connector icons
+    </div>
+  );
 }
 
 export function FlowCanvas() {
-  const {
-    nodes, edges,
-    onNodesChange, onEdgesChange, onConnect,
-    addNode, updateNodeData,
-  } = useFlowStore();
-
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData } = useFlowStore();
   const { screenToFlowPosition } = useReactFlow();
-  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const [contextMenu, setContextMenu]         = useState<ContextMenu | null>(null);
+  const [invalidToast, setInvalidToast]       = useState(false);
+  const [isDragOver, setIsDragOver]           = useState(false);
+  const reactFlowWrapper                       = useRef<HTMLDivElement>(null);
+  const invalidToastTimer                      = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Listen for node data updates dispatched from child nodes
+  // Listen for node data updates from child nodes
   useEffect(() => {
     function handleNodeUpdate(e: Event) {
       const { nodeId, data } = (e as CustomEvent).detail;
@@ -73,58 +83,179 @@ export function FlowCanvas() {
     return () => document.removeEventListener('node:update', handleNodeUpdate);
   }, [updateNodeData]);
 
+  // Live prompt propagation: when PromptNode text changes, push to all connected targets
+  useEffect(() => {
+    function handlePromptPropagate(e: Event) {
+      const { sourceNodeId, prompt } = (e as CustomEvent).detail as { sourceNodeId: string; prompt: string };
+      const connectedEdges = edges.filter(
+        (edge) => edge.source === sourceNodeId && edge.sourceHandle === 'prompt'
+      );
+      for (const edge of connectedEdges) {
+        updateNodeData(edge.target, { prompt });
+      }
+    }
+    document.addEventListener('node:prompt-propagate', handlePromptPropagate);
+    return () => document.removeEventListener('node:prompt-propagate', handlePromptPropagate);
+  }, [edges, updateNodeData]);
+
+  // Connection validation — only allow matching port types
+  const isValidConnection = useCallback<IsValidConnection<Edge>>(
+    (connectionOrEdge) => {
+      // React Flow passes either a Connection or an Edge; normalize to handle ids
+      const conn = connectionOrEdge as Connection;
+      const sourceNode = nodes.find((n) => n.id === conn.source);
+      const targetNode = nodes.find((n) => n.id === conn.target);
+      if (!sourceNode || !targetNode) return false;
+
+      const srcKey = `${sourceNode.type}:${conn.sourceHandle ?? ''}:source`;
+      const tgtKey = `${targetNode.type}:${conn.targetHandle ?? ''}:target`;
+      const srcType = PORT_TYPE_MAP[srcKey];
+      const tgtType = PORT_TYPE_MAP[tgtKey];
+
+      if (!srcType || !tgtType) return true;
+
+      if (srcType !== tgtType) {
+        if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
+        setInvalidToast(true);
+        invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
+        return false;
+      }
+      return true;
+    },
+    [nodes]
+  );
+
   const onContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      const bounds = reactFlowWrapper.current?.getBoundingClientRect();
-      if (!bounds) return;
       const canvasPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      setContextMenu({
-        x: e.clientX,
-        y: e.clientY,
-        canvasX: canvasPos.x,
-        canvasY: canvasPos.y,
-      });
+      setContextMenu({ x: e.clientX, y: e.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y });
     },
     [screenToFlowPosition]
   );
 
-  function handleAddNode(type: NodeType) {
-    if (!contextMenu) return;
-    const newNode: Node<NodeData> = {
+  function handleAddNode(type: NodeType, position?: { x: number; y: number }) {
+    const pos = position ?? (contextMenu ? { x: contextMenu.canvasX, y: contextMenu.canvasY } : { x: 200, y: 200 });
+    addNode({
       id: `${type}-${Date.now()}`,
       type,
-      position: { x: contextMenu.canvasX, y: contextMenu.canvasY },
+      position: pos,
       data: { ...DEFAULT_NODE_DATA[type] },
-    };
-    addNode(newNode);
+    } as Node<NodeData>);
   }
 
-  // Pass through prompt from connected PromptNode to downstream nodes
+  // Copy prompt from PromptNode to downstream gen nodes on connect
   const onConnectHandler = useCallback(
-    (connection: Parameters<typeof onConnect>[0]) => {
+    (connection: Connection) => {
       onConnect(connection);
-      // If connecting a prompt output to an image/video gen node, copy prompt value
-      const sourceNode = nodes.find((n) => n.id === connection.source);
-      if (
-        sourceNode?.type === 'promptNode' &&
-        connection.sourceHandle === 'prompt'
-      ) {
-        const promptData = sourceNode.data as { prompt?: string };
-        updateNodeData(connection.target, { prompt: promptData.prompt ?? '' });
+      if (connection.sourceHandle === 'prompt') {
+        const sourceNode = nodes.find((n) => n.id === connection.source);
+        if (sourceNode?.type === 'promptNode') {
+          const { prompt } = sourceNode.data as { prompt?: string };
+          updateNodeData(connection.target, { prompt: prompt ?? '' });
+        }
+      }
+      // Wire up image from ImageInputNode → UpscaleNode.inputImageUrl
+      if (connection.targetHandle === 'image' && connection.sourceHandle === 'image') {
+        const sourceNode = nodes.find((n) => n.id === connection.source);
+        const targetNode = nodes.find((n) => n.id === connection.target);
+        if (sourceNode?.type === 'imageInputNode' && targetNode?.type === 'upscaleNode') {
+          const { imageUrl } = sourceNode.data as { imageUrl?: string };
+          if (imageUrl) updateNodeData(connection.target, { inputImageUrl: imageUrl });
+        }
       }
     },
     [onConnect, nodes, updateNodeData]
   );
 
+  // ── Fix 3: drag-and-drop image file onto canvas ──────────────────────────
+  function onDragOver(e: React.DragEvent) {
+    const hasImageFile = Array.from(e.dataTransfer.items).some(
+      (item) => item.kind === 'file' && item.type.startsWith('image/')
+    );
+    if (!hasImageFile) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    // Only clear when leaving the wrapper itself, not its children
+    if (!reactFlowWrapper.current?.contains(e.relatedTarget as globalThis.Node | null)) {
+      setIsDragOver(false);
+    }
+  }
+
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const files = Array.from(e.dataTransfer.files).filter((f) =>
+      f.type.startsWith('image/')
+    );
+    if (files.length === 0) return;
+
+    const canvasPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // Stagger multiple drops slightly
+      const position = { x: canvasPos.x + i * 280, y: canvasPos.y };
+      const nodeId = `imageInputNode-${Date.now()}-${i}`;
+
+      // Add the node immediately (empty) so users see it appear
+      addNode({
+        id: nodeId,
+        type: 'imageInputNode',
+        position,
+        data: {},
+      } as Node<NodeData>);
+
+      // Upload and populate
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const res  = await fetch('/api/upload', { method: 'POST', body: formData });
+        const { url } = await res.json();
+        if (url) {
+          document.dispatchEvent(new CustomEvent('node:update', {
+            detail: { nodeId, data: { imageUrl: url } },
+          }));
+        }
+      } catch {
+        // node stays empty — user can upload manually
+      }
+    }
+  }
+
   return (
-    <div ref={reactFlowWrapper} className="w-full h-full" onContextMenu={onContextMenu}>
+    <div
+      ref={reactFlowWrapper}
+      className="w-full h-full relative"
+      onContextMenu={onContextMenu}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {/* Drag-over overlay */}
+      {isDragOver && (
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
+          style={{ background: 'rgba(59,158,255,0.08)', border: '2px dashed var(--color-accent)' }}
+        >
+          <p className="text-sm font-medium" style={{ color: 'var(--color-accent)' }}>
+            Drop image to create an Image Input node
+          </p>
+        </div>
+      )}
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnectHandler}
+        isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{ animated: true, type: 'default' }}
@@ -135,39 +266,27 @@ export function FlowCanvas() {
         deleteKeyCode="Delete"
         style={{ background: 'var(--color-bg-darkest)' }}
       >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={24}
-          size={1}
-          color="rgba(255,255,255,0.06)"
-        />
-        <Controls
-          showInteractive={false}
-          style={{
-            background: 'var(--color-bg-elevated)',
-            border: 'var(--border-default)',
-          }}
-        />
+        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(255,255,255,0.06)" />
+        <Controls showInteractive={false} />
         <MiniMap
           nodeColor="var(--color-bg-surface)"
           maskColor="rgba(0,0,0,0.4)"
-          style={{
-            background: 'var(--color-bg-elevated)',
-            border: 'var(--border-default)',
-          }}
+          style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
         />
         <Panel position="bottom-center">
           <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
-            Right-click canvas to add nodes · Delete key removes selected
+            Right-click or drag an image to add nodes · Delete removes selected
           </p>
         </Panel>
       </ReactFlow>
+
+      <InvalidConnectionToast visible={invalidToast} />
 
       {contextMenu && (
         <NodeToolbar
           x={contextMenu.x}
           y={contextMenu.y}
-          onAdd={handleAddNode}
+          onAdd={(type) => handleAddNode(type)}
           onClose={() => setContextMenu(null)}
         />
       )}

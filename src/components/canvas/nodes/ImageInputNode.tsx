@@ -1,10 +1,11 @@
 'use client';
 
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Position, type NodeProps } from '@xyflow/react';
 import { ImageIcon, Upload, X } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { NodeWrapper } from './NodeWrapper';
+import { TypedHandle } from './TypedHandle';
 import type { ImageInputNodeData } from '@/types';
 import { ACCEPTED_IMAGE_TYPES, MAX_UPLOAD_SIZE_BYTES } from '@/lib/utils/constants';
 
@@ -21,10 +22,9 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
       const { url } = await res.json();
 
       if (url) {
-        const event = new CustomEvent('node:update', {
+        document.dispatchEvent(new CustomEvent('node:update', {
           detail: { nodeId: id, data: { imageUrl: url } },
-        });
-        document.dispatchEvent(event);
+        }));
       }
     },
     [id]
@@ -38,18 +38,47 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
   });
 
   function clearImage() {
-    const event = new CustomEvent('node:update', {
-      detail: { nodeId: id, data: { imageUrl: undefined } },
-    });
-    document.dispatchEvent(event);
+    document.dispatchEvent(new CustomEvent('node:update', {
+      detail: { nodeId: id, data: { imageUrl: undefined, naturalWidth: undefined, naturalHeight: undefined } },
+    }));
+  }
+
+  function handleImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    document.dispatchEvent(new CustomEvent('node:update', {
+      detail: { nodeId: id, data: { naturalWidth, naturalHeight } },
+    }));
+  }
+
+  // Compute preview dimensions: preserve aspect ratio, cap at 360×320
+  const MAX_W = 360;
+  const MAX_H = 320;
+  let previewStyle: React.CSSProperties = { aspectRatio: '1', maxHeight: MAX_H };
+
+  if (data.naturalWidth && data.naturalHeight) {
+    const ratio = data.naturalWidth / data.naturalHeight;
+    if (ratio >= 1) {
+      // landscape / square
+      const h = Math.min(MAX_W / ratio, MAX_H);
+      previewStyle = { width: '100%', height: h, maxWidth: MAX_W };
+    } else {
+      // portrait
+      const w = Math.min(MAX_H * ratio, MAX_W);
+      previewStyle = { width: w, height: MAX_H };
+    }
   }
 
   return (
     <NodeWrapper title="Image Input" icon={<ImageIcon size={14} />} selected={selected} minWidth={240}>
       {data.imageUrl ? (
-        <div className="relative rounded-lg overflow-hidden" style={{ height: 140 }}>
+        <div className="relative rounded-lg overflow-hidden mx-auto" style={previewStyle}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={data.imageUrl} alt="Input" className="w-full h-full object-cover" />
+          <img
+            src={data.imageUrl}
+            alt="Input"
+            className="w-full h-full object-contain"
+            onLoad={handleImageLoad}
+          />
           <button
             className="absolute top-1 right-1 p-0.5 rounded-full nodrag"
             style={{ background: 'rgba(0,0,0,0.6)' }}
@@ -78,16 +107,11 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
         </div>
       )}
 
-      <Handle
+      <TypedHandle
         type="source"
         position={Position.Right}
         id="image"
-        style={{
-          background: 'var(--color-accent)',
-          border: '2px solid var(--color-bg-elevated)',
-          width: 10,
-          height: 10,
-        }}
+        portType="image"
       />
     </NodeWrapper>
   );

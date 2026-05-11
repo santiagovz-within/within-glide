@@ -1,24 +1,26 @@
 'use client';
 
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Position, type NodeProps } from '@xyflow/react';
 import { Type, Sparkles } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
+import { TypedHandle } from './TypedHandle';
 import type { PromptNodeData } from '@/types';
 
 export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNodeData }) {
   const [enhancing, setEnhancing] = useState(false);
 
-  const handlePromptChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const event = new CustomEvent('node:update', {
-        detail: { nodeId: id, data: { prompt: e.target.value } },
-        bubbles: true,
-      });
-      e.target.dispatchEvent(event);
-    },
-    [id]
-  );
+  function handlePromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const newPrompt = e.target.value;
+    // Update this node's data
+    document.dispatchEvent(new CustomEvent('node:update', {
+      detail: { nodeId: id, data: { prompt: newPrompt } },
+    }));
+    // Propagate to all downstream nodes so connected gen nodes stay in sync
+    document.dispatchEvent(new CustomEvent('node:prompt-propagate', {
+      detail: { sourceNodeId: id, prompt: newPrompt },
+    }));
+  }
 
   async function handleEnhance() {
     if (!data.prompt?.trim() || enhancing) return;
@@ -27,15 +29,16 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
       const res = await fetch('/api/google/enhance-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: data.prompt, mediaType: 'image', modelName: 'flux-2-pro' }),
+        body: JSON.stringify({ prompt: data.prompt, mediaType: 'image', modelName: '' }),
       });
       const { enhancedPrompt } = await res.json();
       if (enhancedPrompt) {
-        const event = new CustomEvent('node:update', {
+        document.dispatchEvent(new CustomEvent('node:update', {
           detail: { nodeId: id, data: { prompt: enhancedPrompt } },
-          bubbles: true,
-        });
-        document.dispatchEvent(event);
+        }));
+        document.dispatchEvent(new CustomEvent('node:prompt-propagate', {
+          detail: { sourceNodeId: id, prompt: enhancedPrompt },
+        }));
       }
     } finally {
       setEnhancing(false);
@@ -48,7 +51,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
         <textarea
           className="w-full text-xs resize-none rounded-lg p-2.5 outline-none transition-all nodrag"
           rows={4}
-          placeholder="Describe what you want to generate..."
+          placeholder="Describe what you want to generate…"
           value={data.prompt ?? ''}
           onChange={handlePromptChange}
           style={{
@@ -71,17 +74,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
         </button>
       </div>
 
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="prompt"
-        style={{
-          background: 'var(--color-accent)',
-          border: '2px solid var(--color-bg-elevated)',
-          width: 10,
-          height: 10,
-        }}
-      />
+      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" />
     </NodeWrapper>
   );
 }

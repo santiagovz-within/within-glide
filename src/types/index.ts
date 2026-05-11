@@ -113,6 +113,8 @@ export interface PromptNodeData extends Record<string, unknown> {
 
 export interface ImageInputNodeData extends Record<string, unknown> {
   imageUrl?: string;
+  naturalWidth?: number;
+  naturalHeight?: number;
   label?: string;
 }
 

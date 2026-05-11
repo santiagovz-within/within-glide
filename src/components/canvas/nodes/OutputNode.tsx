@@ -1,25 +1,16 @@
 'use client';
 
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Position, type NodeProps } from '@xyflow/react';
 import { MonitorPlay, Download, ImageIcon } from 'lucide-react';
 import { NodeWrapper } from './NodeWrapper';
+import { TypedHandle } from './TypedHandle';
 import type { OutputNodeData } from '@/types';
 
 export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeData }) {
   return (
     <NodeWrapper title="Output" icon={<MonitorPlay size={14} />} selected={selected} minWidth={260}>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        style={{ top: '40%', background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="video"
-        style={{ top: '65%', background: 'var(--color-accent)', border: '2px solid var(--color-bg-elevated)', width: 10, height: 10 }}
-      />
+      <TypedHandle type="target" position={Position.Left} id="image" portType="image" offset="40%" />
+      <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
       {data.mediaUrl ? (
         <div className="rounded-lg overflow-hidden relative group" style={{ aspectRatio: data.mediaType === 'video' ? '16/9' : '1' }}>
