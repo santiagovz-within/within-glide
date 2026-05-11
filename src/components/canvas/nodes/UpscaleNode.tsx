@@ -54,7 +54,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       icon={<Zap size={14} />}
       status={data.status}
       selected={selected}
-      minWidth={260}
+      minWidth={280}
     >
       <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
 

@@ -269,12 +269,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
               src={url}
               alt={`Generated ${i + 1}`}
               className="w-full block cursor-pointer nodrag"
-              style={{
-                height: 'auto',
-                maxHeight: 320,
-                objectFit: 'contain',
-                background: 'var(--color-bg-elevated)',
-              }}
+              style={{ height: 'auto' }}
               onClick={() => downloadFromUrl(url)}
               title="Click to download"
             />

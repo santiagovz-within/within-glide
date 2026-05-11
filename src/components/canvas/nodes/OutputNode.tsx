@@ -9,7 +9,7 @@ import { downloadFromUrl } from '@/lib/utils/download';
 
 export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeData }) {
   return (
-    <NodeWrapper title="Output" icon={<MonitorPlay size={14} />} selected={selected} minWidth={260}>
+    <NodeWrapper title="Output" icon={<MonitorPlay size={14} />} selected={selected} minWidth={280}>
       <TypedHandle type="target" position={Position.Left} id="image" portType="image" offset="40%" />
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
@@ -20,7 +20,7 @@ export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeDat
               src={data.mediaUrl}
               controls
               className="w-full block"
-              style={{ height: 'auto', maxHeight: 300 }}
+              style={{ height: 'auto' }}
             />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
@@ -28,12 +28,7 @@ export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeDat
               src={data.mediaUrl}
               alt="Output"
               className="w-full block cursor-pointer nodrag"
-              style={{
-                height: 'auto',
-                maxHeight: 360,
-                objectFit: 'contain',
-                background: 'var(--color-bg-darkest)',
-              }}
+              style={{ height: 'auto' }}
               onClick={() => downloadFromUrl(data.mediaUrl!)}
               title="Click to download"
             />

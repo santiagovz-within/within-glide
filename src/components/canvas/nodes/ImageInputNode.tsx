@@ -61,7 +61,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
     : '1 / 1';
 
   return (
-    <NodeWrapper title="Image Input" icon={<ImageIcon size={14} />} selected={selected} minWidth={240}>
+    <NodeWrapper title="Image Input" icon={<ImageIcon size={14} />} selected={selected} minWidth={280}>
       {data.imageUrl ? (
         <div className="relative -m-3 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -69,12 +69,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
             src={data.imageUrl}
             alt="Input"
             className="w-full block nodrag"
-            style={{
-              height: 'auto',
-              maxHeight: 260,
-              objectFit: 'contain',
-              background: 'var(--color-bg-surface)',
-            }}
+            style={{ height: 'auto' }}
             onLoad={handleImageLoad}
           />
           <button
