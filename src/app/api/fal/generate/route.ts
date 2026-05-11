@@ -82,13 +82,15 @@ export async function POST(request: NextRequest) {
 
     const useEditEndpoint = referenceImageUrls.length > 0 && 'editEndpoint' in modelConfig;
     const endpoint = useEditEndpoint ? modelConfig.editEndpoint : modelConfig.endpoint;
+    const usesAspectRatio = 'usesAspectRatio' in modelConfig && modelConfig.usesAspectRatio;
 
     for (let i = 0; i < numImages; i++) {
       const result = await fal.subscribe(endpoint as string, {
         input: {
           prompt,
-          image_size: { width, height },
-          num_inference_steps: body.quality === 'high' ? 40 : body.quality === 'low' ? 20 : 28,
+          ...(usesAspectRatio
+            ? { aspect_ratio: aspectRatio }
+            : { image_size: { width, height }, num_inference_steps: body.quality === 'high' ? 40 : body.quality === 'low' ? 20 : 28 }),
           ...(body.negativePrompt ? { negative_prompt: body.negativePrompt } : {}),
           ...(referenceImageUrls[0] ? { image_url: referenceImageUrls[0] } : {}),
         },
@@ -153,7 +155,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ generationId: lastGen?.id, mediaUrls: results, status: 'completed' });
   } catch (err) {
-    console.error('Generation error:', err);
-    return NextResponse.json({ error: 'Generation failed', details: String(err) }, { status: 500 });
+    const details = err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null
+        ? JSON.stringify(err)
+        : String(err);
+    console.error('Generation error:', details);
+    return NextResponse.json({ error: 'Generation failed', details }, { status: 500 });
   }
 }

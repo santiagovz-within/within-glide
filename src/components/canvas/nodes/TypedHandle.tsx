@@ -57,8 +57,8 @@ export function TypedHandle({ portType, offset, position, ...rest }: TypedHandle
       position={position}
       {...rest}
       style={{
-        width: 18,
-        height: 18,
+        width: 24,
+        height: 24,
         borderRadius: '50%',
         background: 'var(--color-bg-elevated)',
         border: `2px solid ${color}`,
@@ -66,22 +66,11 @@ export function TypedHandle({ portType, offset, position, ...rest }: TypedHandle
         alignItems: 'center',
         justifyContent: 'center',
         color,
+        pointerEvents: 'all',
         ...offsetStyle,
       }}
     >
-      {/* Icon sits inside the handle circle */}
-      <span
-        style={{
-          pointerEvents: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color,
-          position: 'absolute',
-        }}
-      >
-        <PortIcon type={portType} />
-      </span>
+      <PortIcon type={portType} size={10} />
     </Handle>
   );
 }

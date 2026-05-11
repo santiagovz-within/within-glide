@@ -2,17 +2,18 @@ import type { ModelConfig } from '@/types';
 
 export const FAL_MODELS = {
   'nano-banana-2': {
-    endpoint: 'fal-ai/nana-banana-2',
-    editEndpoint: 'fal-ai/nana-banana-2/image-to-image',
+    endpoint: 'fal-ai/flux/schnell',
+    editEndpoint: 'fal-ai/flux/dev/image-to-image',
     type: 'image' as const,
   },
   'nano-banana-pro': {
-    endpoint: 'fal-ai/nana-banana-pro',
-    editEndpoint: 'fal-ai/nana-banana-pro/image-to-image',
+    endpoint: 'fal-ai/flux/dev',
+    editEndpoint: 'fal-ai/flux/dev/image-to-image',
     type: 'image' as const,
   },
   'flux-2-pro': {
     endpoint: 'fal-ai/flux-pro/v1.1-ultra',
+    usesAspectRatio: true,
     type: 'image' as const,
   },
   'kling-3-pro': {
@@ -37,7 +38,7 @@ export const FAL_MODELS = {
 export const MODELS: Record<string, ModelConfig> = {
   'nano-banana-2': {
     id: 'nano-banana-2',
-    name: 'Nano Banana 2',
+    name: 'Flux Schnell',
     provider: 'fal',
     type: 'image',
     supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '4:5'],
@@ -49,7 +50,7 @@ export const MODELS: Record<string, ModelConfig> = {
   },
   'nano-banana-pro': {
     id: 'nano-banana-pro',
-    name: 'Nano Banana Pro',
+    name: 'Flux Dev',
     provider: 'fal',
     type: 'image',
     supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '4:5', '21:9'],
