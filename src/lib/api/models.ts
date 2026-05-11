@@ -1,16 +1,12 @@
 import type { ModelConfig } from '@/types';
 
+// Google Imagen model IDs — keyed by our internal model ID
+export const GOOGLE_IMAGE_MODELS: Record<string, string> = {
+  'nano-banana-2':  'imagen-3.0-fast-generate-001',
+  'nano-banana-pro': 'imagen-3.0-generate-001',
+};
+
 export const FAL_MODELS = {
-  'nano-banana-2': {
-    endpoint: 'fal-ai/flux/schnell',
-    editEndpoint: 'fal-ai/flux/dev/image-to-image',
-    type: 'image' as const,
-  },
-  'nano-banana-pro': {
-    endpoint: 'fal-ai/flux/dev',
-    editEndpoint: 'fal-ai/flux/dev/image-to-image',
-    type: 'image' as const,
-  },
   'flux-2-pro': {
     endpoint: 'fal-ai/flux-pro/v1.1-ultra',
     usesAspectRatio: true,
@@ -38,26 +34,26 @@ export const FAL_MODELS = {
 export const MODELS: Record<string, ModelConfig> = {
   'nano-banana-2': {
     id: 'nano-banana-2',
-    name: 'Flux Schnell',
-    provider: 'fal',
+    name: 'Nano Banana 2',
+    provider: 'google',
     type: 'image',
-    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '4:5'],
-    supportedResolutions: ['1K', '2K'],
+    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    supportedResolutions: ['1K'],
     maxBatchSize: 4,
-    supportsImageInput: true,
-    supportsNegativePrompt: true,
+    supportsImageInput: false,
+    supportsNegativePrompt: false,
     estimatedTimeSeconds: 8,
   },
   'nano-banana-pro': {
     id: 'nano-banana-pro',
-    name: 'Flux Dev',
-    provider: 'fal',
+    name: 'Nano Banana Pro',
+    provider: 'google',
     type: 'image',
-    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '4:5', '21:9'],
-    supportedResolutions: ['1K', '2K', '4K'],
+    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    supportedResolutions: ['1K'],
     maxBatchSize: 4,
-    supportsImageInput: true,
-    supportsNegativePrompt: true,
+    supportsImageInput: false,
+    supportsNegativePrompt: false,
     estimatedTimeSeconds: 12,
   },
   'flux-2-pro': {

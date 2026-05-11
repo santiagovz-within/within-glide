@@ -25,8 +25,12 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     setIsGenerating(true);
     updateData({ status: 'processing' });
 
+    const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
+    const isGoogle = modelConfig?.provider === 'google';
+    const endpoint = isGoogle ? '/api/google/generate' : '/api/fal/generate';
+
     try {
-      const res = await fetch('/api/fal/generate', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -149,10 +153,16 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {generatedImages.length > 0 && (
         <div
           className="mb-3 grid gap-1"
-          style={{ gridTemplateColumns: `repeat(${Math.min(generatedImages.length, 2)}, 1fr)` }}
+          style={{
+            gridTemplateColumns: `repeat(${data.aspectRatio.startsWith('16') || data.aspectRatio.startsWith('21') ? 1 : Math.min(generatedImages.length, 2)}, 1fr)`,
+          }}
         >
           {generatedImages.map((url, i) => (
-            <div key={i} className="relative rounded-lg overflow-hidden group" style={{ aspectRatio: '1' }}>
+            <div
+              key={i}
+              className="relative rounded-lg overflow-hidden group"
+              style={{ aspectRatio: data.aspectRatio.replace(':', '/') }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt={`Generated ${i + 1}`} className="w-full h-full object-cover" />
               <a
