@@ -29,58 +29,61 @@ export async function POST(request: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
-    const response = await ai.models.generateImages({
-      model: googleModelId,
-      prompt,
-      config: {
-        numberOfImages: numImages,
-        aspectRatio,
-      },
-    });
-
-    if (!response.generatedImages?.length) {
-      return NextResponse.json({ error: 'No images returned' }, { status: 500 });
-    }
+    // Include aspect ratio in the prompt since Gemini image models read it from context
+    const aspectHint = aspectRatio !== '1:1' ? ` Use a ${aspectRatio} aspect ratio.` : '';
+    const fullPrompt = prompt + aspectHint;
 
     const mediaUrls: string[] = [];
 
-    for (const generated of response.generatedImages) {
-      const imageBytes = generated.image?.imageBytes;
-      if (!imageBytes) continue;
-
-      // imageBytes is a base64 string — decode to binary
-      const binary = Buffer.from(imageBytes, 'base64');
-      const mimeType = generated.image?.mimeType ?? 'image/png';
-      const ext = mimeType.split('/')[1] ?? 'png';
-
-      const genId = crypto.randomUUID();
-      const storagePath = `${user.id}/${genId}.${ext}`;
-
-      await supabase.storage
-        .from('generations')
-        .upload(storagePath, binary, { contentType: mimeType, upsert: false });
-
-      const { data: { publicUrl } } = supabase.storage.from('generations').getPublicUrl(storagePath);
-
-      await supabase.from('generations').insert({
-        id: genId,
-        user_id: user.id,
-        source_type: sourceType,
-        source_id: sourceId,
-        node_id: nodeId,
-        model,
-        prompt,
-        parameters: { aspectRatio },
-        media_type: 'image',
-        media_url: publicUrl,
-        status: 'completed',
+    // Each generateContent call produces one image; loop for multiple
+    for (let i = 0; i < numImages; i++) {
+      const response = await ai.models.generateContent({
+        model: googleModelId,
+        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+        config: {
+          responseModalities: ['TEXT', 'IMAGE'],
+        },
       });
 
-      mediaUrls.push(publicUrl);
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      for (const part of parts) {
+        if (!part.inlineData?.data) continue;
+
+        const imageBytes = part.inlineData.data; // base64 string
+        const mimeType = part.inlineData.mimeType ?? 'image/png';
+        const ext = mimeType.split('/')[1] ?? 'png';
+
+        const binary = Buffer.from(imageBytes, 'base64');
+        const genId = crypto.randomUUID();
+        const storagePath = `${user.id}/${genId}.${ext}`;
+
+        await supabase.storage
+          .from('generations')
+          .upload(storagePath, binary, { contentType: mimeType, upsert: false });
+
+        const { data: { publicUrl } } = supabase.storage.from('generations').getPublicUrl(storagePath);
+
+        await supabase.from('generations').insert({
+          id: genId,
+          user_id: user.id,
+          source_type: sourceType,
+          source_id: sourceId,
+          node_id: nodeId,
+          model,
+          prompt,
+          parameters: { aspectRatio },
+          media_type: 'image',
+          media_url: publicUrl,
+          status: 'completed',
+        });
+
+        mediaUrls.push(publicUrl);
+        break; // one image per response
+      }
     }
 
     if (mediaUrls.length === 0) {
-      return NextResponse.json({ error: 'Generation failed — no images produced' }, { status: 500 });
+      return NextResponse.json({ error: 'No images returned by the model' }, { status: 500 });
     }
 
     return NextResponse.json({ mediaUrls, status: 'completed' });

@@ -1,9 +1,9 @@
 import type { ModelConfig } from '@/types';
 
-// Google Imagen model IDs — keyed by our internal model ID
+// Google Gemini image generation model IDs — keyed by our internal model ID
 export const GOOGLE_IMAGE_MODELS: Record<string, string> = {
-  'nano-banana-2':  'imagen-3.0-fast-generate-001',
-  'nano-banana-pro': 'imagen-3.0-generate-001',
+  'nano-banana-2':   'gemini-3.1-flash-image-preview',
+  'nano-banana-pro': 'gemini-3-pro-image-preview',
 };
 
 export const FAL_MODELS = {
