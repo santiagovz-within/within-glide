@@ -157,7 +157,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       </div>
 
       {data.videoUrl && (
-        <div className="mb-3 rounded-lg overflow-hidden" style={{ width: '100%', aspectRatio: data.aspectRatio.replace(':', '/'), maxHeight: 240 }}>
+        <div className="-mx-3 mb-3" style={{ aspectRatio: data.aspectRatio.replace(':', '/'), maxHeight: 240 }}>
           <video src={data.videoUrl} controls className="w-full h-full object-cover" />
         </div>
       )}

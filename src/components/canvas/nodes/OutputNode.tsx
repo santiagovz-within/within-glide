@@ -14,7 +14,7 @@ export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeDat
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
       {data.mediaUrl ? (
-        <div className="rounded-lg overflow-hidden">
+        <div className="-m-3">
           {data.mediaType === 'video' ? (
             <video
               src={data.mediaUrl}
@@ -28,7 +28,7 @@ export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeDat
               src={data.mediaUrl}
               alt="Output"
               className="w-full h-auto block cursor-pointer"
-              style={{ maxHeight: 300, objectFit: 'contain' }}
+              style={{ objectFit: 'contain' }}
               onClick={() => downloadFromUrl(data.mediaUrl!)}
               title="Click to download"
             />

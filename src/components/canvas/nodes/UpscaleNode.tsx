@@ -81,8 +81,8 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
               onClick={() => updateData({ scaleFactor: scale })}
               className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors nodrag"
               style={{
-                background: data.scaleFactor === scale ? 'var(--color-accent)' : 'var(--color-bg-surface)',
-                color: data.scaleFactor === scale ? '#fff' : 'var(--color-white-muted)',
+                background: data.scaleFactor === scale ? '#fff' : 'var(--color-bg-surface)',
+                color: data.scaleFactor === scale ? '#000' : 'var(--color-white-muted)',
                 border: 'var(--border-default)',
               }}
             >

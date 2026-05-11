@@ -7,7 +7,7 @@ import { downloadFromUrl } from '@/lib/utils/download';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
-import { IMAGE_MODELS } from '@/lib/api/models';
+import { IMAGE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 
 const RESOLUTIONS = ['1K', '2K', '4K'];
@@ -23,6 +23,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const isMultiImageModel = modelConfig?.provider === 'google';
   const portCount = isMultiImageModel ? Math.max(data.imagePortCount ?? 1, 1) : 0;
   const connectedCount = (data.inputImageUrls ?? []).filter(Boolean).length;
+
+  const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
+  const hasEditVariant = !!falConfig && 'editEndpoint' in falConfig;
+  const hasImageInput = (data.inputImageUrls ?? []).some(Boolean);
+  const isEditMode = hasEditVariant && hasImageInput;
 
   // Measure the pixel offset of the reference-image rows within the RF node div.
   // offsetTop is relative to the first positioned ancestor = the React Flow node div.
@@ -155,6 +160,19 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </select>
       </div>
 
+      {/* ── Variant indicator (Fal models with edit endpoint) ─── */}
+      {hasEditVariant && (
+        <div className="flex items-center gap-1.5 mb-3 -mt-2">
+          <div
+            className="w-1.5 h-1.5 rounded-full transition-colors"
+            style={{ background: isEditMode ? 'var(--color-accent)' : 'rgba(255,255,255,0.2)' }}
+          />
+          <span className="text-xs transition-colors" style={{ color: isEditMode ? 'var(--color-accent)' : 'var(--color-white-muted)' }}>
+            {isEditMode ? 'Image-to-Image' : 'Text-to-Image'}
+          </span>
+        </div>
+      )}
+
       {/* ── Aspect ratio + resolution ─────────────────────────── */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
@@ -228,21 +246,24 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {/* ── Generated previews ───────────────────────────────── */}
       {generatedImages.length > 0 && (
         <div
-          className="mb-3 grid gap-1"
-          style={{ gridTemplateColumns: `repeat(${Math.min(generatedImages.length, 2)}, 1fr)` }}
+          className="-mx-3 mb-3"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${Math.min(generatedImages.length, 2)}, 1fr)`,
+            gap: '1px',
+          }}
         >
           {generatedImages.map((url, i) => (
-            <div key={i} className="rounded-lg overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={url}
-                alt={`Generated ${i + 1}`}
-                className="w-full h-auto block cursor-pointer nodrag"
-                style={{ maxHeight: 300, objectFit: 'contain' }}
-                onClick={() => downloadFromUrl(url)}
-                title="Click to download"
-              />
-            </div>
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={i}
+              src={url}
+              alt={`Generated ${i + 1}`}
+              className="w-full h-auto block cursor-pointer nodrag"
+              style={{ objectFit: 'contain' }}
+              onClick={() => downloadFromUrl(url)}
+              title="Click to download"
+            />
           ))}
         </div>
       )}

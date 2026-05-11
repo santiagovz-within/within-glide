@@ -1,12 +1,19 @@
 import type { ModelConfig } from '@/types';
 
 // Google Gemini image generation model IDs — keyed by our internal model ID
-export const GOOGLE_IMAGE_MODELS: Record<string, string> = {
-  'nano-banana-2':   'gemini-3.1-flash-image-preview',
-  'nano-banana-pro': 'gemini-3-pro-image-preview',
-};
+export const GOOGLE_IMAGE_MODELS: Record<string, string> = {};
 
 export const FAL_MODELS = {
+  'nano-banana-2': {
+    endpoint: 'fal-ai/flux/schnell',
+    editEndpoint: 'fal-ai/flux/dev/image-to-image',
+    type: 'image' as const,
+  },
+  'nano-banana-pro': {
+    endpoint: 'fal-ai/flux/dev',
+    editEndpoint: 'fal-ai/flux/dev/image-to-image',
+    type: 'image' as const,
+  },
   'flux-2-pro': {
     endpoint: 'fal-ai/flux-pro/v1.1-ultra',
     usesAspectRatio: true,
@@ -35,24 +42,24 @@ export const MODELS: Record<string, ModelConfig> = {
   'nano-banana-2': {
     id: 'nano-banana-2',
     name: 'Nano Banana 2',
-    provider: 'google',
+    provider: 'fal',
     type: 'image',
     supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
     supportedResolutions: ['1K'],
-    maxBatchSize: 4,
-    supportsImageInput: false,
+    maxBatchSize: 1,
+    supportsImageInput: true,
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 8,
   },
   'nano-banana-pro': {
     id: 'nano-banana-pro',
     name: 'Nano Banana Pro',
-    provider: 'google',
+    provider: 'fal',
     type: 'image',
     supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
     supportedResolutions: ['1K'],
-    maxBatchSize: 4,
-    supportsImageInput: false,
+    maxBatchSize: 1,
+    supportsImageInput: true,
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 12,
   },
