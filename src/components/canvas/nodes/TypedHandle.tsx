@@ -12,9 +12,9 @@ export const PORT_COLORS: Record<PortType, string> = {
 };
 
 export const PORT_TINTS: Record<PortType, string> = {
-  text:  'rgba(59,158,255,0.15)',
-  image: 'rgba(168,85,247,0.15)',
-  video: 'rgba(52,211,153,0.15)',
+  text:  '#1e3f6a',
+  image: '#3a1a6a',
+  video: '#114a32',
 };
 
 // Registry: `nodeType:handleId:source|target` → PortType

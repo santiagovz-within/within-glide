@@ -5,13 +5,13 @@ export const GOOGLE_IMAGE_MODELS: Record<string, string> = {};
 
 export const FAL_MODELS = {
   'nano-banana-2': {
-    endpoint: 'fal-ai/flux/schnell',
-    editEndpoint: 'fal-ai/flux/dev/image-to-image',
+    endpoint: 'fal-ai/nano-banana-2',
+    editEndpoint: 'fal-ai/nano-banana-2/edit',
     type: 'image' as const,
   },
   'nano-banana-pro': {
-    endpoint: 'fal-ai/flux/dev',
-    editEndpoint: 'fal-ai/flux/dev/image-to-image',
+    endpoint: 'fal-ai/nano-banana-pro',
+    editEndpoint: 'fal-ai/nano-banana-pro/edit',
     type: 'image' as const,
   },
   'flux-2-pro': {
@@ -29,11 +29,13 @@ export const FAL_MODELS = {
     type: 'video' as const,
   },
   'seedvr2': {
-    endpoint: 'fal-ai/seedvr2-multi-turn',
+    endpoint: 'fal-ai/clarity-upscaler',
+    scaleParam: 'upscaling_factor',
     type: 'upscale' as const,
   },
   'topaz': {
     endpoint: 'fal-ai/topaz/upscale',
+    scaleParam: 'scale',
     type: 'upscale' as const,
   },
 } as const;
@@ -113,7 +115,7 @@ export const MODELS: Record<string, ModelConfig> = {
   },
   'seedvr2': {
     id: 'seedvr2',
-    name: 'SeedVR2',
+    name: 'Clarity',
     provider: 'fal',
     type: 'upscale',
     supportedAspectRatios: [],

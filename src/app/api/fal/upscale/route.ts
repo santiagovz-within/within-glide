@@ -18,16 +18,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid upscale model' }, { status: 400 });
     }
 
-    const result = await fal.subscribe(modelConfig.endpoint, {
-      input: {
-        image_url: imageUrl,
-        scale: scaleFactor,
-      },
-    });
+    const scaleParam = 'scaleParam' in modelConfig ? modelConfig.scaleParam : 'scale';
+    const falInput = { image_url: imageUrl, [scaleParam]: scaleFactor };
 
-    const falResult = result.data as { image?: { url: string }; output_image?: { url: string } };
-    const outputUrl = falResult.image?.url ?? falResult.output_image?.url;
+    console.log('[fal/upscale] endpoint:', modelConfig.endpoint, '| scaleParam:', scaleParam, '| scale:', scaleFactor);
+    console.log('[fal/upscale] input:', JSON.stringify(falInput));
+
+    const result = await fal.subscribe(modelConfig.endpoint, { input: falInput });
+
+    const d = result.data as Record<string, unknown>;
+    const outputUrl =
+      (d.image as { url: string } | undefined)?.url ??
+      ((d.images as Array<{ url: string }> | undefined)?.[0])?.url ??
+      (d.output as { url: string } | undefined)?.url ??
+      (d.output_image as { url: string } | undefined)?.url ??
+      (d.upscaled_image as { url: string } | undefined)?.url;
+
+    console.log('[fal/upscale] response keys:', Object.keys(d), '| outputUrl:', outputUrl);
+
     if (!outputUrl) {
+      console.error('[fal/upscale] no URL found in response:', JSON.stringify(d));
       return NextResponse.json({ error: 'Upscale returned no image' }, { status: 500 });
     }
 
