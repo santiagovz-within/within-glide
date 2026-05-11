@@ -12,6 +12,7 @@ import {
   type Connection,
   type IsValidConnection,
   type Edge,
+  type EdgeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,7 +26,7 @@ import { OutputNode } from './nodes/OutputNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData } from '@/types';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -43,7 +44,7 @@ const edgeTypes = {
 const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   promptNode:    { prompt: '' },
   imageInputNode: {},
-  imageGenNode:  { model: 'flux-2-pro', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle' },
+  imageGenNode:  { model: 'flux-2-pro', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
   videoGenNode:  { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
   upscaleNode:   { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
   outputNode:    {},
@@ -144,10 +145,62 @@ export function FlowCanvas() {
     } as Node<NodeData>);
   }
 
-  // Copy prompt from PromptNode to downstream gen nodes on connect
+  // Propagate image URL from a source ImageInputNode to all consuming nodes
+  const propagateImageToTarget = useCallback(
+    (sourceNodeId: string, targetEdge: Edge, imageUrl: string | null) => {
+      const sourceNode = nodes.find((n) => n.id === sourceNodeId);
+      if (sourceNode?.type !== 'imageInputNode') return;
+
+      const targetNode = nodes.find((n) => n.id === targetEdge.target);
+      if (!targetNode) return;
+      const handle = targetEdge.targetHandle ?? '';
+
+      if (targetNode.type === 'upscaleNode') {
+        updateNodeData(targetEdge.target, { inputImageUrl: imageUrl ?? undefined });
+      } else if (targetNode.type === 'videoGenNode') {
+        if (handle === 'start_frame') updateNodeData(targetEdge.target, { startFrameUrl: imageUrl ?? undefined });
+        else if (handle === 'end_frame') updateNodeData(targetEdge.target, { endFrameUrl: imageUrl ?? undefined });
+      } else if (targetNode.type === 'imageGenNode') {
+        const currentData = targetNode.data as ImageGenNodeData;
+        const urls = [...(currentData.inputImageUrls ?? [])];
+        if (handle.startsWith('ref_')) {
+          const idx = parseInt(handle.split('_')[1]);
+          urls[idx] = imageUrl ?? '';
+        } else {
+          // single reference_image handle
+          urls[0] = imageUrl ?? '';
+        }
+        const filled = urls.filter(Boolean).length;
+        updateNodeData(targetEdge.target, {
+          inputImageUrls: urls,
+          imagePortCount: Math.min(filled + 1, 14),
+        });
+      }
+    },
+    [nodes, updateNodeData]
+  );
+
+  // Live image propagation: when ImageInputNode gets a new upload, push to all connected targets
+  useEffect(() => {
+    function handleImagePropagate(e: Event) {
+      const { sourceNodeId, imageUrl } = (e as CustomEvent).detail as { sourceNodeId: string; imageUrl: string | null };
+      const connectedEdges = edges.filter(
+        (edge) => edge.source === sourceNodeId && edge.sourceHandle === 'image'
+      );
+      for (const edge of connectedEdges) {
+        propagateImageToTarget(sourceNodeId, edge, imageUrl);
+      }
+    }
+    document.addEventListener('node:image-propagate', handleImagePropagate);
+    return () => document.removeEventListener('node:image-propagate', handleImagePropagate);
+  }, [edges, propagateImageToTarget]);
+
+  // Copy prompt from PromptNode and image from ImageInputNode to downstream nodes on connect
   const onConnectHandler = useCallback(
     (connection: Connection) => {
       onConnect(connection);
+
+      // Prompt propagation
       if (connection.sourceHandle === 'prompt') {
         const sourceNode = nodes.find((n) => n.id === connection.source);
         if (sourceNode?.type === 'promptNode') {
@@ -155,17 +208,40 @@ export function FlowCanvas() {
           updateNodeData(connection.target, { prompt: prompt ?? '' });
         }
       }
-      // Wire up image from ImageInputNode → UpscaleNode.inputImageUrl
-      if (connection.targetHandle === 'image' && connection.sourceHandle === 'image') {
+
+      // Image propagation — push existing imageUrl into the newly connected target
+      if (connection.sourceHandle === 'image') {
         const sourceNode = nodes.find((n) => n.id === connection.source);
-        const targetNode = nodes.find((n) => n.id === connection.target);
-        if (sourceNode?.type === 'imageInputNode' && targetNode?.type === 'upscaleNode') {
+        if (sourceNode?.type === 'imageInputNode') {
           const { imageUrl } = sourceNode.data as { imageUrl?: string };
-          if (imageUrl) updateNodeData(connection.target, { inputImageUrl: imageUrl });
+          if (imageUrl) {
+            // Build a synthetic edge object to reuse propagateImageToTarget
+            propagateImageToTarget(connection.source, {
+              id: '',
+              source: connection.source,
+              target: connection.target,
+              sourceHandle: connection.sourceHandle,
+              targetHandle: connection.targetHandle,
+            }, imageUrl);
+          }
         }
       }
     },
-    [onConnect, nodes, updateNodeData]
+    [onConnect, nodes, updateNodeData, propagateImageToTarget]
+  );
+
+  // Clear image data from nodes when an image-carrying edge is removed
+  const onEdgesChangeHandler = useCallback(
+    (changes: EdgeChange[]) => {
+      for (const change of changes) {
+        if (change.type !== 'remove') continue;
+        const edge = edges.find((e) => e.id === change.id);
+        if (!edge || edge.sourceHandle !== 'image') continue;
+        propagateImageToTarget(edge.source, edge, null);
+      }
+      onEdgesChange(changes);
+    },
+    [edges, onEdgesChange, propagateImageToTarget]
   );
 
   // ── Fix 3: drag-and-drop image file onto canvas ──────────────────────────
@@ -253,7 +329,7 @@ export function FlowCanvas() {
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={onEdgesChangeHandler}
         onConnect={onConnectHandler}
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}

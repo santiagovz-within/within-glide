@@ -19,6 +19,10 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
   'imageGenNode:prompt:target':            'text',
   'imageGenNode:reference_image:target':   'image',
   'imageGenNode:image:source':             'image',
+  // Dynamic multi-image reference handles (Google models, up to 14)
+  ...Object.fromEntries(
+    Array.from({ length: 14 }, (_, i) => [`imageGenNode:ref_${i}:target`, 'image' as PortType])
+  ),
   'videoGenNode:prompt:target':            'text',
   'videoGenNode:start_frame:target':       'image',
   'videoGenNode:end_frame:target':         'image',
@@ -37,11 +41,13 @@ function PortIcon({ type, size = 9 }: { type: PortType; size?: number }) {
 
 interface TypedHandleProps extends Omit<HandleProps, 'style'> {
   portType: PortType;
-  // offset from the edge as a % string, e.g. '35%' — maps to `top` or `left`
+  // offset from the edge as a % string or px value, e.g. '35%' or '240px'
   offset?: string;
+  // small numeric badge shown above the handle circle (for numbered multi-image slots)
+  badge?: number;
 }
 
-export function TypedHandle({ portType, offset, position, ...rest }: TypedHandleProps) {
+export function TypedHandle({ portType, offset, position, badge, ...rest }: TypedHandleProps) {
   const color = PORT_COLORS[portType];
   const isLeft = position === Position.Left;
   const isRight = position === Position.Right;
@@ -71,6 +77,27 @@ export function TypedHandle({ portType, offset, position, ...rest }: TypedHandle
       }}
     >
       <PortIcon type={portType} size={10} />
+      {badge !== undefined && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -7,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            fontSize: 8,
+            lineHeight: '10px',
+            padding: '0 3px',
+            borderRadius: 4,
+            background: 'var(--color-bg-darkest)',
+            border: `1px solid ${color}`,
+            color,
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {badge}
+        </span>
+      )}
     </Handle>
   );
 }

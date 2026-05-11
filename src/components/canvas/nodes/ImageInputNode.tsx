@@ -25,6 +25,9 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
         document.dispatchEvent(new CustomEvent('node:update', {
           detail: { nodeId: id, data: { imageUrl: url } },
         }));
+        document.dispatchEvent(new CustomEvent('node:image-propagate', {
+          detail: { sourceNodeId: id, imageUrl: url },
+        }));
       }
     },
     [id]
@@ -41,6 +44,9 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
     document.dispatchEvent(new CustomEvent('node:update', {
       detail: { nodeId: id, data: { imageUrl: undefined, naturalWidth: undefined, naturalHeight: undefined } },
     }));
+    document.dispatchEvent(new CustomEvent('node:image-propagate', {
+      detail: { sourceNodeId: id, imageUrl: null },
+    }));
   }
 
   function handleImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
@@ -50,28 +56,17 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
     }));
   }
 
-  // Compute preview dimensions: preserve aspect ratio, cap at 360×320
-  const MAX_W = 360;
-  const MAX_H = 320;
-  let previewStyle: React.CSSProperties = { aspectRatio: '1', maxHeight: MAX_H };
-
-  if (data.naturalWidth && data.naturalHeight) {
-    const ratio = data.naturalWidth / data.naturalHeight;
-    if (ratio >= 1) {
-      // landscape / square
-      const h = Math.min(MAX_W / ratio, MAX_H);
-      previewStyle = { width: '100%', height: h, maxWidth: MAX_W };
-    } else {
-      // portrait
-      const w = Math.min(MAX_H * ratio, MAX_W);
-      previewStyle = { width: w, height: MAX_H };
-    }
-  }
+  const aspectRatio = data.naturalWidth && data.naturalHeight
+    ? `${data.naturalWidth} / ${data.naturalHeight}`
+    : '1 / 1';
 
   return (
     <NodeWrapper title="Image Input" icon={<ImageIcon size={14} />} selected={selected} minWidth={240}>
       {data.imageUrl ? (
-        <div className="relative rounded-lg overflow-hidden mx-auto" style={previewStyle}>
+        <div
+          className="relative rounded-lg overflow-hidden w-full"
+          style={{ aspectRatio, maxHeight: 240, background: 'var(--color-bg-surface)' }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={data.imageUrl}

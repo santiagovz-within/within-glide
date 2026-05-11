@@ -2,7 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Wand2, Play, Download } from 'lucide-react';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
@@ -10,9 +10,25 @@ import { IMAGE_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 
 const RESOLUTIONS = ['1K', '2K', '4K'];
+const MAX_REF_IMAGES = 14;
+const REF_ROW_HEIGHT = 28;
 
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const imgRowsRef = useRef<HTMLDivElement>(null);
+  const [rowOffsetTop, setRowOffsetTop] = useState(230);
+
+  const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
+  const isMultiImageModel = modelConfig?.provider === 'google';
+  const portCount = isMultiImageModel ? Math.max(data.imagePortCount ?? 1, 1) : 0;
+  const connectedCount = (data.inputImageUrls ?? []).filter(Boolean).length;
+
+  // Measure the pixel offset of the reference-image rows within the RF node div.
+  // offsetTop is relative to the first positioned ancestor = the React Flow node div.
+  useLayoutEffect(() => {
+    if (!isMultiImageModel || !imgRowsRef.current) return;
+    setRowOffsetTop(imgRowsRef.current.offsetTop);
+  }, [isMultiImageModel, portCount, data.generatedImages?.length, data.status]);
 
   function updateData(updates: Partial<ImageGenNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {
@@ -20,38 +36,53 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     }));
   }
 
+  function handleModelChange(newModel: string) {
+    const newConfig = IMAGE_MODELS.find((m) => m.id === newModel);
+    const wasGoogle = isMultiImageModel;
+    const nowGoogle = newConfig?.provider === 'google';
+    if (wasGoogle !== nowGoogle) {
+      updateData({ model: newModel, inputImageUrls: [], imagePortCount: nowGoogle ? 1 : 0 });
+    } else {
+      updateData({ model: newModel });
+    }
+  }
+
   async function handleGenerate() {
     if (isGenerating) return;
     setIsGenerating(true);
     updateData({ status: 'processing' });
 
-    const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
-    const isGoogle = modelConfig?.provider === 'google';
-    const endpoint = isGoogle ? '/api/google/generate' : '/api/fal/generate';
+    const endpoint = isMultiImageModel ? '/api/google/generate' : '/api/fal/generate';
+    const inputImageUrls = (data.inputImageUrls ?? []).filter(Boolean);
+
+    const payload = {
+      model: data.model,
+      prompt: data.prompt ?? '',
+      aspectRatio: data.aspectRatio,
+      resolution: data.resolution,
+      numImages: data.numImages,
+      referenceImageUrls: inputImageUrls,
+      sourceType: 'canvas',
+      nodeId: id,
+    };
+    console.log('[ImageGenNode] Outgoing payload →', JSON.stringify(payload, null, 2));
 
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: data.model,
-          prompt: data.prompt ?? '',
-          aspectRatio: data.aspectRatio,
-          resolution: data.resolution,
-          numImages: data.numImages,
-          referenceImageUrls: data.referenceImageUrl ? [data.referenceImageUrl] : [],
-          sourceType: 'canvas',
-          nodeId: id,
-        }),
+        body: JSON.stringify(payload),
       });
       const result = await res.json();
+      console.log('[ImageGenNode] API response ←', result);
 
       if (result.mediaUrls?.length) {
         updateData({ generatedImages: result.mediaUrls, status: 'completed' });
       } else {
         updateData({ status: 'error' });
       }
-    } catch {
+    } catch (err) {
+      console.error('[ImageGenNode] fetch error', err);
       updateData({ status: 'error' });
     } finally {
       setIsGenerating(false);
@@ -59,6 +90,8 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   }
 
   const generatedImages = data.generatedImages ?? [];
+  const aspectCss = data.aspectRatio.replace(':', '/');
+  const isWide = data.aspectRatio.startsWith('16') || data.aspectRatio.startsWith('21');
 
   return (
     <NodeWrapper
@@ -68,11 +101,28 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       selected={selected}
       minWidth={300}
     >
-      {/* Input handles — positioned relative to the node card */}
-      <TypedHandle type="target" position={Position.Left} id="prompt"           portType="text"  offset="30%" />
-      <TypedHandle type="target" position={Position.Left} id="reference_image"  portType="image" offset="58%" />
+      {/* ── Prompt handle (left edge) ───────────────────────── */}
+      <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset="26%" />
 
-      {/* Inline prompt — editable directly or populated by a connected PromptNode */}
+      {/* ── Single reference-image handle (non-Google models) ── */}
+      {!isMultiImageModel && (
+        <TypedHandle type="target" position={Position.Left} id="reference_image" portType="image" offset="55%" />
+      )}
+
+      {/* ── Dynamic multi-image handles (Google models) ──────── */}
+      {isMultiImageModel && Array.from({ length: portCount }, (_, i) => (
+        <TypedHandle
+          key={`ref_${i}`}
+          type="target"
+          position={Position.Left}
+          id={`ref_${i}`}
+          portType="image"
+          offset={`${rowOffsetTop + REF_ROW_HEIGHT / 2 + i * REF_ROW_HEIGHT}px`}
+          badge={i + 1}
+        />
+      ))}
+
+      {/* ── Inline prompt ────────────────────────────────────── */}
       <div className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
           Prompt
@@ -91,13 +141,13 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         />
       </div>
 
-      {/* Model selector */}
+      {/* ── Model selector ───────────────────────────────────── */}
       <div className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
         <select
           className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
           value={data.model}
-          onChange={(e) => updateData({ model: e.target.value })}
+          onChange={(e) => handleModelChange(e.target.value)}
           style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
         >
           {IMAGE_MODELS.map((m) => (
@@ -106,7 +156,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </select>
       </div>
 
-      {/* Aspect ratio + resolution */}
+      {/* ── Aspect ratio + resolution ─────────────────────────── */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
@@ -136,7 +186,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </div>
       </div>
 
-      {/* Num images */}
+      {/* ── Num images ───────────────────────────────────────── */}
       <div className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
           Images: {data.numImages}
@@ -149,19 +199,44 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         />
       </div>
 
-      {/* Generated previews */}
+      {/* ── Reference image rows (Google multi-image models) ──── */}
+      {isMultiImageModel && (
+        <div ref={imgRowsRef} className="mb-3">
+          <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
+            Reference Images{connectedCount > 0 ? ` (${connectedCount}/${MAX_REF_IMAGES})` : ''}
+          </label>
+          {Array.from({ length: portCount }, (_, i) => {
+            const hasImage = !!(data.inputImageUrls?.[i]);
+            return (
+              <div
+                key={i}
+                className="flex items-center px-2 text-xs rounded mb-0.5"
+                style={{
+                  height: REF_ROW_HEIGHT,
+                  background: 'var(--color-bg-surface)',
+                  border: `1px solid ${hasImage ? 'var(--color-accent)' : 'rgba(255,255,255,0.08)'}`,
+                  color: hasImage ? 'var(--color-accent)' : 'var(--color-white-muted)',
+                  transition: 'border-color 0.15s, color 0.15s',
+                }}
+              >
+                {hasImage ? '✓' : '○'}&nbsp;Image {i + 1}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Generated previews ───────────────────────────────── */}
       {generatedImages.length > 0 && (
         <div
           className="mb-3 grid gap-1"
-          style={{
-            gridTemplateColumns: `repeat(${data.aspectRatio.startsWith('16') || data.aspectRatio.startsWith('21') ? 1 : Math.min(generatedImages.length, 2)}, 1fr)`,
-          }}
+          style={{ gridTemplateColumns: `repeat(${isWide ? 1 : Math.min(generatedImages.length, 2)}, 1fr)` }}
         >
           {generatedImages.map((url, i) => (
             <div
               key={i}
               className="relative rounded-lg overflow-hidden group"
-              style={{ aspectRatio: data.aspectRatio.replace(':', '/') }}
+              style={{ width: '100%', aspectRatio: aspectCss, maxHeight: 240 }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt={`Generated ${i + 1}`} className="w-full h-full object-cover" />
@@ -177,7 +252,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </div>
       )}
 
-      {/* Generate button — only disabled while a request is in-flight */}
+      {/* ── Generate button ───────────────────────────────────── */}
       <button
         onClick={handleGenerate}
         disabled={isGenerating}

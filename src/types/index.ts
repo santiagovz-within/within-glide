@@ -124,7 +124,8 @@ export interface ImageGenNodeData extends Record<string, unknown> {
   resolution: string;
   numImages: number;
   prompt?: string;
-  referenceImageUrl?: string;
+  inputImageUrls?: string[];
+  imagePortCount?: number;
   generatedImages?: string[];
   status: NodeStatus;
   label?: string;

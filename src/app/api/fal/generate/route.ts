@@ -84,17 +84,19 @@ export async function POST(request: NextRequest) {
     const endpoint = useEditEndpoint ? modelConfig.editEndpoint : modelConfig.endpoint;
     const usesAspectRatio = 'usesAspectRatio' in modelConfig && modelConfig.usesAspectRatio;
 
+    console.log('[fal/generate] endpoint:', endpoint, '| refs:', referenceImageUrls.length, '| prompt:', prompt.slice(0, 80));
+
     for (let i = 0; i < numImages; i++) {
-      const result = await fal.subscribe(endpoint as string, {
-        input: {
-          prompt,
-          ...(usesAspectRatio
-            ? { aspect_ratio: aspectRatio }
-            : { image_size: { width, height }, num_inference_steps: body.quality === 'high' ? 40 : body.quality === 'low' ? 20 : 28 }),
-          ...(body.negativePrompt ? { negative_prompt: body.negativePrompt } : {}),
-          ...(referenceImageUrls[0] ? { image_url: referenceImageUrls[0] } : {}),
-        },
-      });
+      const falInput = {
+        prompt,
+        ...(usesAspectRatio
+          ? { aspect_ratio: aspectRatio }
+          : { image_size: { width, height }, num_inference_steps: body.quality === 'high' ? 40 : body.quality === 'low' ? 20 : 28 }),
+        ...(body.negativePrompt ? { negative_prompt: body.negativePrompt } : {}),
+        ...(referenceImageUrls[0] ? { image_url: referenceImageUrls[0] } : {}),
+      };
+      console.log(`[fal/generate] image ${i + 1}/${numImages} input:`, JSON.stringify(falInput));
+      const result = await fal.subscribe(endpoint as string, { input: falInput });
 
       const falResult = result.data as { images?: Array<{ url: string }>; image?: { url: string } };
       const imageUrl = falResult.images?.[0]?.url ?? falResult.image?.url;

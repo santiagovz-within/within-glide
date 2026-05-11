@@ -97,18 +97,18 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
           {data.inputImageUrl && (
             <div>
               <p className="text-xs mb-1" style={{ color: 'var(--color-white-muted)' }}>Before</p>
-              <div className="rounded-lg overflow-hidden" style={{ aspectRatio: '1' }}>
+              <div className="rounded-lg overflow-hidden" style={{ width: '100%', maxHeight: 200 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={data.inputImageUrl} alt="Before" className="w-full h-full object-cover" />
+                <img src={data.inputImageUrl} alt="Before" className="w-full h-auto object-contain" style={{ maxHeight: 200, display: 'block' }} />
               </div>
             </div>
           )}
           {data.outputImageUrl && (
             <div>
               <p className="text-xs mb-1" style={{ color: 'var(--color-white-muted)' }}>After</p>
-              <div className="rounded-lg overflow-hidden" style={{ aspectRatio: '1' }}>
+              <div className="rounded-lg overflow-hidden" style={{ width: '100%', maxHeight: 200 }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={data.outputImageUrl} alt="After" className="w-full h-full object-cover" />
+                <img src={data.outputImageUrl} alt="After" className="w-full h-auto object-contain" style={{ maxHeight: 200, display: 'block' }} />
               </div>
             </div>
           )}

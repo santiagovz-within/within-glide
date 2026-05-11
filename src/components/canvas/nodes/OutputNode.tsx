@@ -13,12 +13,15 @@ export function OutputNode({ data, selected }: NodeProps & { data: OutputNodeDat
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
       {data.mediaUrl ? (
-        <div className="rounded-lg overflow-hidden relative group" style={{ aspectRatio: data.mediaType === 'video' ? '16/9' : '1' }}>
+        <div
+          className="rounded-lg overflow-hidden relative group"
+          style={{ width: '100%', aspectRatio: data.mediaType === 'video' ? '16/9' : 'auto', maxHeight: 240 }}
+        >
           {data.mediaType === 'video' ? (
             <video src={data.mediaUrl} controls className="w-full h-full object-cover" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.mediaUrl} alt="Output" className="w-full h-full object-cover" />
+            <img src={data.mediaUrl} alt="Output" className="w-full h-auto object-contain" style={{ maxHeight: 240, display: 'block' }} />
           )}
           <a
             href={data.mediaUrl}
