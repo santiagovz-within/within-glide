@@ -20,11 +20,17 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const [rowOffsetTop, setRowOffsetTop] = useState(230);
 
   const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
-  const isMultiImageModel = modelConfig?.provider === 'google';
+  const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
+
+  // Multi-image: Google models OR fal models whose edit endpoint accepts image_urls[]
+  const isMultiImageModel =
+    modelConfig?.provider === 'google' ||
+    (!!falConfig && 'editImageParam' in falConfig &&
+      (falConfig as { editImageParam: string }).editImageParam === 'image_urls');
+
   const portCount = isMultiImageModel ? Math.max(data.imagePortCount ?? 1, 1) : 0;
   const connectedCount = (data.inputImageUrls ?? []).filter(Boolean).length;
 
-  const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
   const hasEditVariant = !!falConfig && 'editEndpoint' in falConfig;
   const hasImageInput = (data.inputImageUrls ?? []).some(Boolean);
   const isEditMode = hasEditVariant && hasImageInput;
@@ -43,11 +49,14 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   }
 
   function handleModelChange(newModel: string) {
+    const newFalConfig = FAL_MODELS[newModel as keyof typeof FAL_MODELS];
     const newConfig = IMAGE_MODELS.find((m) => m.id === newModel);
-    const wasGoogle = isMultiImageModel;
-    const nowGoogle = newConfig?.provider === 'google';
-    if (wasGoogle !== nowGoogle) {
-      updateData({ model: newModel, inputImageUrls: [], imagePortCount: nowGoogle ? 1 : 0 });
+    const nowMulti =
+      newConfig?.provider === 'google' ||
+      (!!newFalConfig && 'editImageParam' in newFalConfig &&
+        (newFalConfig as { editImageParam: string }).editImageParam === 'image_urls');
+    if (isMultiImageModel !== nowMulti) {
+      updateData({ model: newModel, inputImageUrls: [], imagePortCount: nowMulti ? 1 : 0 });
     } else {
       updateData({ model: newModel });
     }
@@ -58,7 +67,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     setIsGenerating(true);
     updateData({ status: 'processing' });
 
-    const endpoint = isMultiImageModel ? '/api/google/generate' : '/api/fal/generate';
+    const endpoint = modelConfig?.provider === 'google' ? '/api/google/generate' : '/api/fal/generate';
     const inputImageUrls = (data.inputImageUrls ?? []).filter(Boolean);
 
     const payload = {
@@ -108,12 +117,12 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {/* ── Prompt handle (left edge) ───────────────────────── */}
       <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset="26%" />
 
-      {/* ── Single reference-image handle (non-Google models) ── */}
+      {/* ── Single reference-image handle (single-image models) ── */}
       {!isMultiImageModel && (
         <TypedHandle type="target" position={Position.Left} id="reference_image" portType="image" offset="55%" />
       )}
 
-      {/* ── Dynamic multi-image handles (Google models) ──────── */}
+      {/* ── Dynamic multi-image handles (up to 14 inputs) ──────── */}
       {isMultiImageModel && Array.from({ length: portCount }, (_, i) => (
         <TypedHandle
           key={`ref_${i}`}
@@ -216,7 +225,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         />
       </div>
 
-      {/* ── Reference image rows (Google multi-image models) ──── */}
+      {/* ── Reference image rows (multi-image models) ──── */}
       {isMultiImageModel && (
         <div ref={imgRowsRef} className="mb-3">
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
