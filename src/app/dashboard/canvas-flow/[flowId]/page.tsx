@@ -1,0 +1,80 @@
+'use client';
+
+import { useEffect, useCallback } from 'react';
+import { useParams } from 'next/navigation';
+import { ReactFlowProvider } from '@xyflow/react';
+import { FlowCanvas } from '@/components/canvas/FlowCanvas';
+import { TopBar } from '@/components/layout/TopBar';
+import { useFlowStore } from '@/lib/stores/flowStore';
+import { createClient } from '@/lib/supabase/client';
+import { AUTOSAVE_DEBOUNCE_MS } from '@/lib/utils/constants';
+
+export default function FlowEditorPage() {
+  const params = useParams<{ flowId: string }>();
+  const { flowId } = params;
+  const { setCurrentFlow, nodes, edges, isDirty, setDirty, setSaving, setLastSaved, currentFlow } = useFlowStore();
+  const supabase = createClient();
+
+  const loadFlow = useCallback(async () => {
+    const { data } = await supabase
+      .from('flows')
+      .select('*')
+      .eq('id', flowId)
+      .single();
+    if (data) setCurrentFlow(data);
+  }, [flowId, supabase, setCurrentFlow]);
+
+  useEffect(() => {
+    loadFlow();
+    return () => setCurrentFlow(null);
+  }, [loadFlow, setCurrentFlow]);
+
+  // Auto-save debounced
+  useEffect(() => {
+    if (!isDirty || !currentFlow) return;
+    const timer = setTimeout(async () => {
+      setSaving(true);
+      try {
+        await supabase
+          .from('flows')
+          .update({
+            flow_data: {
+              nodes: nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
+              edges,
+              viewport: { x: 0, y: 0, zoom: 1 },
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', flowId);
+        setDirty(false);
+        setLastSaved(new Date());
+      } finally {
+        setSaving(false);
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [isDirty, nodes, edges, flowId, currentFlow, supabase, setDirty, setSaving, setLastSaved]);
+
+  // Keyboard shortcut: Ctrl+S
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        if (isDirty) {
+          setDirty(true); // trigger save via autosave
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isDirty, setDirty]);
+
+  return (
+    <ReactFlowProvider>
+      <div className="relative w-full h-full">
+        <TopBar flowId={flowId} />
+        <FlowCanvas />
+      </div>
+    </ReactFlowProvider>
+  );
+}
