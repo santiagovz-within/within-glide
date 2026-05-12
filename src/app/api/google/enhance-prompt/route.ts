@@ -10,7 +10,7 @@ const LENGTH_INSTRUCTIONS: Record<string, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, geminiModel = 'gemini-2.0-flash', length = 'auto' } = await request.json();
+    const { prompt, geminiModel = 'gemini-2.5-flash-preview-05-20', length = 'auto' } = await request.json();
     if (!prompt?.trim()) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }

@@ -5,7 +5,7 @@
    ============================================================ */
 :root {
   /* Core palette — dark mode (default) */
-  --color-bg-darkest: #070708;
+  --color-bg-darkest: #0f0f10;
   --color-bg-elevated: #1c1c1d;
   --color-bg-surface: #2a2a2b;
   --color-bg-hover: #333334;
@@ -158,16 +158,21 @@ body {
   fill: var(--color-bg-hover);
 }
 
+/* Force all edge paths to be solid — no dashes, no animation, ever */
+.react-flow__edge path,
 .react-flow__edge-path,
+.react-flow__edge.animated path,
+.react-flow__edge.animated .react-flow__edge-path,
 .animated .react-flow__edge-path {
-  stroke: var(--color-accent);
-  stroke-width: 2;
   stroke-dasharray: none !important;
+  stroke-dashoffset: 0 !important;
   animation: none !important;
 }
 
 .react-flow__connection-path {
   stroke: var(--color-accent);
   stroke-width: 2;
+  stroke-dasharray: none !important;
+  animation: none !important;
 }
 
