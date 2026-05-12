@@ -18,7 +18,7 @@ export async function GET() {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const supabase = await createAdminClient();
+  const supabase = createAdminClient();
 
   const { data: { users }, error } = await supabase.auth.admin.listUsers();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
 
-  const supabase = await createAdminClient();
+  const supabase = createAdminClient();
 
   const { data: { user }, error: createError } = await supabase.auth.admin.createUser({
     email,

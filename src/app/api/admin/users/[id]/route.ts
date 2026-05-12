@@ -23,7 +23,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await request.json();
-  const supabase = await createAdminClient();
+  const supabase = createAdminClient();
 
   const updates: Record<string, unknown> = {};
   if (typeof body.is_admin === 'boolean') updates.is_admin = body.is_admin;
@@ -52,7 +52,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 });
   }
 
-  const supabase = await createAdminClient();
+  const supabase = createAdminClient();
   const { error } = await supabase.auth.admin.deleteUser(id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

@@ -18,7 +18,7 @@ export async function GET() {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const supabase = await createAdminClient();
+  const supabase = createAdminClient();
 
   // Fetch all generations (limit to last 10k for perf)
   const { data: generations, error } = await supabase

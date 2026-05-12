@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 // GET /api/flows/base — returns all is_template=true flows (visible to all users)
 export async function GET() {
   try {
-    const supabase = await createAdminClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('flows')
       .select('id, title, description, thumbnail_url, flow_data, created_at, updated_at')

@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 // Call once from the browser after running the SQL migration.
 export async function POST() {
   try {
-    const supabase = await createAdminClient();
+    const supabase = createAdminClient();
 
     const { data: profiles, error } = await supabase
       .from('profiles')
