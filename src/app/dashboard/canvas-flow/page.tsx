@@ -2,99 +2,16 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search, MoreHorizontal, Clock, Workflow } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Clock, Workflow, BookTemplate } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { Flow } from '@/types';
 import { cn } from '@/lib/utils/cn';
 import { formatDistanceToNow } from '@/lib/utils/date';
 
-const TEMPLATES = [
-  {
-    id: 'tpl-moodboard',
-    title: 'Moodboard',
-    description: 'Generate multiple images from a single prompt',
-    color: 'from-blue-500/20 to-purple-500/20',
-    icon: '🎨',
-  },
-  {
-    id: 'tpl-upscale',
-    title: 'Upscale',
-    description: 'Enhance image resolution with AI upscaling',
-    color: 'from-emerald-500/20 to-cyan-500/20',
-    icon: '✨',
-  },
-];
-
-const TEMPLATE_FLOW_DATA = {
-  'tpl-moodboard': {
-    nodes: [
-      {
-        id: 'prompt-1',
-        type: 'promptNode',
-        position: { x: 100, y: 200 },
-        data: { prompt: 'A serene mountain landscape at golden hour' },
-      },
-      {
-        id: 'img-gen-1',
-        type: 'imageGenNode',
-        position: { x: 420, y: 150 },
-        data: {
-          model: 'flux-2-pro',
-          aspectRatio: '1:1',
-          resolution: '1K',
-          numImages: 4,
-          status: 'idle',
-        },
-      },
-      {
-        id: 'output-1',
-        type: 'outputNode',
-        position: { x: 760, y: 200 },
-        data: { label: 'Output' },
-      },
-    ],
-    edges: [
-      { id: 'e1', source: 'prompt-1', target: 'img-gen-1', sourceHandle: 'prompt', targetHandle: 'prompt', animated: true },
-      { id: 'e2', source: 'img-gen-1', target: 'output-1', sourceHandle: 'image', targetHandle: 'image', animated: true },
-    ],
-    viewport: { x: 0, y: 0, zoom: 1 },
-  },
-  'tpl-upscale': {
-    nodes: [
-      {
-        id: 'img-input-1',
-        type: 'imageInputNode',
-        position: { x: 100, y: 200 },
-        data: { label: 'Image Input' },
-      },
-      {
-        id: 'upscale-1',
-        type: 'upscaleNode',
-        position: { x: 420, y: 150 },
-        data: {
-          model: 'seedvr2',
-          scaleFactor: 2,
-          status: 'idle',
-        },
-      },
-      {
-        id: 'output-1',
-        type: 'outputNode',
-        position: { x: 760, y: 200 },
-        data: { label: 'Output' },
-      },
-    ],
-    edges: [
-      { id: 'e1', source: 'img-input-1', target: 'upscale-1', sourceHandle: 'image', targetHandle: 'image', animated: true },
-      { id: 'e2', source: 'upscale-1', target: 'output-1', sourceHandle: 'image', targetHandle: 'image', animated: true },
-    ],
-    viewport: { x: 0, y: 0, zoom: 1 },
-  },
-};
-
 export default function CanvasFlowPage() {
   const router = useRouter();
   const [flows, setFlows] = useState<Flow[]>([]);
+  const [baseFlows, setBaseFlows] = useState<Flow[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -105,14 +22,19 @@ export default function CanvasFlowPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data } = await supabase
-      .from('flows')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_template', false)
-      .order('updated_at', { ascending: false });
+    const [userFlowsResult, baseFlowsResult] = await Promise.all([
+      supabase
+        .from('flows')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_template', false)
+        .order('updated_at', { ascending: false }),
+      // Fetch all base flows via service-route (bypasses RLS for cross-user reads)
+      fetch('/api/flows/base').then((r) => r.json()).catch(() => ({ baseFlows: [] })),
+    ]);
 
-    setFlows(data ?? []);
+    setFlows(userFlowsResult.data ?? []);
+    setBaseFlows(baseFlowsResult.baseFlows ?? []);
     setLoading(false);
   }, [supabase]);
 
@@ -120,18 +42,16 @@ export default function CanvasFlowPage() {
     loadFlows();
   }, [loadFlows]);
 
-  async function createNewFlow(title = 'Untitled Flow', flowData: Record<string, unknown> = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }) {
+  async function createNewFlow(
+    title = 'Untitled Flow',
+    flowData: Record<string, unknown> = { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
+  ) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data, error } = await supabase
       .from('flows')
-      .insert({
-        user_id: user.id,
-        title,
-        flow_data: flowData,
-        is_template: false,
-      })
+      .insert({ user_id: user.id, title, flow_data: flowData, is_template: false })
       .select()
       .single();
 
@@ -140,11 +60,9 @@ export default function CanvasFlowPage() {
     }
   }
 
-  async function createFromTemplate(templateId: string) {
-    const template = TEMPLATES.find((t) => t.id === templateId);
-    if (!template) return;
-    const flowData = TEMPLATE_FLOW_DATA[templateId as keyof typeof TEMPLATE_FLOW_DATA];
-    await createNewFlow(template.title, flowData);
+  async function createFromBase(base: Flow) {
+    // Duplicate as a personal flow (is_template: false)
+    await createNewFlow(base.title, base.flow_data as unknown as Record<string, unknown>);
   }
 
   async function renameFlow(id: string, newTitle: string) {
@@ -162,36 +80,47 @@ export default function CanvasFlowPage() {
   );
 
   return (
-    <div
-      className="h-full overflow-auto p-8"
-      onClick={() => setMenuOpenId(null)}
-    >
-      {/* Base Flows (Templates) */}
+    <div className="h-full overflow-auto p-8" onClick={() => setMenuOpenId(null)}>
+      {/* Base Flows */}
       <section className="mb-10">
         <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white-muted)' }}>
           BASE FLOWS
         </h2>
-        <div className="flex gap-4 overflow-x-auto pb-2">
-          {TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => createFromTemplate(t.id)}
-              className={cn(
-                'flex-shrink-0 w-48 h-36 rounded-xl p-4 text-left transition-all duration-150 hover:scale-[1.02] hover:opacity-90',
-                `bg-gradient-to-br ${t.color}`
-              )}
-              style={{ border: 'var(--border-default)' }}
-            >
-              <div className="text-2xl mb-2">{t.icon}</div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--color-white)' }}>
-                {t.title}
-              </p>
-              <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-white-muted)' }}>
-                {t.description}
-              </p>
-            </button>
-          ))}
-        </div>
+        {baseFlows.length === 0 ? (
+          <div
+            className="flex items-center gap-3 px-4 py-5 rounded-xl"
+            style={{ border: '1.5px dashed rgba(255,255,255,0.1)' }}
+          >
+            <BookTemplate size={20} className="opacity-30" style={{ color: 'var(--color-white)' }} />
+            <p className="text-sm" style={{ color: 'var(--color-white-muted)' }}>
+              No base flows yet — admins can save any flow as a base from the editor.
+            </p>
+          </div>
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {baseFlows.map((bf) => (
+              <button
+                key={bf.id}
+                onClick={() => createFromBase(bf)}
+                className="flex-shrink-0 w-48 h-36 rounded-xl p-4 text-left transition-all duration-150 hover:scale-[1.02] hover:opacity-90"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(59,158,255,0.15), rgba(168,85,247,0.15))',
+                  border: 'var(--border-default)',
+                }}
+              >
+                <BookTemplate size={20} className="mb-2 opacity-70" style={{ color: 'var(--color-accent)' }} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--color-white)' }}>
+                  {bf.title}
+                </p>
+                {bf.description && (
+                  <p className="text-xs mt-1 leading-relaxed line-clamp-2" style={{ color: 'var(--color-white-muted)' }}>
+                    {bf.description}
+                  </p>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Recent Flows */}
@@ -311,7 +240,6 @@ function FlowCard({
       style={{ border: 'var(--border-default)', background: 'var(--color-bg-elevated)' }}
       onClick={onOpen}
     >
-      {/* Thumbnail area */}
       <div
         className="h-28 flex items-center justify-center"
         style={{ background: 'var(--color-bg-surface)' }}
@@ -324,7 +252,6 @@ function FlowCard({
         )}
       </div>
 
-      {/* Footer */}
       <div className="p-3">
         <div className="flex items-start justify-between gap-2">
           <p
@@ -348,7 +275,6 @@ function FlowCard({
         </div>
       </div>
 
-      {/* Context menu */}
       {menuOpen && (
         <div
           className="absolute right-2 bottom-2 z-10 w-36 rounded-lg overflow-hidden shadow-lg"

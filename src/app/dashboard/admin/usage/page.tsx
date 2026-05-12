@@ -1,0 +1,221 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { BarChart2, Loader2, ImageIcon, Film } from 'lucide-react';
+
+interface UsageData {
+  totalGenerations: number;
+  modelUsage: { model: string; count: number }[];
+  userUsage: { userId: string; username: string; count: number }[];
+  hourlyTraffic: number[];
+  mediaTypeSplit: { image: number; video: number };
+}
+
+function BarRow({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span
+        className="text-xs truncate"
+        style={{ color: 'var(--color-white-muted)', minWidth: 160, maxWidth: 160 }}
+        title={label}
+      >
+        {label}
+      </span>
+      <div className="flex-1 flex items-center gap-2">
+        <div
+          className="rounded-full overflow-hidden"
+          style={{ flex: 1, height: 6, background: 'var(--color-bg-surface)' }}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${pct}%`, background: color }}
+          />
+        </div>
+        <span className="text-xs tabular-nums w-8 text-right" style={{ color: 'var(--color-white)' }}>
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function HourChart({ traffic }: { traffic: number[] }) {
+  const max = Math.max(...traffic, 1);
+  const HOURS = Array.from({ length: 24 }, (_, i) => {
+    const ampm = i < 12 ? 'am' : 'pm';
+    const h = i === 0 ? 12 : i > 12 ? i - 12 : i;
+    return `${h}${ampm}`;
+  });
+
+  return (
+    <div className="flex items-end gap-0.5 h-20">
+      {traffic.map((count, i) => {
+        const pct = Math.round((count / max) * 100);
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${HOURS[i]}: ${count}`}>
+            <div
+              className="w-full rounded-sm"
+              style={{
+                height: `${Math.max(pct, 2)}%`,
+                background: count > 0 ? 'var(--color-accent)' : 'var(--color-bg-surface)',
+                opacity: count > 0 ? 0.7 + (pct / 100) * 0.3 : 1,
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function AdminUsagePage() {
+  const [data, setData] = useState<UsageData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    async function load() {
+      const res = await fetch('/api/admin/usage');
+      if (res.ok) {
+        setData(await res.json());
+      } else {
+        setError('Failed to load usage data');
+      }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const cardStyle: React.CSSProperties = {
+    background: 'var(--color-bg-elevated)',
+    border: 'var(--border-default)',
+    borderRadius: 12,
+    padding: 20,
+  };
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center gap-2" style={{ color: 'var(--color-white-muted)' }}>
+        <Loader2 size={18} className="animate-spin" />
+        <span className="text-sm">Loading usage data…</span>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-sm" style={{ color: 'var(--color-error)' }}>{error || 'No data'}</p>
+      </div>
+    );
+  }
+
+  const maxModelCount = Math.max(...data.modelUsage.map((m) => m.count), 1);
+  const maxUserCount  = Math.max(...data.userUsage.map((u) => u.count), 1);
+
+  return (
+    <div className="h-full overflow-auto p-8">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-8">
+        <BarChart2 size={24} style={{ color: 'var(--color-accent)' }} />
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: 'var(--color-white)' }}>All Usage</h1>
+          <p className="text-sm" style={{ color: 'var(--color-white-muted)' }}>
+            Platform-wide generation activity across all users
+          </p>
+        </div>
+      </div>
+
+      {/* KPI row */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div style={cardStyle}>
+          <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--color-white-muted)' }}>
+            Total Generations
+          </p>
+          <p className="text-3xl font-semibold tabular-nums" style={{ color: 'var(--color-white)' }}>
+            {data.totalGenerations.toLocaleString()}
+          </p>
+        </div>
+        <div style={cardStyle}>
+          <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--color-white-muted)' }}>
+            Images Generated
+          </p>
+          <div className="flex items-center gap-2">
+            <ImageIcon size={18} style={{ color: 'var(--color-accent)' }} />
+            <p className="text-3xl font-semibold tabular-nums" style={{ color: 'var(--color-white)' }}>
+              {data.mediaTypeSplit.image.toLocaleString()}
+            </p>
+          </div>
+        </div>
+        <div style={cardStyle}>
+          <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--color-white-muted)' }}>
+            Videos Generated
+          </p>
+          <div className="flex items-center gap-2">
+            <Film size={18} style={{ color: 'var(--color-success)' }} />
+            <p className="text-3xl font-semibold tabular-nums" style={{ color: 'var(--color-white)' }}>
+              {data.mediaTypeSplit.video.toLocaleString()}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        {/* Model usage */}
+        <div style={cardStyle}>
+          <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>Model Usage</p>
+          {data.modelUsage.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No data yet</p>
+          ) : (
+            <div>
+              {data.modelUsage.slice(0, 12).map((m) => (
+                <BarRow
+                  key={m.model}
+                  label={m.model}
+                  value={m.count}
+                  max={maxModelCount}
+                  color="var(--color-accent)"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* User activity */}
+        <div style={cardStyle}>
+          <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>User Activity</p>
+          {data.userUsage.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No data yet</p>
+          ) : (
+            <div>
+              {data.userUsage.slice(0, 12).map((u) => (
+                <BarRow
+                  key={u.userId}
+                  label={u.username}
+                  value={u.count}
+                  max={maxUserCount}
+                  color="var(--color-processing)"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hourly traffic */}
+      <div style={cardStyle}>
+        <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>API Traffic by Hour of Day</p>
+        <HourChart traffic={data.hourlyTraffic} />
+        <div className="flex justify-between mt-2" style={{ color: 'var(--color-white-muted)', fontSize: 10 }}>
+          <span>12am</span>
+          <span>6am</span>
+          <span>12pm</span>
+          <span>6pm</span>
+          <span>11pm</span>
+        </div>
+      </div>
+    </div>
+  );
+}

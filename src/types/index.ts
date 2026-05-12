@@ -7,6 +7,7 @@ export interface Profile {
   username: string;
   display_name: string | null;
   theme: 'dark' | 'light';
+  is_admin: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -75,7 +76,9 @@ export type NodeType =
   | 'imageGenNode'
   | 'videoGenNode'
   | 'upscaleNode'
-  | 'outputNode';
+  | 'outputNode'
+  | 'galleryOutputNode'
+  | 'groupNode';
 
 export interface FlowViewport {
   x: number;
@@ -158,13 +161,24 @@ export interface OutputNodeData extends Record<string, unknown> {
   label?: string;
 }
 
+export interface GalleryOutputNodeData extends Record<string, unknown> {
+  label?: string;
+}
+
+export interface GroupNodeData extends Record<string, unknown> {
+  label?: string;
+  color?: string;
+}
+
 export type NodeData =
   | PromptNodeData
   | ImageInputNodeData
   | ImageGenNodeData
   | VideoGenNodeData
   | UpscaleNodeData
-  | OutputNodeData;
+  | OutputNodeData
+  | GalleryOutputNodeData
+  | GroupNodeData;
 
 export type NodeStatus = 'idle' | 'processing' | 'completed' | 'error';
 

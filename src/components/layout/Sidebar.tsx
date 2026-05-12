@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Workflow,
   ImageIcon,
@@ -11,8 +11,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Users,
+  BarChart2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
+import { createClient } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
   { label: 'Canvas Flow', icon: Workflow, href: '/dashboard/canvas-flow' },
@@ -20,13 +23,68 @@ const NAV_ITEMS = [
   { label: 'Gallery', icon: Grid3x3, href: '/dashboard/gallery' },
 ];
 
+const ADMIN_ITEMS = [
+  { label: 'Users', icon: Users, href: '/dashboard/admin/users' },
+  { label: 'All Usage', icon: BarChart2, href: '/dashboard/admin/usage' },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    async function checkAdmin() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+      setIsAdmin(profile?.is_admin ?? false);
+    }
+    checkAdmin();
+  }, []);
 
   function handleJamBox() {
     window.open('https://jambox-one.vercel.app/', '_blank', 'noopener,noreferrer');
   }
+
+  const renderNavItem = (label: string, Icon: React.ElementType, href: string) => {
+    const active = pathname.startsWith(href);
+    return (
+      <Link
+        key={href}
+        href={href}
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group',
+          active ? 'bg-white/10' : 'hover:bg-white/5'
+        )}
+      >
+        <Icon
+          size={18}
+          className="shrink-0 transition-colors"
+          style={{ color: active ? 'var(--color-white)' : 'var(--color-white-muted)' }}
+        />
+        {!collapsed && (
+          <span
+            className="text-sm whitespace-nowrap transition-colors"
+            style={{ color: active ? 'var(--color-white)' : 'var(--color-white-muted)' }}
+          >
+            {label}
+          </span>
+        )}
+        {active && (
+          <div
+            className="absolute left-0 w-0.5 h-6 rounded-r-full"
+            style={{ background: 'var(--color-accent)' }}
+          />
+        )}
+      </Link>
+    );
+  };
 
   return (
     <aside
@@ -53,46 +111,14 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--color-white)' }}>
-            FlowCanvas
+            Canvas
           </span>
         )}
       </div>
 
-      {/* Nav items */}
-      <nav className="flex-1 px-2 py-4 space-y-1 overflow-hidden">
-        {NAV_ITEMS.map(({ label, icon: Icon, href }) => {
-          const active = pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group',
-                active ? 'bg-white/10' : 'hover:bg-white/5'
-              )}
-            >
-              <Icon
-                size={18}
-                className="shrink-0 transition-colors"
-                style={{ color: active ? 'var(--color-white)' : 'var(--color-white-muted)' }}
-              />
-              {!collapsed && (
-                <span
-                  className="text-sm whitespace-nowrap transition-colors"
-                  style={{ color: active ? 'var(--color-white)' : 'var(--color-white-muted)' }}
-                >
-                  {label}
-                </span>
-              )}
-              {active && (
-                <div
-                  className="absolute left-0 w-0.5 h-6 rounded-r-full"
-                  style={{ background: 'var(--color-accent)' }}
-                />
-              )}
-            </Link>
-          );
-        })}
+      {/* Main nav items */}
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-hidden overflow-y-auto">
+        {NAV_ITEMS.map(({ label, icon: Icon, href }) => renderNavItem(label, Icon, href))}
 
         {/* JamBox (external link) */}
         <button
@@ -113,6 +139,22 @@ export function Sidebar() {
             </span>
           )}
         </button>
+
+        {/* Admin section */}
+        {isAdmin && (
+          <>
+            <div
+              className="mx-3 my-2"
+              style={{ height: '1px', background: 'var(--color-white-subtle)' }}
+            />
+            {!collapsed && (
+              <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--color-white-muted)' }}>
+                Admin
+              </p>
+            )}
+            {ADMIN_ITEMS.map(({ label, icon: Icon, href }) => renderNavItem(label, Icon, href))}
+          </>
+        )}
       </nav>
 
       {/* Bottom section */}

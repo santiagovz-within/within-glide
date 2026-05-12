@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Cloud, CloudUpload, Undo2, Redo2, Share2 } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronRight, Cloud, CloudUpload, Undo2, Redo2, Share2, BookTemplate } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
 
@@ -14,8 +14,30 @@ export function TopBar({ flowId }: TopBarProps) {
   const { currentFlow, isDirty, isSaving, nodes, edges, setDirty, setSaving, setLastSaved } = useFlowStore();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState('');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [savingBase, setSavingBase] = useState(false);
+  const [isBaseFlow, setIsBaseFlow] = useState(false);
 
   const supabase = createClient();
+
+  useEffect(() => {
+    async function checkAdmin() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .single();
+      setIsAdmin(profile?.is_admin ?? false);
+    }
+    checkAdmin();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    setIsBaseFlow(currentFlow?.is_template ?? false);
+  }, [currentFlow]);
 
   function startEditTitle() {
     setTitleValue(currentFlow?.title ?? '');
@@ -43,7 +65,7 @@ export function TopBar({ flowId }: TopBarProps) {
         .from('flows')
         .update({
           flow_data: {
-            nodes: nodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
+            nodes: nodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data, parentId: n.parentId, style: n.style })),
             edges,
             viewport: { x: 0, y: 0, zoom: 1 },
           },
@@ -54,6 +76,32 @@ export function TopBar({ flowId }: TopBarProps) {
       setLastSaved(new Date());
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveAsBaseFlow() {
+    if (!currentFlow || savingBase) return;
+    const confirmMsg = isBaseFlow
+      ? 'Remove this flow from Base Flows? Users will no longer see it as a template.'
+      : 'Save this flow as a Base Flow? All users will be able to use it as a starting template.';
+    if (!confirm(confirmMsg)) return;
+    setSavingBase(true);
+    try {
+      // First save current state
+      await supabase.from('flows').update({
+        is_template: !isBaseFlow,
+        flow_data: {
+          nodes: nodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data, parentId: n.parentId, style: n.style })),
+          edges,
+          viewport: { x: 0, y: 0, zoom: 1 },
+        },
+        updated_at: new Date().toISOString(),
+      }).eq('id', flowId);
+      setIsBaseFlow(!isBaseFlow);
+      setDirty(false);
+      setLastSaved(new Date());
+    } finally {
+      setSavingBase(false);
     }
   }
 
@@ -89,11 +137,7 @@ export function TopBar({ flowId }: TopBarProps) {
               if (e.key === 'Escape') setEditingTitle(false);
             }}
             className="text-sm font-medium bg-transparent outline-none border-b"
-            style={{
-              color: 'var(--color-white)',
-              borderColor: 'var(--color-accent)',
-              minWidth: '120px',
-            }}
+            style={{ color: 'var(--color-white)', borderColor: 'var(--color-accent)', minWidth: '120px' }}
           />
         ) : (
           <button
@@ -104,6 +148,15 @@ export function TopBar({ flowId }: TopBarProps) {
             {currentFlow?.title ?? 'Untitled Flow'}
           </button>
         )}
+        {isBaseFlow && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"
+            style={{ background: 'rgba(59,158,255,0.15)', color: 'var(--color-accent)' }}
+          >
+            <BookTemplate size={9} />
+            Base Flow
+          </span>
+        )}
         {isDirty && (
           <span className="text-xs" style={{ color: 'var(--color-white-muted)' }}>•</span>
         )}
@@ -111,22 +164,32 @@ export function TopBar({ flowId }: TopBarProps) {
 
       {/* Right: actions */}
       <div className="flex items-center gap-2 pointer-events-auto">
-        <button
-          className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40"
-          title="Undo (Ctrl+Z)"
-          disabled
-        >
+        <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Undo" disabled>
           <Undo2 size={14} style={{ color: 'var(--color-white-muted)' }} />
         </button>
-        <button
-          className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40"
-          title="Redo"
-          disabled
-        >
+        <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Redo" disabled>
           <Redo2 size={14} style={{ color: 'var(--color-white-muted)' }} />
         </button>
 
         <div className="w-px h-4" style={{ background: 'var(--color-white-subtle)' }} />
+
+        {/* Admin: Save as Base Flow toggle */}
+        {isAdmin && (
+          <button
+            onClick={handleSaveAsBaseFlow}
+            disabled={savingBase}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+            style={{
+              background: isBaseFlow ? 'rgba(59,158,255,0.2)' : 'transparent',
+              color: isBaseFlow ? 'var(--color-accent)' : 'var(--color-white-muted)',
+              border: 'var(--border-default)',
+            }}
+            title={isBaseFlow ? 'Remove from Base Flows' : 'Save as Base Flow (visible to all users)'}
+          >
+            <BookTemplate size={12} />
+            {isBaseFlow ? 'Base Flow ✓' : 'Make Base Flow'}
+          </button>
+        )}
 
         <button
           onClick={handleSave}
