@@ -5,7 +5,7 @@ import { Wand2, Play } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { NodeWrapper } from './NodeWrapper';
-import { TypedHandle } from './TypedHandle';
+import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
 import { IMAGE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
@@ -125,6 +125,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       status={data.status}
       selected={selected}
       minWidth={300}
+      accentColor={PORT_COLORS.image}
     >
       {/* ── Prompt handle aligned to center of prompt section ── */}
       <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset={`${promptHandleTop}px`} />

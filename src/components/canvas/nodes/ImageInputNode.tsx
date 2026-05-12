@@ -5,7 +5,7 @@ import { ImageIcon, Upload, X, Loader2, GalleryHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { NodeWrapper } from './NodeWrapper';
-import { TypedHandle } from './TypedHandle';
+import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageInputNodeData } from '@/types';
 import { ACCEPTED_IMAGE_TYPES, MAX_UPLOAD_SIZE_BYTES } from '@/lib/utils/constants';
 import { createClient } from '@/lib/supabase/client';
@@ -172,7 +172,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
   }
 
   return (
-    <NodeWrapper title="Image Input" icon={<ImageIcon size={14} />} selected={selected} minWidth={280}>
+    <NodeWrapper title="Image Input" icon={<ImageIcon size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.image}>
       {uploading && previewUrl ? (
         <div className="relative -m-3 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}

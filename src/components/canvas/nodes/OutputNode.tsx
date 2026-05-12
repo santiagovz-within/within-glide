@@ -3,7 +3,7 @@
 import { Position, type NodeProps } from '@xyflow/react';
 import { MonitorPlay, ImageIcon } from 'lucide-react';
 import { NodeWrapper } from './NodeWrapper';
-import { TypedHandle } from './TypedHandle';
+import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { OutputNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, VideoGenNodeData } from '@/types';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { useFlowStore } from '@/lib/stores/flowStore';
@@ -31,7 +31,7 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
   const mediaType: 'image' | 'video' | undefined = videoUrl ? 'video' : imageUrl ? 'image' : data.mediaType;
 
   return (
-    <NodeWrapper title="Output" icon={<MonitorPlay size={14} />} selected={selected} minWidth={280}>
+    <NodeWrapper title="Output" icon={<MonitorPlay size={14} />} selected={selected} minWidth={280} accentColor="var(--color-white)">
       <TypedHandle type="target" position={Position.Left} id="image" portType="image" offset="40%" />
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 

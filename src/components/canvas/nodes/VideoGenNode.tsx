@@ -4,7 +4,7 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { Film, Play } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
-import { TypedHandle } from './TypedHandle';
+import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoGenNodeData } from '@/types';
 import { VIDEO_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
@@ -111,6 +111,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       status={data.status}
       selected={selected}
       minWidth={300}
+      accentColor={PORT_COLORS.video}
     >
       <TypedHandle type="target" position={Position.Left} id="prompt"      portType="text"  offset={`${promptHandleTop}px`}      />
       <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset={`${startFrameHandleTop}px`} />

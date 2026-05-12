@@ -4,7 +4,7 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play, ChevronsLeftRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
-import { TypedHandle } from './TypedHandle';
+import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
 import { UPSCALE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { useFlowStore } from '@/lib/stores/flowStore';
@@ -176,6 +176,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       status={data.status}
       selected={selected}
       minWidth={280}
+      accentColor={PORT_COLORS.image}
     >
       <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
 

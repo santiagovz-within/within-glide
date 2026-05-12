@@ -10,20 +10,21 @@ interface NodeWrapperProps {
   children: React.ReactNode;
   minWidth?: number;
   width?: number;
+  accentColor?: string;
 }
 
-export function NodeWrapper({ title, icon, status, selected, children, minWidth = 280, width }: NodeWrapperProps) {
+export function NodeWrapper({ title, icon, status, selected, children, minWidth = 280, width, accentColor }: NodeWrapperProps) {
+  const color = accentColor ?? 'var(--color-accent)';
+  const glow  = accentColor ? `${accentColor}4d` : 'var(--color-accent-glow)';
+
   return (
     <div
-      className={cn(
-        'rounded-xl overflow-hidden transition-all duration-150',
-        selected && 'ring-1 ring-[var(--color-accent)]'
-      )}
+      className={cn('rounded-xl overflow-hidden transition-all duration-150')}
       style={{
         background: 'var(--color-bg-elevated)',
-        border: selected ? '1px solid var(--color-accent)' : 'var(--border-default)',
+        border: selected ? `1px solid ${color}` : 'var(--border-default)',
         boxShadow: selected
-          ? '0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px var(--color-accent-glow)'
+          ? `0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px ${glow}`
           : 'var(--shadow-node)',
         width: width ?? minWidth,
       }}
@@ -34,7 +35,7 @@ export function NodeWrapper({ title, icon, status, selected, children, minWidth 
         style={{ borderBottom: 'var(--border-default)' }}
       >
         <div className="flex items-center gap-2">
-          <span style={{ color: 'var(--color-accent)' }}>{icon}</span>
+          <span style={{ color }}>{icon}</span>
           <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-white-muted)' }}>
             {title}
           </span>
