@@ -2,17 +2,40 @@
 
 import { useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { ReactFlowProvider } from '@xyflow/react';
+import { ReactFlowProvider, type Node } from '@xyflow/react';
 import { FlowCanvas } from '@/components/canvas/FlowCanvas';
 import { TopBar } from '@/components/layout/TopBar';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
 import { AUTOSAVE_DEBOUNCE_MS } from '@/lib/utils/constants';
+import type { NodeData, ImageGenNodeData, UpscaleNodeData, ImageInputNodeData } from '@/types';
+
+/** Returns the first available generated/uploaded image URL from the canvas nodes */
+function extractThumbnail(nodes: Node<NodeData>[]): string | null {
+  for (const node of nodes) {
+    if (node.type === 'imageGenNode') {
+      const url = (node.data as ImageGenNodeData).generatedImages?.[0];
+      if (url) return url;
+    }
+    if (node.type === 'upscaleNode') {
+      const url = (node.data as UpscaleNodeData).outputImageUrl;
+      if (url) return url;
+    }
+    if (node.type === 'imageInputNode') {
+      const url = (node.data as ImageInputNodeData).imageUrl;
+      if (url) return url;
+    }
+  }
+  return null;
+}
 
 export default function FlowEditorPage() {
   const params = useParams<{ flowId: string }>();
   const { flowId } = params;
-  const { setCurrentFlow, nodes, edges, isDirty, setDirty, setSaving, setLastSaved, currentFlow } = useFlowStore();
+  const {
+    setCurrentFlow, nodes, edges,
+    isDirty, setDirty, setSaving, setLastSaved, currentFlow,
+  } = useFlowStore();
   const supabase = createClient();
 
   const loadFlow = useCallback(async () => {
@@ -29,20 +52,29 @@ export default function FlowEditorPage() {
     return () => setCurrentFlow(null);
   }, [loadFlow, setCurrentFlow]);
 
-  // Auto-save debounced
+  // Auto-save debounced — also extracts and saves thumbnail
   useEffect(() => {
     if (!isDirty || !currentFlow) return;
     const timer = setTimeout(async () => {
       setSaving(true);
       try {
+        const thumbnail = extractThumbnail(nodes);
         await supabase
           .from('flows')
           .update({
             flow_data: {
-              nodes: nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.data })),
+              nodes: nodes.map((n) => ({
+                id: n.id,
+                type: n.type,
+                position: n.position,
+                data: n.data,
+                parentId: n.parentId,
+                style: n.style,
+              })),
               edges,
               viewport: { x: 0, y: 0, zoom: 1 },
             },
+            ...(thumbnail ? { thumbnail_url: thumbnail } : {}),
             updated_at: new Date().toISOString(),
           })
           .eq('id', flowId);
@@ -55,14 +87,12 @@ export default function FlowEditorPage() {
     return () => clearTimeout(timer);
   }, [isDirty, nodes, edges, flowId, currentFlow, supabase, setDirty, setSaving, setLastSaved]);
 
-  // Keyboard shortcut: Ctrl+S
+  // Ctrl+S
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        if (isDirty) {
-          setDirty(true); // trigger save via autosave
-        }
+        if (isDirty) setDirty(true);
       }
     }
     window.addEventListener('keydown', onKeyDown);

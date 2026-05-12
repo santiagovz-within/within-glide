@@ -111,7 +111,7 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--color-white)' }}>
-            Canvas
+            WITHIN Glide
           </span>
         )}
       </div>

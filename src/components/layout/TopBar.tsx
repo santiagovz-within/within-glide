@@ -5,6 +5,26 @@ import { ChevronRight, Cloud, CloudUpload, Undo2, Redo2, Share2, BookTemplate } 
 import { useEffect, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
+import type { Node } from '@xyflow/react';
+import type { NodeData, ImageGenNodeData, UpscaleNodeData, ImageInputNodeData } from '@/types';
+
+function extractThumbnail(nodes: Node<NodeData>[]): string | null {
+  for (const node of nodes) {
+    if (node.type === 'imageGenNode') {
+      const url = (node.data as ImageGenNodeData).generatedImages?.[0];
+      if (url) return url;
+    }
+    if (node.type === 'upscaleNode') {
+      const url = (node.data as UpscaleNodeData).outputImageUrl;
+      if (url) return url;
+    }
+    if (node.type === 'imageInputNode') {
+      const url = (node.data as ImageInputNodeData).imageUrl;
+      if (url) return url;
+    }
+  }
+  return null;
+}
 
 interface TopBarProps {
   flowId: string;
@@ -61,6 +81,7 @@ export function TopBar({ flowId }: TopBarProps) {
     if (!currentFlow || isSaving) return;
     setSaving(true);
     try {
+      const thumbnail = extractThumbnail(nodes);
       await supabase
         .from('flows')
         .update({
@@ -69,6 +90,7 @@ export function TopBar({ flowId }: TopBarProps) {
             edges,
             viewport: { x: 0, y: 0, zoom: 1 },
           },
+          ...(thumbnail ? { thumbnail_url: thumbnail } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', flowId);
@@ -87,7 +109,7 @@ export function TopBar({ flowId }: TopBarProps) {
     if (!confirm(confirmMsg)) return;
     setSavingBase(true);
     try {
-      // First save current state
+      const thumbnail = extractThumbnail(nodes);
       await supabase.from('flows').update({
         is_template: !isBaseFlow,
         flow_data: {
@@ -95,6 +117,7 @@ export function TopBar({ flowId }: TopBarProps) {
           edges,
           viewport: { x: 0, y: 0, zoom: 1 },
         },
+        ...(thumbnail ? { thumbnail_url: thumbnail } : {}),
         updated_at: new Date().toISOString(),
       }).eq('id', flowId);
       setIsBaseFlow(!isBaseFlow);
