@@ -2,6 +2,7 @@
 
 import { Handle, Position, type HandleProps } from '@xyflow/react';
 import { ImageIcon, Film, Type } from 'lucide-react';
+import { useState } from 'react';
 
 export type PortType = 'text' | 'image' | 'video';
 
@@ -51,40 +52,43 @@ interface TypedHandleProps extends Omit<HandleProps, 'style'> {
   offset?: string;
   // small numeric badge shown above the handle circle (for numbered multi-image slots)
   badge?: number;
+  // text label shown next to the circle always
+  label?: string;
 }
 
-export function TypedHandle({ portType, offset, position, badge, ...rest }: TypedHandleProps) {
+export function TypedHandle({ portType, offset, position, badge, label, ...rest }: TypedHandleProps) {
+  const [hovered, setHovered] = useState(false);
   const color = PORT_COLORS[portType];
   const tint  = PORT_TINTS[portType];
   const isLeft = position === Position.Left;
   const isRight = position === Position.Right;
 
   const offsetStyle: React.CSSProperties = {
-    ...(offset
-      ? isLeft || isRight
-        ? { top: offset }
-        : { left: offset }
-      : {}),
-    // Push the circle 15px outside the node border
-    ...(isLeft  ? { left:  -15 } : {}),
-    ...(isRight ? { right: -15 } : {}),
+    ...(offset ? (isLeft || isRight ? { top: offset } : { left: offset }) : {}),
+    // Push circle so right/left edge is 20px outside the node border.
+    // Override the built-in translateX so only Y-centering remains.
+    ...(isLeft  ? { left: -56, transform: 'translateY(-50%)' } : {}),
+    ...(isRight ? { right: -56, transform: 'translateY(-50%)' } : {}),
   };
 
   return (
     <Handle
       position={position}
       {...rest}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         width: 36,
         height: 36,
         borderRadius: '50%',
-        background: tint,
+        background: hovered ? color : tint,
         border: `1.5px solid ${color}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color,
+        color: hovered ? '#fff' : color,
         pointerEvents: 'all',
+        transition: 'background 0.15s, color 0.15s',
         ...offsetStyle,
       }}
     >
@@ -108,6 +112,29 @@ export function TypedHandle({ portType, offset, position, badge, ...rest }: Type
           }}
         >
           {badge}
+        </span>
+      )}
+      {label && (
+        <span
+          style={{
+            position: 'absolute',
+            ...(isLeft ? { left: 58 } : { right: 58 }),
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: 9,
+            lineHeight: '14px',
+            padding: '1px 5px',
+            borderRadius: 4,
+            background: hovered ? color : 'var(--color-bg-darkest)',
+            border: `1px solid ${color}`,
+            color: hovered ? '#fff' : color,
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            zIndex: 100,
+            transition: 'background 0.15s, color 0.15s',
+          }}
+        >
+          {label}
         </span>
       )}
     </Handle>

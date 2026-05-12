@@ -127,11 +127,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       minWidth={300}
     >
       {/* ── Prompt handle aligned to center of prompt section ── */}
-      <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset={`${promptHandleTop}px`} />
+      <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset={`${promptHandleTop}px`} label="Prompt" />
 
       {/* ── Single reference-image handle (single-image models) ── */}
       {!isMultiImageModel && (
-        <TypedHandle type="target" position={Position.Left} id="reference_image" portType="image" offset="55%" />
+        <TypedHandle type="target" position={Position.Left} id="reference_image" portType="image" offset="55%" label="Image" />
       )}
 
       {/* ── Dynamic multi-image handles aligned to row centers ─── */}
@@ -308,7 +308,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
 
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle type="source" position={Position.Right} id="image" portType="image" label="Image" />
     </NodeWrapper>
   );
 }

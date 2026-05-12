@@ -74,7 +74,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
         </button>
       </div>
 
-      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" />
+      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" label="Prompt" />
     </NodeWrapper>
   );
 }

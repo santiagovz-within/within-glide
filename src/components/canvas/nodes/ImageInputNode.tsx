@@ -134,6 +134,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
         position={Position.Right}
         id="image"
         portType="image"
+        label="Image"
       />
     </NodeWrapper>
   );

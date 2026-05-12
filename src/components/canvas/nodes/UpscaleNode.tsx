@@ -9,10 +9,14 @@ import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData } from '@/ty
 import { UPSCALE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
+type Dims = { w: number; h: number };
+
 function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl: string }) {
   const [pct, setPct] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const [beforeDims, setBeforeDims] = useState<Dims | null>(null);
+  const [afterDims, setAfterDims] = useState<Dims | null>(null);
 
   const move = useRef((clientX: number) => {
     if (!containerRef.current) return;
@@ -28,42 +32,65 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, []);
 
+  const dimLabel = (d: Dims | null) => d ? `${d.w}×${d.h}` : '';
+
   return (
-    <div
-      ref={containerRef}
-      className="relative overflow-hidden select-none nodrag"
-      style={{ cursor: 'col-resize' }}
-      onMouseDown={(e) => { dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
-    >
-      {/* After image — sets the container height */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={afterUrl} alt="After" className="w-full block" style={{ height: 'auto' }} />
-
-      {/* Before image — absolutely overlaid, clipped via clipPath (no size distortion) */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={beforeUrl}
-        alt="Before"
-        className="absolute inset-0 w-full h-full block"
-        style={{ objectFit: 'cover', clipPath: `inset(0 ${100 - pct}% 0 0)` }}
-      />
-
-      {/* Divider line + handle */}
+    <>
       <div
-        className="absolute top-0 bottom-0 w-0.5"
-        style={{ left: `${pct}%`, background: 'rgba(255,255,255,0.9)', transform: 'translateX(-50%)', pointerEvents: 'none' }}
+        ref={containerRef}
+        className="relative overflow-hidden select-none nodrag"
+        style={{ cursor: 'col-resize' }}
+        onMouseDown={(e) => { dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
       >
+        {/* After image — sets the container height */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={afterUrl}
+          alt="After"
+          className="w-full block"
+          style={{ height: 'auto' }}
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            setAfterDims({ w: img.naturalWidth, h: img.naturalHeight });
+          }}
+        />
+
+        {/* Before image — absolutely overlaid, clipped via clipPath (no size distortion) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={beforeUrl}
+          alt="Before"
+          className="absolute inset-0 w-full h-full block"
+          style={{ objectFit: 'cover', clipPath: `inset(0 ${100 - pct}% 0 0)` }}
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            setBeforeDims({ w: img.naturalWidth, h: img.naturalHeight });
+          }}
+        />
+
+        {/* Divider line + handle */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full flex items-center justify-center"
-          style={{ width: 22, height: 22, background: '#fff', color: '#000' }}
+          className="absolute top-0 bottom-0 w-0.5"
+          style={{ left: `${pct}%`, background: 'rgba(255,255,255,0.9)', transform: 'translateX(-50%)', pointerEvents: 'none' }}
         >
-          <ChevronsLeftRight size={12} />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full flex items-center justify-center"
+            style={{ width: 22, height: 22, background: '#fff', color: '#000' }}
+          >
+            <ChevronsLeftRight size={12} />
+          </div>
         </div>
+
+        <span className="absolute top-1.5 left-2 text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>Before</span>
+        <span className="absolute top-1.5 right-2 text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>After</span>
       </div>
 
-      <span className="absolute bottom-1.5 left-2 text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>Before</span>
-      <span className="absolute bottom-1.5 right-2 text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>After</span>
-    </div>
+      {/* Resolution row */}
+      <div className="flex justify-between px-1 pt-1" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>
+        <span>{dimLabel(beforeDims)}</span>
+        <span>{dimLabel(afterDims)}</span>
+      </div>
+    </>
   );
 }
 
@@ -150,7 +177,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       selected={selected}
       minWidth={280}
     >
-      <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
+      <TypedHandle type="target" position={Position.Left} id="image" portType="image" label="Image" />
 
       <div className="mb-2">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
@@ -207,7 +234,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         {isUpscaling ? 'Upscaling…' : 'Upscale'}
       </button>
 
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle type="source" position={Position.Right} id="image" portType="image" label="Image" />
     </NodeWrapper>
   );
 }

@@ -112,9 +112,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       selected={selected}
       minWidth={300}
     >
-      <TypedHandle type="target" position={Position.Left} id="prompt"      portType="text"  offset={`${promptHandleTop}px`} />
-      <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset={`${startFrameHandleTop}px`} />
-      <TypedHandle type="target" position={Position.Left} id="end_frame"   portType="image" offset={`${endFrameHandleTop}px`} />
+      <TypedHandle type="target" position={Position.Left} id="prompt"      portType="text"  offset={`${promptHandleTop}px`}      label="Prompt" />
+      <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset={`${startFrameHandleTop}px`} label="Start Frame" />
+      <TypedHandle type="target" position={Position.Left} id="end_frame"   portType="image" offset={`${endFrameHandleTop}px`}   label="End Frame" />
 
       {/* Inline prompt */}
       <div ref={promptSectionRef} className="mb-3">
@@ -238,7 +238,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
 
-      <TypedHandle type="source" position={Position.Right} id="video" portType="video" />
+      <TypedHandle type="source" position={Position.Right} id="video" portType="video" label="Video" />
     </NodeWrapper>
   );
 }
