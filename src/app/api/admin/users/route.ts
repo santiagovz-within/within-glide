@@ -54,19 +54,37 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createAdminClient();
 
-  const { data: { user }, error } = await supabase.auth.admin.createUser({
+  const { data: { user }, error: createError } = await supabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
     user_metadata: { display_name },
   });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (createError) return NextResponse.json({ error: createError.message }, { status: 500 });
   if (!user) return NextResponse.json({ error: 'User creation failed' }, { status: 500 });
 
-  // Update is_admin on the auto-created profile (trigger creates it)
-  if (makeAdmin) {
-    await supabase.from('profiles').update({ is_admin: true }).eq('id', user.id);
+  // The profile row is created by a DB trigger, but that trigger runs asynchronously
+  // from Supabase Auth. Use upsert so this succeeds whether the trigger has fired or not.
+  const username = email.split('@')[0].replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+  const { error: profileError } = await supabase.from('profiles').upsert(
+    {
+      id: user.id,
+      username,
+      display_name: display_name?.trim() || null,
+      theme: 'dark',
+      is_admin: makeAdmin,
+    },
+    { onConflict: 'id' }
+  );
+
+  if (profileError) {
+    // User was created but profile update failed (e.g. is_admin column missing).
+    // Return 207 so the client knows to show a warning.
+    return NextResponse.json(
+      { user: { id: user.id, email: user.email }, warning: `Profile update failed: ${profileError.message}` },
+      { status: 207 }
+    );
   }
 
   return NextResponse.json({ user: { id: user.id, email: user.email } }, { status: 201 });
