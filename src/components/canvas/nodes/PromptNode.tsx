@@ -8,8 +8,8 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { PromptNodeData } from '@/types';
 
 const GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash Preview' },
-  { id: 'gemini-2.0-flash-lite',          label: 'Gemini 2.0 Flash Lite' },
+  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+  { id: 'gemini-3.1-flash-lite',  label: 'Gemini 3.1 Flash Lite' },
 ];
 
 const LENGTH_OPTIONS = [
@@ -21,7 +21,7 @@ const LENGTH_OPTIONS = [
 
 export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNodeData }) {
   const [enhancing, setEnhancing] = useState(false);
-  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash-preview-05-20');
+  const [geminiModel, setGeminiModel] = useState('gemini-3-flash-preview');
   const [length, setLength] = useState('auto');
 
   function handlePromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
