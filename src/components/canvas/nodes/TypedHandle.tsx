@@ -59,22 +59,27 @@ export function TypedHandle({ portType, offset, position, badge, ...rest }: Type
   const isLeft = position === Position.Left;
   const isRight = position === Position.Right;
 
-  const offsetStyle: React.CSSProperties = offset
-    ? isLeft || isRight
-      ? { top: offset }
-      : { left: offset }
-    : {};
+  const offsetStyle: React.CSSProperties = {
+    ...(offset
+      ? isLeft || isRight
+        ? { top: offset }
+        : { left: offset }
+      : {}),
+    // Push the circle 15px outside the node border
+    ...(isLeft  ? { left:  -15 } : {}),
+    ...(isRight ? { right: -15 } : {}),
+  };
 
   return (
     <Handle
       position={position}
       {...rest}
       style={{
-        width: 24,
-        height: 24,
+        width: 36,
+        height: 36,
         borderRadius: '50%',
         background: tint,
-        border: 'none',
+        border: `1.5px solid ${color}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -83,12 +88,12 @@ export function TypedHandle({ portType, offset, position, badge, ...rest }: Type
         ...offsetStyle,
       }}
     >
-      <PortIcon type={portType} size={10} />
+      <PortIcon type={portType} size={14} />
       {badge !== undefined && (
         <span
           style={{
             position: 'absolute',
-            top: -7,
+            top: -8,
             left: '50%',
             transform: 'translateX(-50%)',
             fontSize: 8,

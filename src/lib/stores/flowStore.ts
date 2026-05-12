@@ -73,7 +73,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
   },
   onConnect: (connection) => {
     set({
-      edges: addEdge({ ...connection, animated: true }, get().edges),
+      edges: addEdge({ ...connection, animated: false }, get().edges),
       isDirty: true,
     });
   },

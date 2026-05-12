@@ -2,7 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play, ChevronsLeftRight } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
 import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
@@ -14,53 +14,55 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
 
-  function move(clientX: number) {
+  const move = useRef((clientX: number) => {
     if (!containerRef.current) return;
     const { left, width } = containerRef.current.getBoundingClientRect();
     setPct(Math.max(0, Math.min(100, ((clientX - left) / width) * 100)));
-  }
+  });
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => { if (dragging.current) move.current(e.clientX); };
+    const onUp   = () => { dragging.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, []);
 
   return (
     <div
       ref={containerRef}
       className="relative overflow-hidden select-none nodrag"
       style={{ cursor: 'col-resize' }}
-      onMouseDown={(e) => { dragging.current = true; move(e.clientX); }}
-      onMouseMove={(e) => { if (dragging.current) move(e.clientX); }}
-      onMouseUp={() => { dragging.current = false; }}
-      onMouseLeave={() => { dragging.current = false; }}
+      onMouseDown={(e) => { dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
     >
-      {/* After image — base layer */}
+      {/* After image — sets the container height */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={afterUrl} alt="After" className="w-full block" style={{ height: 'auto' }} />
 
-      {/* Before image — clipped overlay */}
-      <div className="absolute inset-0 overflow-hidden" style={{ width: `${pct}%` }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={beforeUrl}
-          alt="Before"
-          className="absolute top-0 left-0 block"
-          style={{ width: containerRef.current?.offsetWidth ?? 'auto', height: '100%', objectFit: 'fill' }}
-        />
-      </div>
+      {/* Before image — absolutely overlaid, clipped via clipPath (no size distortion) */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={beforeUrl}
+        alt="Before"
+        className="absolute inset-0 w-full h-full block"
+        style={{ objectFit: 'cover', clipPath: `inset(0 ${100 - pct}% 0 0)` }}
+      />
 
-      {/* Divider */}
+      {/* Divider line + handle */}
       <div
-        className="absolute top-0 bottom-0 flex items-center justify-center"
-        style={{ left: `${pct}%`, width: 2, background: 'rgba(255,255,255,0.9)', transform: 'translateX(-50%)', pointerEvents: 'none' }}
+        className="absolute top-0 bottom-0 w-0.5"
+        style={{ left: `${pct}%`, background: 'rgba(255,255,255,0.9)', transform: 'translateX(-50%)', pointerEvents: 'none' }}
       >
         <div
-          className="flex items-center justify-center rounded-full"
-          style={{ width: 20, height: 20, background: '#fff', color: '#000', marginLeft: -9 }}
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full flex items-center justify-center"
+          style={{ width: 22, height: 22, background: '#fff', color: '#000' }}
         >
           <ChevronsLeftRight size={12} />
         </div>
       </div>
 
-      {/* Labels */}
-      <span className="absolute bottom-1 left-2 text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>Before</span>
-      <span className="absolute bottom-1 right-2 text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>After</span>
+      <span className="absolute bottom-1.5 left-2 text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>Before</span>
+      <span className="absolute bottom-1.5 right-2 text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}>After</span>
     </div>
   );
 }

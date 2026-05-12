@@ -165,7 +165,7 @@ export function FlowCanvas() {
           id: `edge-${ts}-${i}`,
           source: idMap.get(edge.source) ?? edge.source,
           target: idMap.get(edge.target) ?? edge.target,
-          animated: true,
+          animated: false,
         }));
 
         setNodes([...nodesRef.current.map((n) => ({ ...n, selected: false })), ...newNodes]);
@@ -416,7 +416,7 @@ export function FlowCanvas() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         proOptions={{ hideAttribution: true }}
-        defaultEdgeOptions={{ animated: true, type: 'default' }}
+        defaultEdgeOptions={{ animated: false, type: 'default' }}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
@@ -424,7 +424,7 @@ export function FlowCanvas() {
         deleteKeyCode="Delete"
         style={{ background: 'var(--color-bg-darkest)' }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="rgba(255,255,255,0.06)" />
+        <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="rgba(255,255,255,0.18)" />
         <Controls showInteractive={false} />
         <MiniMap
           nodeColor="var(--color-bg-surface)"
