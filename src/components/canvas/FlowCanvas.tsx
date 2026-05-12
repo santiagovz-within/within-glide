@@ -106,15 +106,30 @@ export function FlowCanvas() {
     return () => document.removeEventListener('node:prompt-propagate', handlePromptPropagate);
   }, [edges, updateNodeData]);
 
-  // Copy / paste selected nodes (Ctrl/Cmd+C, Ctrl/Cmd+V)
+  // Copy / paste selected nodes (Ctrl/Cmd+C, Ctrl/Cmd+V) and Delete selected nodes
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement;
+      const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput) {
+        const selectedNodeIds = new Set(nodesRef.current.filter((n) => n.selected).map((n) => n.id));
+        const hasSelectedEdges = edgesRef.current.some((e) => e.selected);
+        if (selectedNodeIds.size > 0 || hasSelectedEdges) {
+          setNodes(nodesRef.current.filter((n) => !n.selected));
+          setEdges(edgesRef.current.filter(
+            (edge) => !edge.selected && !selectedNodeIds.has(edge.source) && !selectedNodeIds.has(edge.target)
+          ));
+          e.preventDefault();
+        }
+        return;
+      }
+
       const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform);
       const ctrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
       if (!ctrlOrCmd) return;
 
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (inInput) return;
 
       if (e.key === 'c') {
         const selected = nodesRef.current.filter((n) => n.selected);

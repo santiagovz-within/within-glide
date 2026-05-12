@@ -16,8 +16,10 @@ const REF_ROW_HEIGHT = 36;
 
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
-  const imgRowsRef = useRef<HTMLDivElement>(null);
-  const [rowOffsetTop, setRowOffsetTop] = useState(230);
+  const promptSectionRef = useRef<HTMLDivElement>(null);
+  const rowsListRef = useRef<HTMLDivElement>(null);
+  const [promptHandleTop, setPromptHandleTop] = useState(50);
+  const [rowsStartTop, setRowsStartTop] = useState(220);
 
   const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
   const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
@@ -35,11 +37,17 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const hasImageInput = (data.inputImageUrls ?? []).some(Boolean);
   const isEditMode = hasEditVariant && hasImageInput;
 
-  // Measure the pixel offset of the reference-image rows within the RF node div.
-  // offsetTop is relative to the first positioned ancestor = the React Flow node div.
+  // Measure the prompt section center for the text handle
   useLayoutEffect(() => {
-    if (!isMultiImageModel || !imgRowsRef.current) return;
-    setRowOffsetTop(imgRowsRef.current.offsetTop);
+    if (!promptSectionRef.current) return;
+    const el = promptSectionRef.current;
+    setPromptHandleTop(el.offsetTop + el.offsetHeight / 2);
+  });
+
+  // Measure the rows list (not the label) top for reference-image handle positions
+  useLayoutEffect(() => {
+    if (!isMultiImageModel || !rowsListRef.current) return;
+    setRowsStartTop(rowsListRef.current.offsetTop);
   }, [isMultiImageModel, portCount, data.generatedImages?.length, data.status]);
 
   function updateData(updates: Partial<ImageGenNodeData>) {
@@ -117,15 +125,15 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       selected={selected}
       minWidth={300}
     >
-      {/* ── Prompt handle (left edge) ───────────────────────── */}
-      <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset="26%" />
+      {/* ── Prompt handle aligned to center of prompt section ── */}
+      <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset={`${promptHandleTop}px`} />
 
       {/* ── Single reference-image handle (single-image models) ── */}
       {!isMultiImageModel && (
         <TypedHandle type="target" position={Position.Left} id="reference_image" portType="image" offset="55%" />
       )}
 
-      {/* ── Dynamic multi-image handles (up to 14 inputs) ──────── */}
+      {/* ── Dynamic multi-image handles aligned to row centers ─── */}
       {isMultiImageModel && Array.from({ length: portCount }, (_, i) => (
         <TypedHandle
           key={`ref_${i}`}
@@ -133,13 +141,13 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           position={Position.Left}
           id={`ref_${i}`}
           portType="image"
-          offset={`${rowOffsetTop + REF_ROW_HEIGHT / 2 + i * REF_ROW_HEIGHT}px`}
+          offset={`${rowsStartTop + REF_ROW_HEIGHT / 2 + i * REF_ROW_HEIGHT}px`}
           badge={i + 1}
         />
       ))}
 
       {/* ── Inline prompt ────────────────────────────────────── */}
-      <div className="mb-3">
+      <div ref={promptSectionRef} className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
           Prompt
         </label>
@@ -230,10 +238,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* ── Reference image rows (multi-image models) ──── */}
       {isMultiImageModel && (
-        <div ref={imgRowsRef} className="mb-3">
+        <div className="mb-3">
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
             Reference Images{connectedCount > 0 ? ` (${connectedCount}/${MAX_REF_IMAGES})` : ''}
           </label>
+          <div ref={rowsListRef}>
           {Array.from({ length: portCount }, (_, i) => {
             const hasImage = !!(data.inputImageUrls?.[i]);
             return (
@@ -257,6 +266,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
               </div>
             );
           })}
+          </div>
         </div>
       )}
 

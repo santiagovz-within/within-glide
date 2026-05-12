@@ -118,30 +118,34 @@ body {
 }
 
 .react-flow__controls {
-  background: var(--color-bg-elevated);
-  border: var(--border-default);
-  border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-node);
+  background: var(--color-bg-elevated) !important;
+  border: var(--border-default) !important;
+  border-radius: var(--border-radius-md) !important;
+  box-shadow: var(--shadow-node) !important;
+  overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: transparent;
-  border: none;
-  color: var(--color-white-muted);
-  border-bottom: var(--border-default);
+  background: transparent !important;
+  border: none !important;
+  border-bottom: var(--border-default) !important;
+  color: var(--color-white-muted) !important;
+  fill: var(--color-white-muted) !important;
 }
 
 .react-flow__controls-button:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-white);
+  background: var(--color-bg-hover) !important;
+  color: var(--color-white) !important;
+  fill: var(--color-white) !important;
 }
 
 .react-flow__controls-button:last-child {
-  border-bottom: none;
+  border-bottom: none !important;
 }
 
-.react-flow__controls-button svg {
-  fill: currentColor;
+.react-flow__controls-button svg,
+.react-flow__controls-button svg path {
+  fill: currentColor !important;
 }
 
 .react-flow__minimap {

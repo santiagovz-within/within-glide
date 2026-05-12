@@ -37,11 +37,13 @@ export const FAL_MODELS = {
   'seedvr2': {
     endpoint: 'fal-ai/seedvr/upscale/image',
     scaleParam: 'upscale_factor',
+    scaleOptions: [2, 4, 8, 10],
     type: 'upscale' as const,
   },
   'topaz': {
     endpoint: 'fal-ai/topaz/upscale/image',
     scaleParam: 'upscale_factor',
+    scaleOptions: [2, 4],
     type: 'upscale' as const,
   },
 } as const;
