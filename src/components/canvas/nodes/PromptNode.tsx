@@ -47,34 +47,33 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
 
   return (
     <NodeWrapper title="Prompt" icon={<Type size={14} />} selected={selected}>
-      <div className="relative">
-        <textarea
-          className="w-full text-xs resize-none rounded-lg p-2.5 outline-none transition-all nodrag"
-          rows={4}
-          placeholder="Describe what you want to generate…"
-          value={data.prompt ?? ''}
-          onChange={handlePromptChange}
-          style={{
-            background: 'var(--color-bg-surface)',
-            border: 'var(--border-default)',
-            color: 'var(--color-white)',
-          }}
-        />
-        <button
-          onClick={handleEnhance}
-          disabled={enhancing || !data.prompt?.trim()}
-          className="absolute bottom-2 right-2 p-1 rounded transition-opacity hover:opacity-80 disabled:opacity-40 nodrag"
-          title="Enhance prompt with AI"
-        >
-          <Sparkles
-            size={12}
-            style={{ color: enhancing ? 'var(--color-processing)' : 'var(--color-accent)' }}
-            className={enhancing ? 'animate-pulse' : ''}
-          />
-        </button>
-      </div>
+      <textarea
+        className="w-full text-xs resize-y rounded-lg p-2.5 outline-none transition-all nodrag mb-2"
+        rows={4}
+        placeholder="Describe what you want to generate…"
+        value={data.prompt ?? ''}
+        onChange={handlePromptChange}
+        style={{
+          background: 'var(--color-bg-surface)',
+          border: 'var(--border-default)',
+          color: 'var(--color-white)',
+        }}
+      />
+      <button
+        onClick={handleEnhance}
+        disabled={enhancing || !data.prompt?.trim()}
+        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{
+          background: 'var(--color-bg-surface)',
+          border: 'var(--border-default)',
+          color: enhancing ? 'var(--color-processing)' : 'var(--color-accent)',
+        }}
+      >
+        <Sparkles size={11} className={enhancing ? 'animate-pulse' : ''} />
+        {enhancing ? 'Enhancing…' : 'Enhance'}
+      </button>
 
-      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" label="Prompt" />
+      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" />
     </NodeWrapper>
   );
 }

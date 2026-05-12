@@ -32,8 +32,8 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
 
   return (
     <NodeWrapper title="Output" icon={<MonitorPlay size={14} />} selected={selected} minWidth={280}>
-      <TypedHandle type="target" position={Position.Left} id="image" portType="image" offset="40%" label="Image" />
-      <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" label="Video" />
+      <TypedHandle type="target" position={Position.Left} id="image" portType="image" offset="40%" />
+      <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
       {mediaUrl ? (
         <div className="-m-3 overflow-hidden">

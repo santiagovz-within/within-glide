@@ -29,7 +29,13 @@ interface NodeToolbarProps {
   onClose: () => void;
 }
 
+const MENU_WIDTH  = 220;
+const MENU_HEIGHT = 400; // conservative estimate — prevents bottom clipping
+
 export function NodeToolbar({ x, y, onAdd, onClose }: NodeToolbarProps) {
+  const left   = x + MENU_WIDTH  > window.innerWidth  ? x - MENU_WIDTH  : x;
+  const top    = y + MENU_HEIGHT > window.innerHeight ? y - MENU_HEIGHT : y;
+
   return (
     <>
       {/* Backdrop */}
@@ -39,9 +45,9 @@ export function NodeToolbar({ x, y, onAdd, onClose }: NodeToolbarProps) {
       <div
         className="fixed z-50 rounded-xl overflow-hidden shadow-xl"
         style={{
-          left: x,
-          top: y,
-          width: 220,
+          left,
+          top,
+          width: MENU_WIDTH,
           background: 'var(--color-bg-surface)',
           border: 'var(--border-default)',
           boxShadow: 'var(--shadow-modal)',

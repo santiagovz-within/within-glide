@@ -177,7 +177,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       selected={selected}
       minWidth={280}
     >
-      <TypedHandle type="target" position={Position.Left} id="image" portType="image" label="Image" />
+      <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
 
       <div className="mb-2">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
@@ -234,7 +234,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         {isUpscaling ? 'Upscaling…' : 'Upscale'}
       </button>
 
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" label="Image" />
+      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
     </NodeWrapper>
   );
 }

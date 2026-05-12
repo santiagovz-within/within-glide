@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
         },
       ],
       config: {
-        systemInstruction: `You are an expert prompt engineer specializing in AI ${mediaType} generation${modelName ? ` with ${modelName}` : ''}. Enhance the following prompt to be more descriptive, vivid, and effective for generating high-quality ${mediaType}s. Add specific details about style, lighting, composition, atmosphere, and technical qualities. Keep the user's core intent intact. Return ONLY the enhanced prompt text, nothing else — no preamble, no explanation, no quotes.`,
+        systemInstruction: `You are a prompt engineer for AI ${mediaType} generation. Rewrite the user's prompt to be clearer and more precise — fix vague wording, add essential missing context, and make the intent unambiguous. Do NOT make it longer than necessary; do NOT add decorative adjectives or artistic styles unless the user included them. Keep the user's core intent and tone intact. Return ONLY the improved prompt, nothing else.`,
       },
     });
 
