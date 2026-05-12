@@ -13,6 +13,7 @@ import { ASPECT_RATIOS } from '@/lib/utils/constants';
 const RESOLUTIONS = ['1K', '2K', '4K'];
 const MAX_REF_IMAGES = 14;
 const REF_ROW_HEIGHT = 36;
+const ROW_GAP = 25;
 
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -141,7 +142,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           position={Position.Left}
           id={`ref_${i}`}
           portType="image"
-          offset={`${rowsStartTop + REF_ROW_HEIGHT / 2 + i * REF_ROW_HEIGHT}px`}
+          offset={`${rowsStartTop + REF_ROW_HEIGHT / 2 + i * (REF_ROW_HEIGHT + ROW_GAP)}px`}
           badge={i + 1}
         />
       ))}
@@ -248,7 +249,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             return (
               <div
                 key={i}
-                className="flex items-center text-xs mb-0.5"
+                className="flex items-center text-xs"
                 style={{
                   height: REF_ROW_HEIGHT,
                   marginLeft: -12,
@@ -259,6 +260,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
                   border: hasImage ? 'none' : '1px solid rgba(255,255,255,0.08)',
                   borderLeft: 'none',
                   color: hasImage ? '#a855f7' : 'var(--color-white-muted)',
+                  marginBottom: i < portCount - 1 ? ROW_GAP : 0,
                   transition: 'background 0.15s, color 0.15s',
                 }}
               >

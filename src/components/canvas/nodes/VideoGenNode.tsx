@@ -2,15 +2,39 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Film, Play } from 'lucide-react';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
 import type { VideoGenNodeData } from '@/types';
 import { VIDEO_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 
+const FRAME_ROW_HEIGHT = 36;
+const FRAME_ROW_GAP = 25;
+
 export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const promptSectionRef = useRef<HTMLDivElement>(null);
+  const startFrameRowRef = useRef<HTMLDivElement>(null);
+  const endFrameRowRef = useRef<HTMLDivElement>(null);
+  const [promptHandleTop, setPromptHandleTop] = useState(50);
+  const [startFrameHandleTop, setStartFrameHandleTop] = useState(200);
+  const [endFrameHandleTop, setEndFrameHandleTop] = useState(261);
+
+  useLayoutEffect(() => {
+    if (!promptSectionRef.current) return;
+    const el = promptSectionRef.current;
+    setPromptHandleTop(el.offsetTop + el.offsetHeight / 2);
+  });
+
+  useLayoutEffect(() => {
+    if (startFrameRowRef.current) {
+      setStartFrameHandleTop(startFrameRowRef.current.offsetTop + FRAME_ROW_HEIGHT / 2);
+    }
+    if (endFrameRowRef.current) {
+      setEndFrameHandleTop(endFrameRowRef.current.offsetTop + FRAME_ROW_HEIGHT / 2);
+    }
+  });
 
   function updateData(updates: Partial<VideoGenNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {
@@ -88,12 +112,12 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       selected={selected}
       minWidth={300}
     >
-      <TypedHandle type="target" position={Position.Left} id="prompt"      portType="text"  offset="28%" />
-      <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset="54%" />
-      <TypedHandle type="target" position={Position.Left} id="end_frame"   portType="image" offset="72%" />
+      <TypedHandle type="target" position={Position.Left} id="prompt"      portType="text"  offset={`${promptHandleTop}px`} />
+      <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset={`${startFrameHandleTop}px`} />
+      <TypedHandle type="target" position={Position.Left} id="end_frame"   portType="image" offset={`${endFrameHandleTop}px`} />
 
       {/* Inline prompt */}
-      <div className="mb-3">
+      <div ref={promptSectionRef} className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
           Prompt
         </label>
@@ -153,6 +177,48 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             <option value={8}>8s</option>
             <option value={10}>10s</option>
           </select>
+        </div>
+      </div>
+
+      {/* Frame reference slots */}
+      <div className="mb-3">
+        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Frame References</label>
+        <div
+          ref={startFrameRowRef}
+          className="flex items-center text-xs"
+          style={{
+            height: FRAME_ROW_HEIGHT,
+            marginLeft: -12,
+            paddingLeft: 14,
+            paddingRight: 8,
+            borderRadius: '0 6px 6px 0',
+            background: data.startFrameUrl ? '#3a1a6a' : 'var(--color-bg-surface)',
+            border: data.startFrameUrl ? 'none' : '1px solid rgba(255,255,255,0.08)',
+            borderLeft: 'none',
+            color: data.startFrameUrl ? '#a855f7' : 'var(--color-white-muted)',
+            marginBottom: FRAME_ROW_GAP,
+            transition: 'background 0.15s, color 0.15s',
+          }}
+        >
+          Start Frame
+        </div>
+        <div
+          ref={endFrameRowRef}
+          className="flex items-center text-xs"
+          style={{
+            height: FRAME_ROW_HEIGHT,
+            marginLeft: -12,
+            paddingLeft: 14,
+            paddingRight: 8,
+            borderRadius: '0 6px 6px 0',
+            background: data.endFrameUrl ? '#3a1a6a' : 'var(--color-bg-surface)',
+            border: data.endFrameUrl ? 'none' : '1px solid rgba(255,255,255,0.08)',
+            borderLeft: 'none',
+            color: data.endFrameUrl ? '#a855f7' : 'var(--color-white-muted)',
+            transition: 'background 0.15s, color 0.15s',
+          }}
+        >
+          End Frame
         </div>
       </div>
 

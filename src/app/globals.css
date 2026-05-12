@@ -158,9 +158,12 @@ body {
   fill: var(--color-bg-hover);
 }
 
-.react-flow__edge-path {
+.react-flow__edge-path,
+.animated .react-flow__edge-path {
   stroke: var(--color-accent);
   stroke-width: 2;
+  stroke-dasharray: none !important;
+  animation: none !important;
 }
 
 .react-flow__connection-path {
