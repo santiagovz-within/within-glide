@@ -298,7 +298,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       {data.videoUrl && (
         <button
           onClick={() => downloadFromUrl(data.videoUrl!)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag"
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
           style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
         >
           <Download size={12} />

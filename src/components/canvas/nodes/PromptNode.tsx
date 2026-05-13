@@ -2,8 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Type, Sunrise, Droplet, Plus, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { PromptNodeData, PaletteColor } from '@/types';
@@ -21,7 +20,7 @@ const LENGTH_OPTIONS = [
 ];
 
 const MAX_PALETTE_COLORS = 5;
-const LINE_H = '1.6';  // shared line-height for textarea + overlay
+const LINE_H = '1.6';
 
 function autoResize(el: HTMLTextAreaElement) {
   el.style.height = 'auto';
@@ -85,43 +84,9 @@ function buildEnrichedPrompt(rawPrompt: string, palette: PaletteColor[]): string
   return enriched;
 }
 
-// Tag navigation helpers — treat @colorN as an atomic unit in the textarea.
-function tagAtPosition(text: string, pos: number, pal: PaletteColor[]): { ref: string; start: number; end: number } | null {
-  for (let i = 0; i < pal.length; i++) {
-    const ref = `@color${i + 1}`;
-    let from = 0;
-    while (true) {
-      const idx = text.indexOf(ref, from);
-      if (idx === -1) break;
-      if (pos > idx && pos < idx + ref.length) return { ref, start: idx, end: idx + ref.length };
-      from = idx + 1;
-    }
-  }
-  return null;
-}
-
-function tagEndingAt(text: string, pos: number, pal: PaletteColor[]): { start: number } | null {
-  for (let i = 0; i < pal.length; i++) {
-    const ref = `@color${i + 1}`;
-    const start = pos - ref.length;
-    if (start >= 0 && text.slice(start, pos) === ref) return { start };
-  }
-  return null;
-}
-
-function tagStartingAt(text: string, pos: number, pal: PaletteColor[]): { end: number } | null {
-  for (let i = 0; i < pal.length; i++) {
-    const ref = `@color${i + 1}`;
-    if (text.slice(pos, pos + ref.length) === ref) return { end: pos + ref.length };
-  }
-  return null;
-}
-
-// Overlay that renders @colorN refs as inline colored chips.
-// pointer-events: none on container; × buttons get pointer-events: auto so they're clickable.
-function ChipOverlay({
-  text, palette, onRemoveRef,
-}: { text: string; palette: PaletteColor[]; onRemoveRef: (ref: string) => void }) {
+// Renders the prompt text with @colorN refs shown in their palette color + bold.
+// The rest of the text is transparent so the textarea's caret aligns naturally.
+function ColorTextOverlay({ text, palette }: { text: string; palette: PaletteColor[] }) {
   const refs = palette.map((_, i) => `@color${i + 1}`);
   const parts: React.ReactNode[] = [];
   let remaining = text;
@@ -136,31 +101,19 @@ function ChipOverlay({
       }
     }
 
-    if (firstIdx === -1) { parts.push(<span key={key++}>{remaining}</span>); break; }
-    if (firstIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, firstIdx)}</span>);
+    if (firstIdx === -1) {
+      // Plain text — transparent so textarea text shows through (keeps caret aligned)
+      parts.push(<span key={key++} style={{ color: 'transparent' }}>{remaining}</span>);
+      break;
+    }
+    if (firstIdx > 0) {
+      parts.push(<span key={key++} style={{ color: 'transparent' }}>{remaining.slice(0, firstIdx)}</span>);
+    }
 
     const c = palette[firstColorIdx];
-    const capturedRef = firstRef;
-    // Chip: colored highlight with same font-size so it doesn't change line height.
-    // × button gets pointer-events: auto to receive clicks through the overlay.
     parts.push(
-      <span
-        key={key++}
-        style={{
-          display: 'inline',
-          background: c?.hex ? `${c.hex}28` : 'rgba(255,255,255,0.12)',
-          color: c?.hex ?? 'var(--color-white)',
-          borderRadius: 3,
-          padding: '1px 5px',
-          fontSize: 10,
-        }}
-      >
-        {capturedRef}
-        <button
-          className="nodrag"
-          style={{ display: 'inline', pointerEvents: 'auto', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 10, paddingLeft: 2 }}
-          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveRef(capturedRef); }}
-        >×</button>
+      <span key={key++} style={{ color: c?.hex ?? 'var(--color-white)', fontWeight: 700 }}>
+        {firstRef}
       </span>
     );
     remaining = remaining.slice(firstIdx + firstRef.length);
@@ -174,9 +127,6 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   const [geminiModel, setGeminiModel] = useState('gemini-3-flash-preview');
   const [length, setLength] = useState('auto');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Tracks the cursor position at which we last auto-inserted a space after a tag,
-  // so Backspace-then-retype doesn't cause an infinite insert loop.
-  const lastAutoSpacedAt = useRef<number | null>(null);
 
   const paletteEnabled = data.paletteEnabled ?? false;
   const palette: PaletteColor[] = data.palette ?? [];
@@ -199,33 +149,8 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
 
   function handlePromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     autoResize(e.target);
-    const newValue = e.target.value;
-    const cursorPos = e.target.selectionStart ?? newValue.length;
-
-    if (paletteEnabled && palette.length) {
-      const ending = tagEndingAt(newValue, cursorPos, palette);
-      if (ending !== null) {
-        const charAfter = newValue[cursorPos];
-        // Auto-insert a space so the cursor hops cleanly outside the chip.
-        // Skip if a space is already there OR we already fired for this exact position.
-        if (charAfter !== ' ' && charAfter !== '\n' && lastAutoSpacedAt.current !== cursorPos) {
-          lastAutoSpacedAt.current = cursorPos;
-          const withSpace = newValue.slice(0, cursorPos) + ' ' + newValue.slice(cursorPos);
-          dispatchUpdate({ prompt: withSpace });
-          propagatePrompt(withSpace);
-          setTimeout(() => {
-            const ta = textareaRef.current;
-            if (ta) ta.setSelectionRange(cursorPos + 1, cursorPos + 1);
-          }, 0);
-          return;
-        }
-      } else {
-        lastAutoSpacedAt.current = null;
-      }
-    }
-
-    dispatchUpdate({ prompt: newValue });
-    propagatePrompt(newValue);
+    dispatchUpdate({ prompt: e.target.value });
+    propagatePrompt(e.target.value);
   }
 
   useEffect(() => {
@@ -276,95 +201,6 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     dispatchUpdate({ palette: newPalette });
   }
 
-  function removeChipFromPrompt(ref: string) {
-    const newPrompt = (data.prompt ?? '').replaceAll(ref, '').replace(/  +/g, ' ').trim();
-    dispatchUpdate({ prompt: newPrompt });
-    propagatePrompt(newPrompt);
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (!paletteEnabled || !palette.length) return;
-    const ta = e.currentTarget;
-    const pos = ta.selectionStart ?? 0;
-    const selEnd = ta.selectionEnd ?? 0;
-    const text = ta.value;
-    const collapsed = pos === selEnd;
-
-    if (e.key === 'Backspace' && collapsed) {
-      const ending = tagEndingAt(text, pos, palette);
-      if (ending) {
-        e.preventDefault();
-        const np = text.slice(0, ending.start) + text.slice(pos);
-        dispatchUpdate({ prompt: np }); propagatePrompt(np);
-        setTimeout(() => ta.setSelectionRange(ending.start, ending.start), 0);
-        return;
-      }
-      const inside = tagAtPosition(text, pos, palette);
-      if (inside) {
-        e.preventDefault();
-        const np = text.slice(0, inside.start) + text.slice(inside.end);
-        dispatchUpdate({ prompt: np }); propagatePrompt(np);
-        setTimeout(() => ta.setSelectionRange(inside.start, inside.start), 0);
-        return;
-      }
-    }
-
-    if (e.key === 'Delete' && collapsed) {
-      const starting = tagStartingAt(text, pos, palette);
-      if (starting) {
-        e.preventDefault();
-        const np = text.slice(0, pos) + text.slice(starting.end);
-        dispatchUpdate({ prompt: np }); propagatePrompt(np);
-        setTimeout(() => ta.setSelectionRange(pos, pos), 0);
-        return;
-      }
-      const inside = tagAtPosition(text, pos, palette);
-      if (inside) {
-        e.preventDefault();
-        const np = text.slice(0, inside.start) + text.slice(inside.end);
-        dispatchUpdate({ prompt: np }); propagatePrompt(np);
-        setTimeout(() => ta.setSelectionRange(inside.start, inside.start), 0);
-        return;
-      }
-    }
-
-    // Block typing inside a tag
-    if (collapsed && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (tagAtPosition(text, pos, palette)) { e.preventDefault(); return; }
-    }
-
-    // Skip arrow keys over tags atomically
-    if (collapsed && !e.shiftKey) {
-      if (e.key === 'ArrowLeft') {
-        const inside = tagAtPosition(text, pos, palette);
-        if (inside) { e.preventDefault(); ta.setSelectionRange(inside.start, inside.start); return; }
-        const ending = tagEndingAt(text, pos, palette);
-        if (ending) { e.preventDefault(); ta.setSelectionRange(ending.start, ending.start); return; }
-      }
-      if (e.key === 'ArrowRight') {
-        const inside = tagAtPosition(text, pos, palette);
-        if (inside) { e.preventDefault(); ta.setSelectionRange(inside.end, inside.end); return; }
-        const starting = tagStartingAt(text, pos, palette);
-        if (starting) { e.preventDefault(); ta.setSelectionRange(starting.end, starting.end); return; }
-      }
-    }
-  }
-
-  function handleMouseUp() {
-    if (!paletteEnabled || !palette.length) return;
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const pos = ta.selectionStart ?? 0;
-    const selEnd = ta.selectionEnd ?? 0;
-    if (pos !== selEnd) return;
-    const inside = tagAtPosition(ta.value, pos, palette);
-    if (inside) {
-      // Skip past the auto-space that follows the tag if it exists.
-      const target = ta.value[inside.end] === ' ' ? inside.end + 1 : inside.end;
-      ta.setSelectionRange(target, target);
-    }
-  }
-
   const selectStyle: React.CSSProperties = {
     background: 'var(--color-bg-surface)',
     border: 'none',
@@ -375,34 +211,29 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   return (
     <NodeWrapper title="Prompt" icon={<Type size={14} />} selected={selected} accentColor={PORT_COLORS.text}>
 
-      {/* Prompt area — overlay shows chips while textarea captures input */}
+      {/* Prompt area — overlay renders @colorN bold+colored; textarea captures input */}
       <div className="relative mb-2">
-        {/* Chip overlay: absolute, pointer-events: none except × buttons */}
         {hasColorRefs && (
           <div
             aria-hidden="true"
             className="absolute inset-0 text-xs pointer-events-none"
             style={{
               lineHeight: LINE_H,
-              color: 'var(--color-white)',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
               overflow: 'hidden',
             }}
           >
-            <ChipOverlay text={data.prompt ?? ''} palette={palette} onRemoveRef={removeChipFromPrompt} />
+            <ColorTextOverlay text={data.prompt ?? ''} palette={palette} />
           </div>
         )}
-        {/* Textarea: text hidden when overlay is active so there's no double-rendering */}
         <textarea
           ref={textareaRef}
           className="w-full text-xs outline-none nodrag"
           rows={2}
-          placeholder={hasColorRefs ? '' : 'Write your prompt here…'}
+          placeholder="Write your prompt here…"
           value={data.prompt ?? ''}
           onChange={handlePromptChange}
-          onKeyDown={handleKeyDown}
-          onMouseUp={handleMouseUp}
           style={{
             background: 'transparent',
             border: 'none',
@@ -471,7 +302,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
                   style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', padding: 0, border: 'none' }}
                 />
               </label>
-              <span className="text-xs flex-1" style={{ color: 'var(--color-white-muted)', fontFamily: 'monospace', fontSize: 11 }}>
+              <span className="flex-1 text-xs" style={{ color: 'var(--color-white-muted)', fontFamily: 'monospace', fontSize: 11 }}>
                 @color{i + 1}
               </span>
               <button onClick={() => removeColor(i)} className="nodrag shrink-0" style={{ color: 'rgba(255,255,255,0.35)' }}>

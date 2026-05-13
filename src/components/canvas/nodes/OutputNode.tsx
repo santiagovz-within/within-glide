@@ -57,7 +57,7 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
           </div>
           <button
             onClick={() => downloadFromUrl(mediaUrl)}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-3 nodrag"
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-3 nodrag transition-opacity hover:opacity-80 active:opacity-60"
             style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
           >
             <Download size={12} />
