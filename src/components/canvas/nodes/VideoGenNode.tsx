@@ -6,8 +6,9 @@ import { downloadFromUrl } from '@/lib/utils/download';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import type { VideoGenNodeData } from '@/types';
+import type { VideoGenNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
 import { VIDEO_MODELS } from '@/lib/api/models';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 const FRAME_ROW_HEIGHT = 36;
 const FRAME_ROW_GAP = 25;
@@ -44,25 +45,43 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
   const aspectRatios = isSeedance ? SEEDANCE_ASPECT_RATIOS : KLING_ASPECT_RATIOS;
 
-  // Auto-detect aspect ratio from connected start frame image (Kling only)
-  useEffect(() => {
-    if (!isKling || !data.startFrameUrl) {
-      if (data.imageAspectRatio) {
-        document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: { imageAspectRatio: undefined } } }));
+  // Read start-frame source node directly from store (reactive, zero-latency)
+  const storeEdges = useFlowStore(state => state.edges);
+  const storeNodes = useFlowStore(state => state.nodes);
+  const startFrameEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'start_frame');
+  const startFrameSource = startFrameEdge ? storeNodes.find(n => n.id === startFrameEdge.source) : undefined;
+
+  // Derive aspect ratio from source node data synchronously
+  const derivedAspect = (() => {
+    if (!isKling || !startFrameSource) return undefined;
+    if (startFrameSource.type === 'imageInputNode') {
+      const { naturalWidth, naturalHeight } = startFrameSource.data as ImageInputNodeData;
+      if (naturalWidth && naturalHeight) {
+        const g = gcd(naturalWidth, naturalHeight);
+        return `${naturalWidth / g}:${naturalHeight / g}`;
       }
-      return;
     }
-    const img = new window.Image();
-    img.onload = () => {
-      const g = gcd(img.naturalWidth, img.naturalHeight);
-      const ratio = `${img.naturalWidth / g}:${img.naturalHeight / g}`;
-      document.dispatchEvent(new CustomEvent('node:update', {
-        detail: { nodeId: id, data: { imageAspectRatio: ratio, aspectRatio: ratio } },
-      }));
-    };
-    img.src = data.startFrameUrl;
+    if (startFrameSource.type === 'imageGenNode') {
+      return (startFrameSource.data as ImageGenNodeData).aspectRatio;
+    }
+    return undefined;
+  })();
+
+  // Persist derived ratio to node data whenever it changes
+  useEffect(() => {
+    if (derivedAspect && derivedAspect !== data.imageAspectRatio) {
+      updateData({ imageAspectRatio: derivedAspect, aspectRatio: derivedAspect });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.startFrameUrl, isKling]);
+  }, [derivedAspect]);
+
+  // Clear stored ratio when image is disconnected or model changes away from Kling
+  useEffect(() => {
+    if ((!isKling || !hasImage) && data.imageAspectRatio) {
+      updateData({ imageAspectRatio: undefined });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isKling, hasImage]);
 
   useLayoutEffect(() => {
     if (!promptSectionRef.current) return;
