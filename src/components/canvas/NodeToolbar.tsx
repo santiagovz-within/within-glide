@@ -1,6 +1,6 @@
 'use client';
 
-import { Type, Image, Aperture, Film, Zap, Monitor, Grid, Layers } from 'lucide-react';
+import { Type, Image, Aperture, Film, Zap, Monitor, Grid, Layers, Sliders } from 'lucide-react';
 import type { NodeType } from '@/types';
 
 interface NodeOption {
@@ -11,13 +11,14 @@ interface NodeOption {
 }
 
 const NODE_OPTIONS: NodeOption[] = [
-  { type: 'promptNode',        label: 'Prompt',           icon: <Type size={14} />,        category: 'Input'    },
-  { type: 'imageInputNode',    label: 'Image Input',      icon: <Image size={14} />,   category: 'Input'    },
-  { type: 'imageGenNode',      label: 'Image Generation', icon: <Aperture size={14} />,       category: 'Generate' },
-  { type: 'videoGenNode',      label: 'Video Generation', icon: <Film size={14} />,        category: 'Generate' },
-  { type: 'upscaleNode',       label: 'Upscale',          icon: <Zap size={14} />,         category: 'Enhance'  },
-  { type: 'outputNode',        label: 'Output',           icon: <Monitor size={14} />, category: 'Output'   },
-  { type: 'galleryOutputNode', label: 'Output Gallery',   icon: <Grid size={14} />,  category: 'Output'   },
+  { type: 'promptNode',        label: 'Prompt',           icon: <Type size={14} />,     category: 'Input'    },
+  { type: 'imageInputNode',    label: 'Image Input',      icon: <Image size={14} />,    category: 'Input'    },
+  { type: 'imageGenNode',      label: 'Image Generation', icon: <Aperture size={14} />, category: 'Generate' },
+  { type: 'videoGenNode',      label: 'Video Generation', icon: <Film size={14} />,     category: 'Generate' },
+  { type: 'upscaleNode',       label: 'Upscale',          icon: <Zap size={14} />,      category: 'Enhance'  },
+  { type: 'modifyNode',        label: 'Modify',           icon: <Sliders size={14} />,  category: 'Enhance'  },
+  { type: 'outputNode',        label: 'Output',           icon: <Monitor size={14} />,  category: 'Output'   },
+  { type: 'galleryOutputNode', label: 'Output Gallery',   icon: <Grid size={14} />,     category: 'Output'   },
 ];
 
 const CATEGORIES = ['Input', 'Generate', 'Enhance', 'Output'];
@@ -86,7 +87,7 @@ export function NodeToolbar({ x, y, onAdd, onClose, selectedCount = 0, onGroup }
                   className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors hover:bg-white/5"
                   onClick={() => { onAdd(option.type); onClose(); }}
                 >
-                  <span style={{ color: 'var(--color-accent)' }}>{option.icon}</span>
+                  <span style={{ color: 'var(--color-white)' }}>{option.icon}</span>
                   <p className="text-xs font-medium" style={{ color: 'var(--color-white)' }}>{option.label}</p>
                 </button>
               ))}

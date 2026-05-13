@@ -76,6 +76,7 @@ export type NodeType =
   | 'imageGenNode'
   | 'videoGenNode'
   | 'upscaleNode'
+  | 'modifyNode'
   | 'outputNode'
   | 'galleryOutputNode'
   | 'groupNode';
@@ -108,10 +109,17 @@ export interface FlowEdge {
   animated?: boolean;
 }
 
+export interface PaletteColor {
+  name: string;
+  hex: string;
+}
+
 // Node-specific data types — all extend Record<string, unknown> for React Flow compatibility
 export interface PromptNodeData extends Record<string, unknown> {
   prompt: string;
   label?: string;
+  paletteEnabled?: boolean;
+  palette?: PaletteColor[];
 }
 
 export interface ImageInputNodeData extends Record<string, unknown> {
@@ -172,12 +180,23 @@ export interface GroupNodeData extends Record<string, unknown> {
   color?: string;
 }
 
+export interface ModifyNodeData extends Record<string, unknown> {
+  model: string;
+  prompt?: string;
+  promptConnected?: boolean;
+  inputImageUrl?: string;
+  outputImageUrl?: string;
+  status: NodeStatus;
+  label?: string;
+}
+
 export type NodeData =
   | PromptNodeData
   | ImageInputNodeData
   | ImageGenNodeData
   | VideoGenNodeData
   | UpscaleNodeData
+  | ModifyNodeData
   | OutputNodeData
   | GalleryOutputNodeData
   | GroupNodeData;

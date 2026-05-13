@@ -24,13 +24,14 @@ import { ImageInputNode } from './nodes/ImageInputNode';
 import { ImageGenNode } from './nodes/ImageGenNode';
 import { VideoGenNode } from './nodes/VideoGenNode';
 import { UpscaleNode } from './nodes/UpscaleNode';
+import { ModifyNode } from './nodes/ModifyNode';
 import { OutputNode } from './nodes/OutputNode';
 import { GalleryOutputNode } from './nodes/GalleryOutputNode';
 import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData } from '@/types';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -38,6 +39,7 @@ const nodeTypes = {
   imageGenNode: ImageGenNode,
   videoGenNode: VideoGenNode,
   upscaleNode: UpscaleNode,
+  modifyNode: ModifyNode,
   outputNode: OutputNode,
   galleryOutputNode: GalleryOutputNode,
   groupNode: GroupNode,
@@ -53,6 +55,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   imageGenNode:       { model: 'flux-2-pro', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
   videoGenNode:       { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
+  modifyNode:         { model: 'nano-banana-2', status: 'idle' },
   outputNode:         {},
   galleryOutputNode:  {},
   groupNode:          { label: 'Group', color: 'Blue' },
@@ -283,12 +286,13 @@ export function FlowCanvas() {
 
   function getAutoConnectTargetHandle(sourceHandleId: string | null, targetNodeType: NodeType): string | null {
     if (sourceHandleId === 'prompt') {
-      if (targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode') return 'prompt';
+      if (targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode' || targetNodeType === 'modifyNode') return 'prompt';
     }
     if (sourceHandleId === 'image') {
       if (targetNodeType === 'videoGenNode')  return 'start_frame';
       if (targetNodeType === 'imageGenNode')  return 'ref_0';
       if (targetNodeType === 'upscaleNode')   return 'image';
+      if (targetNodeType === 'modifyNode')    return 'image';
       if (targetNodeType === 'outputNode')    return 'image';
     }
     if (sourceHandleId === 'video') {
@@ -331,7 +335,7 @@ export function FlowCanvas() {
       if (!targetNode) return;
       const handle = targetEdge.targetHandle ?? '';
 
-      if (targetNode.type === 'upscaleNode') {
+      if (targetNode.type === 'upscaleNode' || targetNode.type === 'modifyNode') {
         updateNodeData(targetEdge.target, { inputImageUrl: imageUrl ?? undefined });
       } else if (targetNode.type === 'videoGenNode') {
         if (handle === 'start_frame') updateNodeData(targetEdge.target, { startFrameUrl: imageUrl ?? undefined });
@@ -382,6 +386,7 @@ export function FlowCanvas() {
         if (sourceNode?.type === 'imageInputNode') imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
         else if (sourceNode?.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
         else if (sourceNode?.type === 'upscaleNode') imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+        else if (sourceNode?.type === 'modifyNode') imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
         if (imageUrl) {
           propagateImageToTarget(connection.source, {
             id: '', source: connection.source, target: connection.target,
