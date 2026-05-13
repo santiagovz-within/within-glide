@@ -114,11 +114,22 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
       setPreviewUrl(localPreview);
       setUploading(true);
 
+      // Strip original filename to avoid multipart parsing failures caused by
+      // special characters, non-ASCII names, or filenames that collide with
+      // the multipart boundary pattern.
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png';
+      const safeFile = new File([file], `upload.${ext}`, { type: file.type });
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', safeFile);
 
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '(no body)');
+          console.error(`Upload failed [HTTP ${res.status}]:`, errText.slice(0, 300));
+          return;
+        }
         const { url } = await res.json();
 
         if (url) {
@@ -190,7 +201,14 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
           </div>
         </div>
       ) : data.imageUrl ? (
-        <div className="relative -m-3 overflow-hidden">
+        <div
+          className="relative -m-3 overflow-hidden"
+          style={{
+            backgroundImage:
+              'conic-gradient(#3a3a3a 90deg, #2a2a2a 90deg 180deg, #3a3a3a 180deg 270deg, #2a2a2a 270deg)',
+            backgroundSize: '14px 14px',
+          }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={data.imageUrl}

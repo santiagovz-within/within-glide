@@ -20,7 +20,7 @@ export const QUALITY_LEVELS = [
   { value: 'high', label: 'High', steps: 40 },
 ] as const;
 
-export const MAX_UPLOAD_SIZE_BYTES = 35 * 1024 * 1024; // 35MB
+export const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 export const MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 
 export const ACCEPTED_IMAGE_TYPES = {
