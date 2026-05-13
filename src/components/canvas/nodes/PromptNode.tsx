@@ -85,6 +85,38 @@ function buildEnrichedPrompt(rawPrompt: string, palette: PaletteColor[]): string
   return enriched;
 }
 
+// Tag navigation helpers — treat @colorN as an atomic unit in the textarea.
+function tagAtPosition(text: string, pos: number, pal: PaletteColor[]): { ref: string; start: number; end: number } | null {
+  for (let i = 0; i < pal.length; i++) {
+    const ref = `@color${i + 1}`;
+    let from = 0;
+    while (true) {
+      const idx = text.indexOf(ref, from);
+      if (idx === -1) break;
+      if (pos > idx && pos < idx + ref.length) return { ref, start: idx, end: idx + ref.length };
+      from = idx + 1;
+    }
+  }
+  return null;
+}
+
+function tagEndingAt(text: string, pos: number, pal: PaletteColor[]): { start: number } | null {
+  for (let i = 0; i < pal.length; i++) {
+    const ref = `@color${i + 1}`;
+    const start = pos - ref.length;
+    if (start >= 0 && text.slice(start, pos) === ref) return { start };
+  }
+  return null;
+}
+
+function tagStartingAt(text: string, pos: number, pal: PaletteColor[]): { end: number } | null {
+  for (let i = 0; i < pal.length; i++) {
+    const ref = `@color${i + 1}`;
+    if (text.slice(pos, pos + ref.length) === ref) return { end: pos + ref.length };
+  }
+  return null;
+}
+
 // Overlay that renders @colorN refs as inline colored chips.
 // pointer-events: none on container; × buttons get pointer-events: auto so they're clickable.
 function ChipOverlay({
@@ -119,14 +151,14 @@ function ChipOverlay({
           background: c?.hex ? `${c.hex}28` : 'rgba(255,255,255,0.12)',
           color: c?.hex ?? 'var(--color-white)',
           borderRadius: 3,
-          padding: '0 2px',
-          fontSize: 'inherit',
+          padding: '0 5px',
+          fontSize: 10,
         }}
       >
         {capturedRef}
         <button
           className="nodrag"
-          style={{ display: 'inline', pointerEvents: 'auto', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 10, paddingLeft: 2, verticalAlign: 'middle' }}
+          style={{ display: 'inline', pointerEvents: 'auto', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 10, paddingLeft: 2 }}
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveRef(capturedRef); }}
         >×</button>
       </span>
@@ -222,6 +254,85 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     propagatePrompt(newPrompt);
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (!paletteEnabled || !palette.length) return;
+    const ta = e.currentTarget;
+    const pos = ta.selectionStart ?? 0;
+    const selEnd = ta.selectionEnd ?? 0;
+    const text = ta.value;
+    const collapsed = pos === selEnd;
+
+    if (e.key === 'Backspace' && collapsed) {
+      const ending = tagEndingAt(text, pos, palette);
+      if (ending) {
+        e.preventDefault();
+        const np = text.slice(0, ending.start) + text.slice(pos);
+        dispatchUpdate({ prompt: np }); propagatePrompt(np);
+        setTimeout(() => ta.setSelectionRange(ending.start, ending.start), 0);
+        return;
+      }
+      const inside = tagAtPosition(text, pos, palette);
+      if (inside) {
+        e.preventDefault();
+        const np = text.slice(0, inside.start) + text.slice(inside.end);
+        dispatchUpdate({ prompt: np }); propagatePrompt(np);
+        setTimeout(() => ta.setSelectionRange(inside.start, inside.start), 0);
+        return;
+      }
+    }
+
+    if (e.key === 'Delete' && collapsed) {
+      const starting = tagStartingAt(text, pos, palette);
+      if (starting) {
+        e.preventDefault();
+        const np = text.slice(0, pos) + text.slice(starting.end);
+        dispatchUpdate({ prompt: np }); propagatePrompt(np);
+        setTimeout(() => ta.setSelectionRange(pos, pos), 0);
+        return;
+      }
+      const inside = tagAtPosition(text, pos, palette);
+      if (inside) {
+        e.preventDefault();
+        const np = text.slice(0, inside.start) + text.slice(inside.end);
+        dispatchUpdate({ prompt: np }); propagatePrompt(np);
+        setTimeout(() => ta.setSelectionRange(inside.start, inside.start), 0);
+        return;
+      }
+    }
+
+    // Block typing inside a tag
+    if (collapsed && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (tagAtPosition(text, pos, palette)) { e.preventDefault(); return; }
+    }
+
+    // Skip arrow keys over tags atomically
+    if (collapsed && !e.shiftKey) {
+      if (e.key === 'ArrowLeft') {
+        const inside = tagAtPosition(text, pos, palette);
+        if (inside) { e.preventDefault(); ta.setSelectionRange(inside.start, inside.start); return; }
+        const ending = tagEndingAt(text, pos, palette);
+        if (ending) { e.preventDefault(); ta.setSelectionRange(ending.start, ending.start); return; }
+      }
+      if (e.key === 'ArrowRight') {
+        const inside = tagAtPosition(text, pos, palette);
+        if (inside) { e.preventDefault(); ta.setSelectionRange(inside.end, inside.end); return; }
+        const starting = tagStartingAt(text, pos, palette);
+        if (starting) { e.preventDefault(); ta.setSelectionRange(starting.end, starting.end); return; }
+      }
+    }
+  }
+
+  function handleSelectInTextarea() {
+    if (!paletteEnabled || !palette.length) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const pos = ta.selectionStart ?? 0;
+    const selEnd = ta.selectionEnd ?? 0;
+    if (pos !== selEnd) return;
+    const inside = tagAtPosition(ta.value, pos, palette);
+    if (inside) setTimeout(() => ta.setSelectionRange(inside.end, inside.end), 0);
+  }
+
   const selectStyle: React.CSSProperties = {
     background: 'var(--color-bg-surface)',
     border: 'none',
@@ -258,6 +369,8 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           placeholder={hasColorRefs ? '' : 'Write your prompt here…'}
           value={data.prompt ?? ''}
           onChange={handlePromptChange}
+          onKeyDown={handleKeyDown}
+          onSelect={handleSelectInTextarea}
           style={{
             background: 'transparent',
             border: 'none',
