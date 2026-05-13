@@ -102,12 +102,11 @@ function ColorTextOverlay({ text, palette }: { text: string; palette: PaletteCol
     }
 
     if (firstIdx === -1) {
-      // Plain text — transparent so textarea text shows through (keeps caret aligned)
-      parts.push(<span key={key++} style={{ color: 'transparent' }}>{remaining}</span>);
+      parts.push(<span key={key++} style={{ color: 'var(--color-white)' }}>{remaining}</span>);
       break;
     }
     if (firstIdx > 0) {
-      parts.push(<span key={key++} style={{ color: 'transparent' }}>{remaining.slice(0, firstIdx)}</span>);
+      parts.push(<span key={key++} style={{ color: 'var(--color-white)' }}>{remaining.slice(0, firstIdx)}</span>);
     }
 
     const c = palette[firstColorIdx];
