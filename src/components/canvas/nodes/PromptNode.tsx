@@ -102,11 +102,11 @@ function ColorTextOverlay({ text, palette }: { text: string; palette: PaletteCol
     }
 
     if (firstIdx === -1) {
-      parts.push(<span key={key++} style={{ color: 'var(--color-white)' }}>{remaining}</span>);
+      parts.push(<span key={key++} style={{ color: 'var(--color-white)', fontWeight: 700 }}>{remaining}</span>);
       break;
     }
     if (firstIdx > 0) {
-      parts.push(<span key={key++} style={{ color: 'var(--color-white)' }}>{remaining.slice(0, firstIdx)}</span>);
+      parts.push(<span key={key++} style={{ color: 'var(--color-white)', fontWeight: 700 }}>{remaining.slice(0, firstIdx)}</span>);
     }
 
     const c = palette[firstColorIdx];
@@ -238,6 +238,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
             border: 'none',
             color: hasColorRefs ? 'transparent' : 'var(--color-white)',
             caretColor: 'var(--color-white)',
+            fontWeight: 700,
             resize: 'none',
             overflow: 'hidden',
             minHeight: 40,
