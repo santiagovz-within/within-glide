@@ -147,6 +147,7 @@ export interface ImageGenNodeData extends Record<string, unknown> {
 export interface VideoGenNodeData extends Record<string, unknown> {
   model: string;
   aspectRatio: string;
+  imageAspectRatio?: string;
   duration?: number;
   prompt?: string;
   promptConnected?: boolean;

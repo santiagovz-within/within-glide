@@ -15,6 +15,10 @@ const FRAME_ROW_GAP = 25;
 const KLING_ASPECT_RATIOS  = ['16:9', '9:16', '1:1'];
 const SEEDANCE_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
 
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
 function autoResize(el: HTMLTextAreaElement) {
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight}px`;
@@ -37,10 +41,28 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const isKling     = data.model === 'kling-3-pro';
   const isSeedance  = data.model === 'seedance-2';
   const hasImage    = !!data.startFrameUrl;
-  // Kling image-to-video: aspect ratio is determined by the input image
-  const aspectLocked = isKling && hasImage;
 
   const aspectRatios = isSeedance ? SEEDANCE_ASPECT_RATIOS : KLING_ASPECT_RATIOS;
+
+  // Auto-detect aspect ratio from connected start frame image (Kling only)
+  useEffect(() => {
+    if (!isKling || !data.startFrameUrl) {
+      if (data.imageAspectRatio) {
+        document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: { imageAspectRatio: undefined } } }));
+      }
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => {
+      const g = gcd(img.naturalWidth, img.naturalHeight);
+      const ratio = `${img.naturalWidth / g}:${img.naturalHeight / g}`;
+      document.dispatchEvent(new CustomEvent('node:update', {
+        detail: { nodeId: id, data: { imageAspectRatio: ratio, aspectRatio: ratio } },
+      }));
+    };
+    img.src = data.startFrameUrl;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.startFrameUrl, isKling]);
 
   useLayoutEffect(() => {
     if (!promptSectionRef.current) return;
@@ -124,8 +146,14 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     }, 3000);
   }
 
-  // Derive video aspect ratio for the player — fall back to 16:9 if "custom"
-  const videoAspect = aspectLocked ? '16/9' : data.aspectRatio.replace(':', '/');
+  // Derive video aspect ratio for the player
+  const videoAspect = (() => {
+    const parts = data.aspectRatio.split(':');
+    if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+      return `${parts[0]}/${parts[1]}`;
+    }
+    return '16/9';
+  })();
 
   return (
     <NodeWrapper
@@ -198,25 +226,21 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
-          {aspectLocked ? (
-            <div
-              className="w-full px-2 py-1.5 rounded-lg text-xs"
-              style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white-muted)' }}
-            >
-              Custom (from image)
-            </div>
-          ) : (
-            <select
-              className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
-              value={data.aspectRatio}
-              onChange={(e) => updateData({ aspectRatio: e.target.value })}
-              style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-            >
-              {aspectRatios.map((r) => (
+          <select
+            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+            value={data.aspectRatio}
+            onChange={(e) => updateData({ aspectRatio: e.target.value })}
+            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
+          >
+            {isKling && hasImage && data.imageAspectRatio && (
+              <option value={data.imageAspectRatio}>Custom ({data.imageAspectRatio})</option>
+            )}
+            {aspectRatios
+              .filter((r) => !(isKling && hasImage && r === data.imageAspectRatio))
+              .map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
-            </select>
-          )}
+          </select>
         </div>
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Duration</label>
