@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Monitor, Image } from 'lucide-react';
+import { Monitor, Image, Download } from 'lucide-react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { OutputNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, VideoGenNodeData } from '@/types';
@@ -36,26 +36,34 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
       {mediaUrl ? (
-        <div className="-m-3 overflow-hidden">
-          {mediaType === 'video' ? (
-            <video
-              src={mediaUrl}
-              controls
-              className="w-full block"
-              style={{ height: 'auto' }}
-            />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={mediaUrl}
-              alt="Output"
-              className="w-full block cursor-pointer nodrag"
-              style={{ height: 'auto' }}
-              onClick={() => downloadFromUrl(mediaUrl)}
-              title="Click to download"
-            />
-          )}
-        </div>
+        <>
+          <div className="-mx-3 -mt-3 overflow-hidden" style={{ borderRadius: '14px 14px 0 0' }}>
+            {mediaType === 'video' ? (
+              <video
+                src={mediaUrl}
+                controls
+                className="w-full block"
+                style={{ height: 'auto' }}
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={mediaUrl}
+                alt="Output"
+                className="w-full block nodrag"
+                style={{ height: 'auto' }}
+              />
+            )}
+          </div>
+          <button
+            onClick={() => downloadFromUrl(mediaUrl)}
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-3 nodrag"
+            style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+          >
+            <Download size={12} />
+            Download
+          </button>
+        </>
       ) : (
         <div
           className="flex flex-col items-center justify-center gap-2"

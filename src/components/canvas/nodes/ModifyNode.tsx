@@ -1,7 +1,8 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Sliders, Play } from 'lucide-react';
+import { Sliders, Play, Download } from 'lucide-react';
+import { downloadFromUrl } from '@/lib/utils/download';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -272,6 +273,17 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         <Play size={12} />
         {isGenerating ? 'Modifying…' : 'Modify'}
       </button>
+
+      {data.outputImageUrl && (
+        <button
+          onClick={() => downloadFromUrl(data.outputImageUrl!)}
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      )}
 
       <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
     </NodeWrapper>

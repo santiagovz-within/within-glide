@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils/cn';
 import type { NodeStatus } from '@/types';
-import { RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { RefreshCw, Check, AlertCircle } from 'lucide-react';
 
 interface NodeWrapperProps {
   title: string;
@@ -57,7 +57,7 @@ function StatusBadge({ status }: { status: NodeStatus }) {
     return <RefreshCw size={14} className="animate-spin" style={{ color: 'var(--color-processing)' }} />;
   }
   if (status === 'completed') {
-    return <CheckCircle size={14} style={{ color: 'var(--color-success)' }} />;
+    return <Check size={14} style={{ color: 'var(--color-success)' }} />;
   }
   if (status === 'error') {
     return <AlertCircle size={14} style={{ color: 'var(--color-error)' }} />;

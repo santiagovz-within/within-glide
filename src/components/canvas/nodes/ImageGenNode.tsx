@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Aperture, Play } from 'lucide-react';
+import { Aperture, Play, Download } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { NodeWrapper } from './NodeWrapper';
@@ -310,10 +310,8 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
               key={i}
               src={url}
               alt={`Generated ${i + 1}`}
-              className="w-full block cursor-pointer nodrag"
+              className="w-full block nodrag"
               style={{ height: 'auto' }}
-              onClick={() => downloadFromUrl(url)}
-              title="Click to download"
             />
           ))}
         </div>
@@ -329,6 +327,17 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         <Play size={12} />
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
+
+      {generatedImages.length > 0 && (
+        <button
+          onClick={() => downloadFromUrl(generatedImages[0])}
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      )}
 
       <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
     </NodeWrapper>

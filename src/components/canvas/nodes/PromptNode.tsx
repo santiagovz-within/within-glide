@@ -2,7 +2,8 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Type, Star, Droplet, Plus, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { PromptNodeData, PaletteColor } from '@/types';
@@ -20,6 +21,7 @@ const LENGTH_OPTIONS = [
 ];
 
 const MAX_PALETTE_COLORS = 5;
+const LINE_H = '1.6';  // shared line-height for textarea + overlay
 
 function autoResize(el: HTMLTextAreaElement) {
   el.style.height = 'auto';
@@ -69,8 +71,7 @@ function buildEnrichedPrompt(rawPrompt: string, palette: PaletteColor[]): string
   active.forEach((c, i) => {
     const ref = `@color${i + 1}`;
     if (rawPrompt.includes(ref)) {
-      const name = hexToColorName(c.hex);
-      enriched = enriched.replaceAll(ref, `${name} (Hex: ${c.hex})`);
+      enriched = enriched.replaceAll(ref, `${hexToColorName(c.hex)} (Hex: ${c.hex})`);
     } else {
       untagged.push(c);
     }
@@ -84,17 +85,11 @@ function buildEnrichedPrompt(rawPrompt: string, palette: PaletteColor[]): string
   return enriched;
 }
 
-function ChipDisplay({
-  text,
-  palette,
-  onRemoveRef,
-  onClick,
-}: {
-  text: string;
-  palette: PaletteColor[];
-  onRemoveRef: (ref: string) => void;
-  onClick: () => void;
-}) {
+// Overlay that renders @colorN refs as inline colored chips.
+// pointer-events: none on container; × buttons get pointer-events: auto so they're clickable.
+function ChipOverlay({
+  text, palette, onRemoveRef,
+}: { text: string; palette: PaletteColor[]; onRemoveRef: (ref: string) => void }) {
   const refs = palette.map((_, i) => `@color${i + 1}`);
   const parts: React.ReactNode[] = [];
   let remaining = text;
@@ -114,51 +109,47 @@ function ChipDisplay({
 
     const c = palette[firstColorIdx];
     const capturedRef = firstRef;
+    // Chip: colored highlight with same font-size so it doesn't change line height.
+    // × button gets pointer-events: auto to receive clicks through the overlay.
     parts.push(
       <span
         key={key++}
-        className="inline-flex items-center gap-1 mx-0.5 px-1.5 rounded"
-        style={{ background: 'rgba(255,255,255,0.12)', fontSize: 11, lineHeight: '18px', verticalAlign: 'middle' }}
+        style={{
+          display: 'inline',
+          background: c?.hex ? `${c.hex}28` : 'rgba(255,255,255,0.12)',
+          color: c?.hex ?? 'var(--color-white)',
+          borderRadius: 3,
+          padding: '0 2px',
+          fontSize: 'inherit',
+        }}
       >
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: c?.hex ?? '#888', display: 'inline-block', flexShrink: 0 }} />
-        <span style={{ fontFamily: 'monospace' }}>{capturedRef}</span>
+        {capturedRef}
         <button
           className="nodrag"
-          onClick={(e) => { e.stopPropagation(); onRemoveRef(capturedRef); }}
-          style={{ color: 'rgba(255,255,255,0.45)', lineHeight: 1, fontSize: 12, paddingLeft: 1 }}
+          style={{ display: 'inline', pointerEvents: 'auto', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 10, paddingLeft: 2, verticalAlign: 'middle' }}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveRef(capturedRef); }}
         >×</button>
       </span>
     );
     remaining = remaining.slice(firstIdx + firstRef.length);
   }
 
-  return (
-    <div
-      className="w-full text-xs cursor-text leading-relaxed nodrag"
-      style={{ minHeight: 40, color: 'var(--color-white)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-      onClick={onClick}
-    >
-      {text ? <>{parts}</> : <span style={{ color: 'rgba(255,255,255,0.35)' }}>Write your prompt here…</span>}
-    </div>
-  );
+  return <>{parts}</>;
 }
 
 export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNodeData }) {
   const [enhancing, setEnhancing] = useState(false);
   const [geminiModel, setGeminiModel] = useState('gemini-3-flash-preview');
   const [length, setLength] = useState('auto');
-  const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const paletteEnabled = data.paletteEnabled ?? false;
   const palette: PaletteColor[] = data.palette ?? [];
-
   const hasColorRefs = paletteEnabled && palette.some((_, i) => (data.prompt ?? '').includes(`@color${i + 1}`));
-  const showChips = hasColorRefs && !focused;
 
   useEffect(() => {
-    if (!showChips && textareaRef.current) autoResize(textareaRef.current);
-  }, [data.prompt, showChips]);
+    if (textareaRef.current) autoResize(textareaRef.current);
+  }, [data.prompt]);
 
   function dispatchUpdate(updates: Partial<PromptNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
@@ -212,9 +203,9 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   }
 
   function removeColor(i: number) {
-    const removed = `@color${i + 1}`;
+    const ref = `@color${i + 1}`;
     const newPalette = palette.filter((_, idx) => idx !== i);
-    const newPrompt = (data.prompt ?? '').replaceAll(removed, '').replace(/  +/g, ' ').trim();
+    const newPrompt = (data.prompt ?? '').replaceAll(ref, '').replace(/  +/g, ' ').trim();
     dispatchUpdate({ palette: newPalette, prompt: newPrompt });
     propagatePrompt(newPrompt);
   }
@@ -241,35 +232,43 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   return (
     <NodeWrapper title="Prompt" icon={<Type size={14} />} selected={selected} accentColor={PORT_COLORS.text}>
 
-      {/* Prompt area — chip display when @colorN refs present and not editing */}
-      <div className="mb-2">
-        {showChips ? (
-          <ChipDisplay
-            text={data.prompt ?? ''}
-            palette={palette}
-            onRemoveRef={removeChipFromPrompt}
-            onClick={() => { setFocused(true); setTimeout(() => textareaRef.current?.focus(), 0); }}
-          />
-        ) : (
-          <textarea
-            ref={textareaRef}
-            className="w-full text-xs outline-none nodrag"
-            rows={2}
-            placeholder="Write your prompt here…"
-            value={data.prompt ?? ''}
-            onChange={handlePromptChange}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+      {/* Prompt area — overlay shows chips while textarea captures input */}
+      <div className="relative mb-2">
+        {/* Chip overlay: absolute, pointer-events: none except × buttons */}
+        {hasColorRefs && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 text-xs pointer-events-none"
             style={{
-              background: 'transparent',
-              border: 'none',
+              lineHeight: LINE_H,
               color: 'var(--color-white)',
-              resize: 'none',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
               overflow: 'hidden',
-              minHeight: 40,
             }}
-          />
+          >
+            <ChipOverlay text={data.prompt ?? ''} palette={palette} onRemoveRef={removeChipFromPrompt} />
+          </div>
         )}
+        {/* Textarea: text hidden when overlay is active so there's no double-rendering */}
+        <textarea
+          ref={textareaRef}
+          className="w-full text-xs outline-none nodrag"
+          rows={2}
+          placeholder={hasColorRefs ? '' : 'Write your prompt here…'}
+          value={data.prompt ?? ''}
+          onChange={handlePromptChange}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: hasColorRefs ? 'transparent' : 'var(--color-white)',
+            caretColor: 'var(--color-white)',
+            resize: 'none',
+            overflow: 'hidden',
+            minHeight: 40,
+            lineHeight: LINE_H,
+          }}
+        />
       </div>
 
       {/* Model + length selectors */}
@@ -315,7 +314,6 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           </p>
           {palette.map((color, i) => (
             <div key={i} className="flex items-center gap-2 mb-1.5">
-              {/* Color swatch — clicking opens native color picker */}
               <label
                 className="nodrag shrink-0 cursor-pointer"
                 style={{ display: 'block', width: 20, height: 20, borderRadius: 5, background: color.hex, overflow: 'hidden', position: 'relative' }}
