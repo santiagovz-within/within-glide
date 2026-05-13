@@ -3,7 +3,7 @@
 import { type NodeProps } from '@xyflow/react';
 import { NodeResizer } from '@xyflow/react';
 import { useState } from 'react';
-import { Layers, Pencil, Check } from 'lucide-react';
+import { Layers, Edit2, Check } from 'lucide-react';
 import type { GroupNodeData } from '@/types';
 
 const GROUP_COLORS = [
@@ -111,7 +111,7 @@ export function GroupNode({ data, selected, id }: NodeProps & { data: GroupNodeD
                 className="p-0.5 rounded nodrag opacity-50 hover:opacity-100 transition-opacity"
                 style={{ color: 'var(--color-white-muted)' }}
               >
-                <Pencil size={11} />
+                <Edit2 size={11} />
               </button>
             )}
           </div>

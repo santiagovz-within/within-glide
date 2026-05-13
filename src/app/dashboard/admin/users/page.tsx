@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Users, Plus, Trash2, Shield, ShieldOff, Loader2, Pencil, Check, X, AlertTriangle } from 'lucide-react';
+import { Users, Plus, Trash2, Shield, ShieldOff, RefreshCw, Edit2, Check, X, AlertTriangle } from 'lucide-react';
 
 interface AdminUser {
   id: string;
@@ -241,7 +241,7 @@ export default function AdminUsersPage() {
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-40"
               style={{ background: '#fff', color: '#000' }}
             >
-              {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+              {creating ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
               {creating ? 'Creating…' : 'Create User'}
             </button>
             <button
@@ -258,7 +258,7 @@ export default function AdminUsersPage() {
       {/* Users table */}
       {loading ? (
         <div className="flex items-center gap-2" style={{ color: 'var(--color-white-muted)' }}>
-          <Loader2 size={16} className="animate-spin" />
+          <RefreshCw size={16} className="animate-spin" />
           <span className="text-sm">Loading users…</span>
         </div>
       ) : (
@@ -310,7 +310,7 @@ export default function AdminUsersPage() {
                           title="Save name"
                         >
                           {isSavingName
-                            ? <Loader2 size={12} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
+                            ? <RefreshCw size={12} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
                             : <Check size={12} style={{ color: 'var(--color-success)' }} />
                           }
                         </button>
@@ -337,7 +337,7 @@ export default function AdminUsersPage() {
                           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/10 shrink-0 ml-1"
                           title="Edit name"
                         >
-                          <Pencil size={11} style={{ color: 'var(--color-white-muted)' }} />
+                          <Edit2 size={11} style={{ color: 'var(--color-white-muted)' }} />
                         </button>
                       </>
                     )}
@@ -376,7 +376,7 @@ export default function AdminUsersPage() {
                       className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40"
                     >
                       {isToggling
-                        ? <Loader2 size={14} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} />
+                        ? <RefreshCw size={14} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} />
                         : user.profile?.is_admin
                           ? <ShieldOff size={14} style={{ color: 'var(--color-white-muted)' }} />
                           : <Shield size={14} style={{ color: 'var(--color-accent)' }} />

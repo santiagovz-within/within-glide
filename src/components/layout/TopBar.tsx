@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Cloud, CloudUpload, Undo2, Redo2, Share2, BookTemplate } from 'lucide-react';
+import { ChevronRight, Cloud, UploadCloud, RotateCcw, RotateCw, Share2, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
@@ -176,7 +176,7 @@ export function TopBar({ flowId }: TopBarProps) {
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"
             style={{ background: 'rgba(59,158,255,0.15)', color: 'var(--color-accent)' }}
           >
-            <BookTemplate size={9} />
+            <BookOpen size={9} />
             Base Flow
           </span>
         )}
@@ -188,10 +188,10 @@ export function TopBar({ flowId }: TopBarProps) {
       {/* Right: actions */}
       <div className="flex items-center gap-2 pointer-events-auto">
         <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Undo" disabled>
-          <Undo2 size={14} style={{ color: 'var(--color-white-muted)' }} />
+          <RotateCcw size={14} style={{ color: 'var(--color-white-muted)' }} />
         </button>
         <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Redo" disabled>
-          <Redo2 size={14} style={{ color: 'var(--color-white-muted)' }} />
+          <RotateCw size={14} style={{ color: 'var(--color-white-muted)' }} />
         </button>
 
         <div className="w-px h-4" style={{ background: 'var(--color-white-subtle)' }} />
@@ -209,7 +209,7 @@ export function TopBar({ flowId }: TopBarProps) {
             }}
             title={isBaseFlow ? 'Remove from Base Flows' : 'Save as Base Flow (visible to all users)'}
           >
-            <BookTemplate size={12} />
+            <BookOpen size={12} />
             {isBaseFlow ? 'Base Flow ✓' : 'Make Base Flow'}
           </button>
         )}
@@ -224,7 +224,7 @@ export function TopBar({ flowId }: TopBarProps) {
             border: isDirty ? 'none' : 'var(--border-default)',
           }}
         >
-          {isSaving ? <Cloud size={12} className="animate-pulse" /> : <CloudUpload size={12} />}
+          {isSaving ? <Cloud size={12} className="animate-pulse" /> : <UploadCloud size={12} />}
           {isSaving ? 'Saving...' : 'Save'}
         </button>
 

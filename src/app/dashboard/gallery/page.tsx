@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Grid3x3, X, Download, Trash2, Play } from 'lucide-react';
+import { Grid, X, Download, Trash2, Play } from 'lucide-react';
 import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
 import type { Generation } from '@/types';
@@ -87,7 +87,7 @@ export default function GalleryPage() {
           </div>
         ) : displayed.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-20">
-            <Grid3x3 size={48} className="mb-4 opacity-20" style={{ color: 'var(--color-white)' }} />
+            <Grid size={48} className="mb-4 opacity-20" style={{ color: 'var(--color-white)' }} />
             <p className="text-sm font-medium mb-1" style={{ color: 'var(--color-white)' }}>
               {filter !== 'all' ? `No ${filter}s yet` : 'No generations yet'}
             </p>

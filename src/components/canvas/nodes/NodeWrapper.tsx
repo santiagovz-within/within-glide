@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils/cn';
 import type { NodeStatus } from '@/types';
-import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface NodeWrapperProps {
   title: string;
@@ -19,8 +19,9 @@ export function NodeWrapper({ title, icon, status, selected, children, minWidth 
 
   return (
     <div
-      className={cn('rounded-xl overflow-hidden transition-all duration-150')}
+      className={cn('overflow-hidden transition-all duration-150')}
       style={{
+        borderRadius: 17,
         background: 'var(--color-bg-elevated)',
         border: selected ? `1px solid ${color}` : 'var(--border-default)',
         boxShadow: selected
@@ -53,7 +54,7 @@ export function NodeWrapper({ title, icon, status, selected, children, minWidth 
 
 function StatusBadge({ status }: { status: NodeStatus }) {
   if (status === 'processing') {
-    return <Loader2 size={14} className="animate-spin" style={{ color: 'var(--color-processing)' }} />;
+    return <RefreshCw size={14} className="animate-spin" style={{ color: 'var(--color-processing)' }} />;
   }
   if (status === 'completed') {
     return <CheckCircle size={14} style={{ color: 'var(--color-success)' }} />;

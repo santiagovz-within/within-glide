@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { MonitorPlay, ImageIcon } from 'lucide-react';
+import { Monitor, Image } from 'lucide-react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { OutputNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, VideoGenNodeData } from '@/types';
@@ -31,7 +31,7 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
   const mediaType: 'image' | 'video' | undefined = videoUrl ? 'video' : imageUrl ? 'image' : data.mediaType;
 
   return (
-    <NodeWrapper title="Output" icon={<MonitorPlay size={14} />} selected={selected} minWidth={280} accentColor="var(--color-white)">
+    <NodeWrapper title="Output" icon={<Monitor size={14} />} selected={selected} minWidth={280} accentColor="var(--color-white)">
       <TypedHandle type="target" position={Position.Left} id="image" portType="image" offset="40%" />
       <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
 
@@ -65,7 +65,7 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
             borderRadius: '8px',
           }}
         >
-          <ImageIcon size={24} className="opacity-20" style={{ color: 'var(--color-white)' }} />
+          <Image size={24} className="opacity-20" style={{ color: 'var(--color-white)' }} />
           <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
             Connect a node to preview output
           </p>

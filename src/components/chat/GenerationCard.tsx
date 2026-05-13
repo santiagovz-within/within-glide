@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Expand, Play } from 'lucide-react';
+import { Download, Maximize2, Play } from 'lucide-react';
 import { useState } from 'react';
 import type { Generation } from '@/types';
 
@@ -67,7 +67,7 @@ export function GenerationCard({ generation, onClick }: GenerationCardProps) {
             style={{ background: 'rgba(0,0,0,0.4)' }}
             onClick={onClick}
           >
-            <Expand size={12} style={{ color: '#fff' }} />
+            <Maximize2 size={12} style={{ color: '#fff' }} />
           </button>
         </div>
       )}

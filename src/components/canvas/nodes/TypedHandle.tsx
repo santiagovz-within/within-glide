@@ -1,7 +1,7 @@
 'use client';
 
 import { Handle, Position, type HandleProps } from '@xyflow/react';
-import { ImageIcon, Film, Type } from 'lucide-react';
+import { Image, Film, Type } from 'lucide-react';
 import { useState } from 'react';
 
 export type PortType = 'text' | 'image' | 'video';
@@ -41,7 +41,7 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
 };
 
 function PortIcon({ type, size = 9 }: { type: PortType; size?: number }) {
-  if (type === 'image') return <ImageIcon size={size} />;
+  if (type === 'image') return <Image size={size} />;
   if (type === 'video') return <Film size={size} />;
   return <Type size={size} />;
 }

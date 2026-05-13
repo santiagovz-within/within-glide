@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart2, Loader2, ImageIcon, Film } from 'lucide-react';
+import { BarChart2, RefreshCw, Image, Film } from 'lucide-react';
 
 interface UsageData {
   totalGenerations: number;
@@ -97,7 +97,7 @@ export default function AdminUsagePage() {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center gap-2" style={{ color: 'var(--color-white-muted)' }}>
-        <Loader2 size={18} className="animate-spin" />
+        <RefreshCw size={18} className="animate-spin" />
         <span className="text-sm">Loading usage data…</span>
       </div>
     );
@@ -142,7 +142,7 @@ export default function AdminUsagePage() {
             Images Generated
           </p>
           <div className="flex items-center gap-2">
-            <ImageIcon size={18} style={{ color: 'var(--color-accent)' }} />
+            <Image size={18} style={{ color: 'var(--color-accent)' }} />
             <p className="text-3xl font-semibold tabular-nums" style={{ color: 'var(--color-white)' }}>
               {data.mediaTypeSplit.image.toLocaleString()}
             </p>

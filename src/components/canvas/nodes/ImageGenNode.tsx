@@ -1,8 +1,8 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Wand2, Play } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { Aperture, Play } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -15,12 +15,22 @@ const MAX_REF_IMAGES = 14;
 const REF_ROW_HEIGHT = 36;
 const ROW_GAP = 25;
 
+function autoResize(el: HTMLTextAreaElement) {
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const promptSectionRef = useRef<HTMLDivElement>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const rowsListRef = useRef<HTMLDivElement>(null);
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [rowsStartTop, setRowsStartTop] = useState(220);
+
+  useEffect(() => {
+    if (promptTextareaRef.current) autoResize(promptTextareaRef.current);
+  }, [data.prompt]);
 
   const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
   const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
@@ -121,7 +131,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   return (
     <NodeWrapper
       title="Image Generation"
-      icon={<Wand2 size={14} />}
+      icon={<Aperture size={14} />}
       status={data.status}
       selected={selected}
       minWidth={300}
@@ -159,23 +169,22 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             Prompt connected
           </div>
         ) : (
-          <>
-            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
-              Prompt
-            </label>
-            <textarea
-              className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
-              rows={3}
-              placeholder="Describe what you want to generate…"
-              value={data.prompt ?? ''}
-              onChange={(e) => updateData({ prompt: e.target.value })}
-              style={{
-                background: 'var(--color-bg-surface)',
-                border: 'var(--border-default)',
-                color: 'var(--color-white)',
-              }}
-            />
-          </>
+          <textarea
+            ref={promptTextareaRef}
+            className="w-full text-xs outline-none nodrag"
+            rows={2}
+            placeholder="Write your prompt here…"
+            value={data.prompt ?? ''}
+            onChange={(e) => { autoResize(e.target); updateData({ prompt: e.target.value }); }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-white)',
+              resize: 'none',
+              overflow: 'hidden',
+              minHeight: 40,
+            }}
+          />
         )}
       </div>
 
@@ -186,7 +195,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
           value={data.model}
           onChange={(e) => handleModelChange(e.target.value)}
-          style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
         >
           {IMAGE_MODELS.map((m) => (
             <option key={m.id} value={m.id}>{m.name}</option>
@@ -215,7 +224,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
             value={data.aspectRatio}
             onChange={(e) => updateData({ aspectRatio: e.target.value })}
-            style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
           >
             {ASPECT_RATIOS.map((r) => (
               <option key={r.value} value={r.value}>{r.value}</option>
@@ -228,7 +237,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
             value={data.resolution}
             onChange={(e) => updateData({ resolution: e.target.value })}
-            style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
           >
             {RESOLUTIONS.map((r) => (
               <option key={r} value={r}>{r}</option>
@@ -314,8 +323,8 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       <button
         onClick={handleGenerate}
         disabled={isGenerating}
-        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000' }}
+        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
       >
         <Play size={12} />
         {isGenerating ? 'Generating…' : 'Generate'}

@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { ImageIcon, Upload, X, Loader2, GalleryHorizontal } from 'lucide-react';
+import { Image, Upload, X, RefreshCw, Layout } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { NodeWrapper } from './NodeWrapper';
@@ -71,11 +71,11 @@ function GalleryPicker({ onSelect, onClose }: { onSelect: (url: string) => void;
         <div className="flex-1 overflow-y-auto p-3">
           {loading ? (
             <div className="flex items-center justify-center h-40">
-              <Loader2 size={20} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} />
+              <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} />
             </div>
           ) : images.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2">
-              <ImageIcon size={28} style={{ color: 'var(--color-white-muted)', opacity: 0.4 }} />
+              <Image size={28} style={{ color: 'var(--color-white-muted)', opacity: 0.4 }} />
               <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No images in gallery yet</p>
             </div>
           ) : (
@@ -172,7 +172,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
   }
 
   return (
-    <NodeWrapper title="Image Input" icon={<ImageIcon size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.image}>
+    <NodeWrapper title="Image Input" icon={<Image size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.image}>
       {uploading && previewUrl ? (
         <div className="relative -m-3 overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -186,7 +186,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
             className="absolute inset-0 flex items-center justify-center"
             style={{ background: 'rgba(0,0,0,0.35)' }}
           >
-            <Loader2 size={28} className="animate-spin" style={{ color: '#fff' }} />
+            <RefreshCw size={28} className="animate-spin" style={{ color: '#fff' }} />
           </div>
         </div>
       ) : data.imageUrl ? (
@@ -236,7 +236,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
               color: 'var(--color-white-muted)',
             }}
           >
-            <GalleryHorizontal size={12} />
+            <Layout size={12} />
             Browse Gallery
           </button>
         </>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Zap, Play, ChevronsLeftRight } from 'lucide-react';
+import { Zap, Play, Maximize2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -77,7 +77,7 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full flex items-center justify-center"
             style={{ width: 22, height: 22, background: '#fff', color: '#000' }}
           >
-            <ChevronsLeftRight size={12} />
+            <Maximize2 size={12} />
           </div>
         </div>
 
@@ -186,7 +186,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
           className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
           value={data.model}
           onChange={(e) => handleModelChange(e.target.value)}
-          style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
         >
           {UPSCALE_MODELS.map((m) => (
             <option key={m.id} value={m.id}>{m.name}</option>
@@ -228,8 +228,8 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       <button
         onClick={handleUpscale}
         disabled={isUpscaling || !inputImageUrl}
-        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000' }}
+        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
       >
         <Play size={12} />
         {isUpscaling ? 'Upscaling…' : 'Upscale'}

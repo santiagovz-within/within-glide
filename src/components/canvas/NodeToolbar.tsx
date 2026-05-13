@@ -1,6 +1,6 @@
 'use client';
 
-import { Type, ImageIcon, Wand2, Film, Zap, MonitorPlay, LayoutGrid, Layers } from 'lucide-react';
+import { Type, Image, Aperture, Film, Zap, Monitor, Grid, Layers } from 'lucide-react';
 import type { NodeType } from '@/types';
 
 interface NodeOption {
@@ -12,12 +12,12 @@ interface NodeOption {
 
 const NODE_OPTIONS: NodeOption[] = [
   { type: 'promptNode',        label: 'Prompt',           icon: <Type size={14} />,        category: 'Input'    },
-  { type: 'imageInputNode',    label: 'Image Input',      icon: <ImageIcon size={14} />,   category: 'Input'    },
-  { type: 'imageGenNode',      label: 'Image Generation', icon: <Wand2 size={14} />,       category: 'Generate' },
+  { type: 'imageInputNode',    label: 'Image Input',      icon: <Image size={14} />,   category: 'Input'    },
+  { type: 'imageGenNode',      label: 'Image Generation', icon: <Aperture size={14} />,       category: 'Generate' },
   { type: 'videoGenNode',      label: 'Video Generation', icon: <Film size={14} />,        category: 'Generate' },
   { type: 'upscaleNode',       label: 'Upscale',          icon: <Zap size={14} />,         category: 'Enhance'  },
-  { type: 'outputNode',        label: 'Output',           icon: <MonitorPlay size={14} />, category: 'Output'   },
-  { type: 'galleryOutputNode', label: 'Output Gallery',   icon: <LayoutGrid size={14} />,  category: 'Output'   },
+  { type: 'outputNode',        label: 'Output',           icon: <Monitor size={14} />, category: 'Output'   },
+  { type: 'galleryOutputNode', label: 'Output Gallery',   icon: <Grid size={14} />,  category: 'Output'   },
 ];
 
 const CATEGORIES = ['Input', 'Generate', 'Enhance', 'Output'];

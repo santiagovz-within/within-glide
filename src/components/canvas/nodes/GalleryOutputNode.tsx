@@ -2,7 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Handle } from '@xyflow/react';
-import { LayoutGrid, Download, Film, ImageIcon } from 'lucide-react';
+import { Grid, Download, Film, Image } from 'lucide-react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { NodeWrapper } from './NodeWrapper';
 import { downloadFromUrl } from '@/lib/utils/download';
@@ -67,7 +67,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
   return (
     <NodeWrapper
       title="Output Gallery"
-      icon={<LayoutGrid size={14} />}
+      icon={<Grid size={14} />}
       selected={selected}
       minWidth={320}
       accentColor="#f59e0b"
@@ -91,7 +91,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
           transform: 'translateY(-50%)',
         }}
       >
-        <LayoutGrid size={14} style={{ pointerEvents: 'none', color: '#f59e0b', position: 'absolute' }} />
+        <Grid size={14} style={{ pointerEvents: 'none', color: '#f59e0b', position: 'absolute' }} />
       </Handle>
 
       {mediaItems.length === 0 ? (
@@ -103,7 +103,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
             borderRadius: 8,
           }}
         >
-          <LayoutGrid size={24} style={{ color: '#f59e0b', opacity: 0.3 }} />
+          <Grid size={24} style={{ color: '#f59e0b', opacity: 0.3 }} />
           <p className="text-xs text-center" style={{ color: 'var(--color-white-muted)' }}>
             Connect image or video nodes to populate the gallery
           </p>
@@ -159,7 +159,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
                 >
                   {item.type === 'video'
                     ? <Film size={14} style={{ color: '#fff' }} />
-                    : <ImageIcon size={14} style={{ color: '#fff' }} />
+                    : <Image size={14} style={{ color: '#fff' }} />
                   }
                 </div>
               </div>

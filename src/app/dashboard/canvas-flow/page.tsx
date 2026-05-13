@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Search, MoreHorizontal, Clock, Workflow,
-  Pencil, Check, X, Upload, Loader2,
+  Edit2, Check, X, Upload, RefreshCw,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { Flow } from '@/types';
@@ -152,7 +152,7 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
           style={{ border: 'var(--border-default)', width: 30, height: 30, flexShrink: 0 }}
           title="Upload image"
         >
-          {uploading ? <Loader2 size={11} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} /> : <Upload size={11} style={{ color: 'var(--color-white-muted)' }} />}
+          {uploading ? <RefreshCw size={11} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} /> : <Upload size={11} style={{ color: 'var(--color-white-muted)' }} />}
         </button>
         <input
           ref={fileRef}
@@ -170,7 +170,7 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
         className="flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
         style={{ background: '#fff', color: '#000' }}
       >
-        {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+        {saving ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />}
         {saving ? 'Saving…' : 'Save Changes'}
       </button>
     </div>
@@ -365,7 +365,7 @@ export default function CanvasFlowPage() {
                         style={{ color: 'var(--color-white)' }}
                         onClick={(e) => { e.stopPropagation(); setEditingBaseId(bf.id); setMenuOpenId(null); }}
                       >
-                        <Pencil size={11} /> Edit thumbnail & icon
+                        <Edit2 size={11} /> Edit thumbnail & icon
                       </button>
                       <button
                         className="w-full text-left px-3 py-2 text-xs transition-colors hover:bg-white/5"

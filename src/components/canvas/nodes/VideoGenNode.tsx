@@ -2,7 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Film, Play, AlertTriangle } from 'lucide-react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoGenNodeData } from '@/types';
@@ -14,14 +14,24 @@ const FRAME_ROW_GAP = 25;
 const KLING_ASPECT_RATIOS  = ['16:9', '9:16', '1:1'];
 const SEEDANCE_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
 
+function autoResize(el: HTMLTextAreaElement) {
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const promptSectionRef = useRef<HTMLDivElement>(null);
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const startFrameRowRef = useRef<HTMLDivElement>(null);
   const endFrameRowRef = useRef<HTMLDivElement>(null);
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [startFrameHandleTop, setStartFrameHandleTop] = useState(200);
   const [endFrameHandleTop, setEndFrameHandleTop] = useState(261);
+
+  useEffect(() => {
+    if (promptTextareaRef.current) autoResize(promptTextareaRef.current);
+  }, [data.prompt]);
 
   const isKling     = data.model === 'kling-3-pro';
   const isSeedance  = data.model === 'seedance-2';
@@ -140,17 +150,22 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             Prompt connected
           </div>
         ) : (
-          <>
-            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Prompt</label>
-            <textarea
-              className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
-              rows={3}
-              placeholder="Describe the video you want to generate…"
-              value={data.prompt ?? ''}
-              onChange={(e) => updateData({ prompt: e.target.value })}
-              style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
-            />
-          </>
+          <textarea
+            ref={promptTextareaRef}
+            className="w-full text-xs outline-none nodrag"
+            rows={2}
+            placeholder="Write your prompt here…"
+            value={data.prompt ?? ''}
+            onChange={(e) => { autoResize(e.target); updateData({ prompt: e.target.value }); }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-white)',
+              resize: 'none',
+              overflow: 'hidden',
+              minHeight: 40,
+            }}
+          />
         )}
       </div>
 
@@ -161,7 +176,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
           value={data.model}
           onChange={(e) => updateData({ model: e.target.value })}
-          style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
         >
           {VIDEO_MODELS.map((m) => (
             <option key={m.id} value={m.id}>{m.name}</option>
@@ -194,7 +209,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
               className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
               value={data.aspectRatio}
               onChange={(e) => updateData({ aspectRatio: e.target.value })}
-              style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+              style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
             >
               {aspectRatios.map((r) => (
                 <option key={r} value={r}>{r}</option>
@@ -208,7 +223,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
             value={data.duration ?? 5}
             onChange={(e) => updateData({ duration: Number(e.target.value) })}
-            style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
           >
             <option value={3}>3s</option>
             <option value={5}>5s</option>
@@ -272,8 +287,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       <button
         onClick={handleGenerate}
         disabled={isGenerating}
-        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000' }}
+        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
       >
         <Play size={12} />
         {isGenerating ? 'Generating…' : 'Generate'}

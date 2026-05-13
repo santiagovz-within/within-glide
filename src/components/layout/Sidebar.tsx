@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  Workflow,
-  ImageIcon,
-  Music2,
-  Grid3x3,
+  GitBranch,
+  Image,
+  Music,
+  Grid,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -18,9 +18,9 @@ import { cn } from '@/lib/utils/cn';
 import { createClient } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
-  { label: 'Canvas Flow', icon: Workflow, href: '/dashboard/canvas-flow' },
-  { label: 'Image & Video', icon: ImageIcon, href: '/dashboard/image-video' },
-  { label: 'Gallery', icon: Grid3x3, href: '/dashboard/gallery' },
+  { label: 'Canvas Flow', icon: GitBranch, href: '/dashboard/canvas-flow' },
+  { label: 'Image & Video', icon: Image, href: '/dashboard/image-video' },
+  { label: 'Gallery', icon: Grid, href: '/dashboard/gallery' },
 ];
 
 const ADMIN_ITEMS = [
@@ -125,7 +125,7 @@ export function Sidebar() {
           onClick={handleJamBox}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 w-full hover:bg-white/5"
         >
-          <Music2
+          <Music
             size={18}
             className="shrink-0"
             style={{ color: 'var(--color-white-muted)' }}

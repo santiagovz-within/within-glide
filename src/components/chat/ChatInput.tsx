@@ -1,6 +1,6 @@
 'use client';
 
-import { Send, Sparkles, X, ImageIcon, Film } from 'lucide-react';
+import { Send, Sparkles, X, Image, Film } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { useCallback } from 'react';
 import { useChatStore } from '@/lib/stores/chatStore';
@@ -90,7 +90,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
                 color: mode === m ? 'var(--color-white)' : 'var(--color-white-muted)',
               }}
             >
-              {m === 'image' ? <ImageIcon size={12} /> : <Film size={12} />}
+              {m === 'image' ? <Image size={12} /> : <Film size={12} />}
               {m === 'image' ? 'Image' : 'Video'}
             </button>
           ))}
