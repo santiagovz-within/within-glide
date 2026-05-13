@@ -2,13 +2,16 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Monitor, Image, Download } from 'lucide-react';
+import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import type { OutputNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, VideoGenNodeData, ModifyNodeData } from '@/types';
+import { MediaPreviewModal } from './MediaPreviewModal';
+import type { OutputNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, VideoGenNodeData, ModifyNodeData, SelectNodeData } from '@/types';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
 export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNodeData }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
   const storeEdges = useFlowStore(state => state.edges);
   const storeNodes = useFlowStore(state => state.nodes);
 
@@ -23,6 +26,7 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
     if (node.type === 'imageGenNode') return (node.data as ImageGenNodeData).generatedImages?.[0];
     if (node.type === 'upscaleNode') return (node.data as UpscaleNodeData).outputImageUrl;
     if (node.type === 'modifyNode') return (node.data as ModifyNodeData).outputImageUrl;
+    if (node.type === 'selectNode') return (node.data as SelectNodeData).selectedImageUrl;
     return undefined;
   }
 
@@ -38,7 +42,7 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
 
       {mediaUrl ? (
         <>
-          <div className="-mx-3 -mt-3 overflow-hidden" style={{ borderRadius: '14px 14px 0 0' }}>
+          <div className="-mx-3 -mt-3 overflow-hidden" style={{ borderRadius: 0 }}>
             {mediaType === 'video' ? (
               <video
                 src={mediaUrl}
@@ -51,8 +55,9 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
               <img
                 src={mediaUrl}
                 alt="Output"
-                className="w-full block nodrag"
+                className="w-full block nodrag cursor-pointer"
                 style={{ height: 'auto' }}
+                onClick={() => setPreviewOpen(true)}
               />
             )}
           </div>
@@ -64,6 +69,9 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
             <Download size={12} />
             Download
           </button>
+          {previewOpen && mediaType === 'image' && (
+            <MediaPreviewModal url={mediaUrl} type="image" onClose={() => setPreviewOpen(false)} />
+          )}
         </>
       ) : (
         <div

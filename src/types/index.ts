@@ -77,6 +77,7 @@ export type NodeType =
   | 'videoGenNode'
   | 'upscaleNode'
   | 'modifyNode'
+  | 'selectNode'
   | 'outputNode'
   | 'galleryOutputNode'
   | 'groupNode';
@@ -165,6 +166,12 @@ export interface UpscaleNodeData extends Record<string, unknown> {
   label?: string;
 }
 
+export interface SelectNodeData extends Record<string, unknown> {
+  selectedIndex?: number;
+  selectedImageUrl?: string;
+  label?: string;
+}
+
 export interface OutputNodeData extends Record<string, unknown> {
   mediaUrl?: string;
   mediaType?: 'image' | 'video';
@@ -197,6 +204,7 @@ export type NodeData =
   | VideoGenNodeData
   | UpscaleNodeData
   | ModifyNodeData
+  | SelectNodeData
   | OutputNodeData
   | GalleryOutputNodeData
   | GroupNodeData;

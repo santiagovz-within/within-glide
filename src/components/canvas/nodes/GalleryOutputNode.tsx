@@ -41,6 +41,10 @@ function getMediaFromNode(node: { type?: string; data: Record<string, unknown> }
     const url = (node.data as { outputImageUrl?: string }).outputImageUrl;
     return url ? [{ url, type: 'image', sourceNodeId: '' }] : [];
   }
+  if (node.type === 'selectNode') {
+    const url = (node.data as { selectedImageUrl?: string }).selectedImageUrl;
+    return url ? [{ url, type: 'image', sourceNodeId: '' }] : [];
+  }
   return [];
 }
 

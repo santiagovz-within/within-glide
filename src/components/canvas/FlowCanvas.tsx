@@ -25,6 +25,7 @@ import { ImageGenNode } from './nodes/ImageGenNode';
 import { VideoGenNode } from './nodes/VideoGenNode';
 import { UpscaleNode } from './nodes/UpscaleNode';
 import { ModifyNode } from './nodes/ModifyNode';
+import { SelectNode } from './nodes/SelectNode';
 import { OutputNode } from './nodes/OutputNode';
 import { GalleryOutputNode } from './nodes/GalleryOutputNode';
 import { GroupNode } from './nodes/GroupNode';
@@ -40,6 +41,7 @@ const nodeTypes = {
   videoGenNode: VideoGenNode,
   upscaleNode: UpscaleNode,
   modifyNode: ModifyNode,
+  selectNode: SelectNode,
   outputNode: OutputNode,
   galleryOutputNode: GalleryOutputNode,
   groupNode: GroupNode,
@@ -56,6 +58,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   videoGenNode:       { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
   modifyNode:         { model: 'nano-banana-2', status: 'idle' },
+  selectNode:         {},
   outputNode:         {},
   galleryOutputNode:  {},
   groupNode:          { label: 'Group', color: 'Blue' },

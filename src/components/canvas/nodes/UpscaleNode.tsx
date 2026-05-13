@@ -6,7 +6,7 @@ import { downloadFromUrl } from '@/lib/utils/download';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
+import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData, SelectNodeData } from '@/types';
 import { UPSCALE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
@@ -110,6 +110,8 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
     inputImageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
   } else if (sourceNode?.type === 'upscaleNode') {
     inputImageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+  } else if (sourceNode?.type === 'selectNode') {
+    inputImageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
   }
 
   // Scale options per model

@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { useFlowStore } from '@/lib/stores/flowStore';
-import type { ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData } from '@/types';
+import type { ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData, SelectNodeData } from '@/types';
 
 const MODIFY_MODELS = [
   { id: 'nano-banana-2',   name: 'Nano Banana 2 Edit' },
@@ -71,6 +71,9 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   } else if (sourceNode?.type === 'modifyNode') {
     const nd = sourceNode.data as ModifyNodeData;
     if (nd.outputImageUrl) availableImages = [nd.outputImageUrl];
+  } else if (sourceNode?.type === 'selectNode') {
+    const url = (sourceNode.data as SelectNodeData).selectedImageUrl;
+    if (url) availableImages = [url];
   }
 
   const safeIndex = Math.min(selectedIndex, Math.max(availableImages.length - 1, 0));
