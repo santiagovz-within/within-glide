@@ -26,65 +26,163 @@ function autoResize(el: HTMLTextAreaElement) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-function enrichWithPalette(prompt: string, palette: PaletteColor[]): string {
+function hexToColorName(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16) || 0;
+  const g = parseInt(hex.slice(3, 5), 16) || 0;
+  const b = parseInt(hex.slice(5, 7), 16) || 0;
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) {
+    if (l < 0.12) return 'Black';
+    if (l > 0.88) return 'White';
+    return l < 0.4 ? 'Dark Gray' : l > 0.6 ? 'Light Gray' : 'Gray';
+  }
+  const d = max - min;
+  let h = 0;
+  if (max === rn)      h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
+  else if (max === gn) h = ((bn - rn) / d + 2) / 6;
+  else                 h = ((rn - gn) / d + 4) / 6;
+  h = Math.round(h * 360);
+  const shade = l < 0.28 ? 'Dark ' : l > 0.72 ? 'Light ' : '';
+  if (h < 15 || h >= 345) return `${shade}Red`;
+  if (h < 40)  return `${shade}Orange`;
+  if (h < 65)  return `${shade}Yellow`;
+  if (h < 80)  return `${shade}Yellow-Green`;
+  if (h < 150) return `${shade}Green`;
+  if (h < 175) return `${shade}Teal`;
+  if (h < 200) return `${shade}Cyan`;
+  if (h < 245) return `${shade}Blue`;
+  if (h < 265) return `${shade}Indigo`;
+  if (h < 290) return `${shade}Purple`;
+  if (h < 325) return `${shade}Magenta`;
+  return `${shade}Pink`;
+}
+
+function buildEnrichedPrompt(rawPrompt: string, palette: PaletteColor[]): string {
   const active = palette.filter(c => c.hex);
-  if (!active.length) return prompt;
-  let enriched = prompt;
+  if (!active.length) return rawPrompt;
+
+  let enriched = rawPrompt;
+  const untagged: PaletteColor[] = [];
+
   active.forEach((c, i) => {
     const ref = `@color${i + 1}`;
-    if (enriched.includes(ref)) {
-      const label = c.name ? `${c.name} (${c.hex})` : c.hex;
-      enriched = enriched.replaceAll(ref, label);
+    if (rawPrompt.includes(ref)) {
+      const name = hexToColorName(c.hex);
+      enriched = enriched.replaceAll(ref, `${name} (Hex: ${c.hex})`);
+    } else {
+      untagged.push(c);
     }
   });
-  const paletteStr = active.map((c, i) => `${c.name || `color ${i + 1}`}: ${c.hex}`).join(', ');
-  return `${enriched}\n\nColor palette — ${paletteStr}`;
+
+  if (untagged.length > 0) {
+    const pool = untagged.map(c => `${hexToColorName(c.hex)} (Hex: ${c.hex})`).join(', ');
+    enriched += `\n\nColor palette for background/secondary elements: ${pool}`;
+  }
+
+  return enriched;
+}
+
+function ChipDisplay({
+  text,
+  palette,
+  onRemoveRef,
+  onClick,
+}: {
+  text: string;
+  palette: PaletteColor[];
+  onRemoveRef: (ref: string) => void;
+  onClick: () => void;
+}) {
+  const refs = palette.map((_, i) => `@color${i + 1}`);
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    let firstIdx = -1, firstRef = '', firstColorIdx = 0;
+    for (let ci = 0; ci < refs.length; ci++) {
+      const idx = remaining.indexOf(refs[ci]);
+      if (idx >= 0 && (firstIdx === -1 || idx < firstIdx)) {
+        firstIdx = idx; firstRef = refs[ci]; firstColorIdx = ci;
+      }
+    }
+
+    if (firstIdx === -1) { parts.push(<span key={key++}>{remaining}</span>); break; }
+    if (firstIdx > 0) parts.push(<span key={key++}>{remaining.slice(0, firstIdx)}</span>);
+
+    const c = palette[firstColorIdx];
+    const capturedRef = firstRef;
+    parts.push(
+      <span
+        key={key++}
+        className="inline-flex items-center gap-1 mx-0.5 px-1.5 rounded"
+        style={{ background: 'rgba(255,255,255,0.12)', fontSize: 11, lineHeight: '18px', verticalAlign: 'middle' }}
+      >
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: c?.hex ?? '#888', display: 'inline-block', flexShrink: 0 }} />
+        <span style={{ fontFamily: 'monospace' }}>{capturedRef}</span>
+        <button
+          className="nodrag"
+          onClick={(e) => { e.stopPropagation(); onRemoveRef(capturedRef); }}
+          style={{ color: 'rgba(255,255,255,0.45)', lineHeight: 1, fontSize: 12, paddingLeft: 1 }}
+        >×</button>
+      </span>
+    );
+    remaining = remaining.slice(firstIdx + firstRef.length);
+  }
+
+  return (
+    <div
+      className="w-full text-xs cursor-text leading-relaxed nodrag"
+      style={{ minHeight: 40, color: 'var(--color-white)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+      onClick={onClick}
+    >
+      {text ? <>{parts}</> : <span style={{ color: 'rgba(255,255,255,0.35)' }}>Write your prompt here…</span>}
+    </div>
+  );
 }
 
 export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNodeData }) {
   const [enhancing, setEnhancing] = useState(false);
   const [geminiModel, setGeminiModel] = useState('gemini-3-flash-preview');
   const [length, setLength] = useState('auto');
+  const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const paletteEnabled = data.paletteEnabled ?? false;
   const palette: PaletteColor[] = data.palette ?? [];
 
+  const hasColorRefs = paletteEnabled && palette.some((_, i) => (data.prompt ?? '').includes(`@color${i + 1}`));
+  const showChips = hasColorRefs && !focused;
+
   useEffect(() => {
-    if (textareaRef.current) autoResize(textareaRef.current);
-  }, [data.prompt]);
+    if (!showChips && textareaRef.current) autoResize(textareaRef.current);
+  }, [data.prompt, showChips]);
 
   function dispatchUpdate(updates: Partial<PromptNodeData>) {
-    document.dispatchEvent(new CustomEvent('node:update', {
-      detail: { nodeId: id, data: updates },
-    }));
+    document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
   }
 
   function propagatePrompt(rawPrompt: string) {
     const enriched = paletteEnabled && palette.length
-      ? enrichWithPalette(rawPrompt, palette)
+      ? buildEnrichedPrompt(rawPrompt, palette)
       : rawPrompt;
-    document.dispatchEvent(new CustomEvent('node:prompt-propagate', {
-      detail: { sourceNodeId: id, prompt: enriched },
-    }));
+    document.dispatchEvent(new CustomEvent('node:prompt-propagate', { detail: { sourceNodeId: id, prompt: enriched } }));
   }
 
   function handlePromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     autoResize(e.target);
-    const newPrompt = e.target.value;
-    dispatchUpdate({ prompt: newPrompt });
-    propagatePrompt(newPrompt);
+    dispatchUpdate({ prompt: e.target.value });
+    propagatePrompt(e.target.value);
   }
 
-  // Re-propagate when palette settings change
   useEffect(() => {
     if (data.prompt) {
       const enriched = data.paletteEnabled && (data.palette ?? []).length
-        ? enrichWithPalette(data.prompt, data.palette ?? [])
+        ? buildEnrichedPrompt(data.prompt, data.palette ?? [])
         : data.prompt;
-      document.dispatchEvent(new CustomEvent('node:prompt-propagate', {
-        detail: { sourceNodeId: id, prompt: enriched },
-      }));
+      document.dispatchEvent(new CustomEvent('node:prompt-propagate', { detail: { sourceNodeId: id, prompt: enriched } }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.paletteEnabled, data.palette]);
@@ -108,19 +206,29 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     }
   }
 
-  function updatePaletteColor(index: number, updates: Partial<PaletteColor>) {
+  function addColor() {
+    if (palette.length >= MAX_PALETTE_COLORS) return;
+    dispatchUpdate({ palette: [...palette, { name: '', hex: '#3b9eff' }] });
+  }
+
+  function removeColor(i: number) {
+    const removed = `@color${i + 1}`;
+    const newPalette = palette.filter((_, idx) => idx !== i);
+    const newPrompt = (data.prompt ?? '').replaceAll(removed, '').replace(/  +/g, ' ').trim();
+    dispatchUpdate({ palette: newPalette, prompt: newPrompt });
+    propagatePrompt(newPrompt);
+  }
+
+  function updateColorHex(i: number, hex: string) {
     const newPalette = [...palette];
-    newPalette[index] = { ...newPalette[index], ...updates };
+    newPalette[i] = { ...newPalette[i], hex };
     dispatchUpdate({ palette: newPalette });
   }
 
-  function addColor() {
-    if (palette.length >= MAX_PALETTE_COLORS) return;
-    dispatchUpdate({ palette: [...palette, { name: '', hex: '#ffffff' }] });
-  }
-
-  function removeColor(index: number) {
-    dispatchUpdate({ palette: palette.filter((_, i) => i !== index) });
+  function removeChipFromPrompt(ref: string) {
+    const newPrompt = (data.prompt ?? '').replaceAll(ref, '').replace(/  +/g, ' ').trim();
+    dispatchUpdate({ prompt: newPrompt });
+    propagatePrompt(newPrompt);
   }
 
   const selectStyle: React.CSSProperties = {
@@ -132,48 +240,62 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
 
   return (
     <NodeWrapper title="Prompt" icon={<Type size={14} />} selected={selected} accentColor={PORT_COLORS.text}>
-      <textarea
-        ref={textareaRef}
-        className="w-full text-xs outline-none nodrag mb-2"
-        rows={2}
-        placeholder="Write your prompt here…"
-        value={data.prompt ?? ''}
-        onChange={handlePromptChange}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: 'var(--color-white)',
-          resize: 'none',
-          overflow: 'hidden',
-          minHeight: 40,
-        }}
-      />
+
+      {/* Prompt area — chip display when @colorN refs present and not editing */}
+      <div className="mb-2">
+        {showChips ? (
+          <ChipDisplay
+            text={data.prompt ?? ''}
+            palette={palette}
+            onRemoveRef={removeChipFromPrompt}
+            onClick={() => { setFocused(true); setTimeout(() => textareaRef.current?.focus(), 0); }}
+          />
+        ) : (
+          <textarea
+            ref={textareaRef}
+            className="w-full text-xs outline-none nodrag"
+            rows={2}
+            placeholder="Write your prompt here…"
+            value={data.prompt ?? ''}
+            onChange={handlePromptChange}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-white)',
+              resize: 'none',
+              overflow: 'hidden',
+              minHeight: 40,
+            }}
+          />
+        )}
+      </div>
 
       {/* Model + length selectors */}
       <div className="grid grid-cols-2 gap-1.5 mb-2">
-        <select
-          value={geminiModel}
-          onChange={(e) => setGeminiModel(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs outline-none nodrag"
-          style={selectStyle}
-        >
-          {GEMINI_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
+        <select value={geminiModel} onChange={(e) => setGeminiModel(e.target.value)} className="w-full px-2 py-1.5 text-xs outline-none nodrag" style={selectStyle}>
+          {GEMINI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
-        <select
-          value={length}
-          onChange={(e) => setLength(e.target.value)}
-          className="w-full px-2 py-1.5 text-xs outline-none nodrag"
-          style={selectStyle}
-        >
-          {LENGTH_OPTIONS.map((o) => (
-            <option key={o.id} value={o.id}>{o.label}</option>
-          ))}
+        <select value={length} onChange={(e) => setLength(e.target.value)} className="w-full px-2 py-1.5 text-xs outline-none nodrag" style={selectStyle}>
+          {LENGTH_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
         </select>
       </div>
 
-      <div className="flex gap-1.5 mb-0">
+      {/* [Add Palette]  [Enhance →] */}
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => dispatchUpdate({ paletteEnabled: !paletteEnabled })}
+          className="flex items-center gap-1 px-2.5 py-2 text-xs font-medium transition-colors nodrag shrink-0"
+          style={{
+            background: paletteEnabled ? 'var(--color-accent)' : 'var(--color-bg-surface)',
+            color: paletteEnabled ? '#fff' : 'var(--color-white-muted)',
+            borderRadius: 11,
+          }}
+        >
+          <Droplet size={11} />
+          {paletteEnabled ? 'Palette' : 'Add Palette'}
+        </button>
         <button
           onClick={handleEnhance}
           disabled={enhancing || !data.prompt?.trim()}
@@ -183,63 +305,39 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           <Star size={11} className={enhancing ? 'animate-pulse' : ''} />
           {enhancing ? 'Enhancing…' : 'Enhance'}
         </button>
-        <button
-          onClick={() => dispatchUpdate({ paletteEnabled: !paletteEnabled })}
-          className="flex items-center justify-center px-2.5 py-2 text-xs font-medium transition-colors nodrag"
-          title="Color palette"
-          style={{
-            background: paletteEnabled ? 'var(--color-accent)' : 'var(--color-bg-surface)',
-            color: paletteEnabled ? '#fff' : 'var(--color-white-muted)',
-            borderRadius: 11,
-          }}
-        >
-          <Droplet size={12} />
-        </button>
       </div>
 
-      {/* Color palette */}
+      {/* Color palette section */}
       {paletteEnabled && (
-        <div className="mt-2">
+        <div className="mt-2.5">
+          <p className="text-[9px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-white-muted)' }}>
+            Color Palette
+          </p>
           {palette.map((color, i) => (
-            <div key={i} className="flex items-center gap-1.5 mb-1.5">
-              <input
-                type="color"
-                value={color.hex}
-                onChange={(e) => updatePaletteColor(i, { hex: e.target.value })}
-                className="nodrag"
-                style={{ width: 24, height: 24, border: 'none', borderRadius: 6, padding: 0, cursor: 'pointer', flexShrink: 0 }}
-              />
-              <input
-                type="text"
-                value={color.name}
-                onChange={(e) => updatePaletteColor(i, { name: e.target.value })}
-                placeholder={`@color${i + 1}`}
-                className="flex-1 text-xs outline-none nodrag"
-                style={{
-                  background: 'var(--color-bg-surface)',
-                  border: 'none',
-                  color: 'var(--color-white)',
-                  borderRadius: 8,
-                  padding: '3px 8px',
-                  height: 24,
-                  minWidth: 0,
-                }}
-              />
-              <button
-                onClick={() => removeColor(i)}
-                className="nodrag shrink-0"
-                style={{ color: 'var(--color-white-muted)', padding: '2px' }}
+            <div key={i} className="flex items-center gap-2 mb-1.5">
+              {/* Color swatch — clicking opens native color picker */}
+              <label
+                className="nodrag shrink-0 cursor-pointer"
+                style={{ display: 'block', width: 20, height: 20, borderRadius: 5, background: color.hex, overflow: 'hidden', position: 'relative' }}
               >
+                <input
+                  type="color"
+                  value={color.hex}
+                  onChange={(e) => updateColorHex(i, e.target.value)}
+                  className="nodrag"
+                  style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', padding: 0, border: 'none' }}
+                />
+              </label>
+              <span className="text-xs flex-1" style={{ color: 'var(--color-white-muted)', fontFamily: 'monospace', fontSize: 11 }}>
+                @color{i + 1}
+              </span>
+              <button onClick={() => removeColor(i)} className="nodrag shrink-0" style={{ color: 'rgba(255,255,255,0.35)' }}>
                 <X size={11} />
               </button>
             </div>
           ))}
           {palette.length < MAX_PALETTE_COLORS && (
-            <button
-              onClick={addColor}
-              className="flex items-center gap-1 mt-0.5 text-xs nodrag"
-              style={{ color: 'var(--color-white-muted)' }}
-            >
+            <button onClick={addColor} className="flex items-center gap-1 mt-0.5 text-xs nodrag" style={{ color: 'rgba(255,255,255,0.35)' }}>
               <Plus size={11} />
               Add color
             </button>
