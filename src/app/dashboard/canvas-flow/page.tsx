@@ -274,6 +274,7 @@ export default function CanvasFlowPage() {
       className="h-full overflow-auto p-8"
       onClick={() => { setMenuOpenId(null); setEditingBaseId(null); }}
     >
+      <div className="max-w-6xl mx-auto">
       {/* Base Flows */}
       <section className="mb-10">
         <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white-muted)' }}>
@@ -308,7 +309,7 @@ export default function CanvasFlowPage() {
                 >
                   {/* Thumbnail area */}
                   <div
-                    className="h-28 flex items-center justify-center rounded-t-xl overflow-hidden"
+                    className="aspect-video flex items-center justify-center rounded-t-xl overflow-hidden"
                     style={{ background: 'var(--color-bg-surface)' }}
                   >
                     {bf.thumbnail_url ? (
@@ -498,6 +499,7 @@ export default function CanvasFlowPage() {
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }
@@ -523,7 +525,7 @@ function FlowCard({
     <CardShell onClick={onOpen}>
       {/* Thumbnail */}
       <div
-        className="h-28 flex items-center justify-center rounded-t-xl overflow-hidden"
+        className="aspect-video flex items-center justify-center rounded-t-xl overflow-hidden"
         style={{ background: 'var(--color-bg-surface)' }}
       >
         {flow.thumbnail_url ? (

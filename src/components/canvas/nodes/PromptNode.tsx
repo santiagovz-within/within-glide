@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Type, Star, Droplet, Plus, X } from 'lucide-react';
+import { Type, Sunrise, Droplet, Plus, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
@@ -151,7 +151,7 @@ function ChipOverlay({
           background: c?.hex ? `${c.hex}28` : 'rgba(255,255,255,0.12)',
           color: c?.hex ?? 'var(--color-white)',
           borderRadius: 3,
-          padding: '0 5px',
+          padding: '1px 3px 1px 6px',
           fontSize: 10,
         }}
       >
@@ -196,8 +196,16 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
 
   function handlePromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     autoResize(e.target);
-    dispatchUpdate({ prompt: e.target.value });
-    propagatePrompt(e.target.value);
+    const newValue = e.target.value;
+    const cursorPos = e.target.selectionStart ?? newValue.length;
+    dispatchUpdate({ prompt: newValue });
+    propagatePrompt(newValue);
+    // When the user just finished typing a complete tag, reaffirm cursor position
+    // after React re-renders so the caret lands cleanly past the chip.
+    if (paletteEnabled && palette.length && tagEndingAt(newValue, cursorPos, palette)) {
+      const ta = e.target;
+      setTimeout(() => ta.setSelectionRange(cursorPos, cursorPos), 0);
+    }
   }
 
   useEffect(() => {
@@ -322,7 +330,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     }
   }
 
-  function handleSelectInTextarea() {
+  function handleMouseUp() {
     if (!paletteEnabled || !palette.length) return;
     const ta = textareaRef.current;
     if (!ta) return;
@@ -330,7 +338,8 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     const selEnd = ta.selectionEnd ?? 0;
     if (pos !== selEnd) return;
     const inside = tagAtPosition(ta.value, pos, palette);
-    if (inside) setTimeout(() => ta.setSelectionRange(inside.end, inside.end), 0);
+    // Synchronous — no setTimeout so there's no risk of firing after the user has moved on.
+    if (inside) ta.setSelectionRange(inside.end, inside.end);
   }
 
   const selectStyle: React.CSSProperties = {
@@ -370,7 +379,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           value={data.prompt ?? ''}
           onChange={handlePromptChange}
           onKeyDown={handleKeyDown}
-          onSelect={handleSelectInTextarea}
+          onMouseUp={handleMouseUp}
           style={{
             background: 'transparent',
             border: 'none',
@@ -414,7 +423,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
           style={{ background: '#fff', color: '#000', borderRadius: 11 }}
         >
-          <Star size={11} className={enhancing ? 'animate-pulse' : ''} />
+          <Sunrise size={11} className={enhancing ? 'animate-pulse' : ''} />
           {enhancing ? 'Enhancing…' : 'Enhance'}
         </button>
       </div>
