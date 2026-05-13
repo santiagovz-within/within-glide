@@ -41,7 +41,7 @@ export function CustomEdge({
   }
 
   function onHoverEnd() {
-    leaveTimer.current = setTimeout(() => setHovered(false), 120);
+    leaveTimer.current = setTimeout(() => setHovered(false), 300);
   }
 
   function deleteEdge(e: React.MouseEvent) {
@@ -85,7 +85,7 @@ export function CustomEdge({
           style={{ cursor: 'pointer' }}
         >
           {/* Transparent hit circle (larger than visible button) */}
-          <circle cx={labelX} cy={labelY} r={16} fill="transparent" />
+          <circle cx={labelX} cy={labelY} r={28} fill="transparent" />
           {/* Visible circle */}
           <circle
             cx={labelX}

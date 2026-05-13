@@ -51,10 +51,11 @@ export async function POST(request: NextRequest) {
       const { request_id } = await fal.queue.submit(endpoint as string, {
         input: {
           prompt,
-          aspect_ratio: aspectRatio,
-          duration: body.duration ?? 5,
-          ...(startFrameUrl ? { image_url: startFrameUrl } : {}),
-          ...(endFrameUrl   ? { tail_image_url: endFrameUrl } : {}),
+          // aspect_ratio only applies to text-to-video; image-to-video derives it from the input image
+          ...(!hasImage ? { aspect_ratio: aspectRatio } : {}),
+          duration: String(body.duration ?? 5),
+          ...(startFrameUrl ? { start_image_url: startFrameUrl } : {}),
+          ...(endFrameUrl   ? { end_image_url: endFrameUrl } : {}),
         },
       });
 
