@@ -7,10 +7,12 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoGenNodeData } from '@/types';
 import { VIDEO_MODELS } from '@/lib/api/models';
-import { ASPECT_RATIOS } from '@/lib/utils/constants';
 
 const FRAME_ROW_HEIGHT = 36;
 const FRAME_ROW_GAP = 25;
+
+const KLING_ASPECT_RATIOS  = ['16:9', '9:16', '1:1'];
+const SEEDANCE_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
 
 export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -20,6 +22,14 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [startFrameHandleTop, setStartFrameHandleTop] = useState(200);
   const [endFrameHandleTop, setEndFrameHandleTop] = useState(261);
+
+  const isKling     = data.model === 'kling-3-pro';
+  const isSeedance  = data.model === 'seedance-2';
+  const hasImage    = !!data.startFrameUrl;
+  // Kling image-to-video: aspect ratio is determined by the input image
+  const aspectLocked = isKling && hasImage;
+
+  const aspectRatios = isSeedance ? SEEDANCE_ASPECT_RATIOS : KLING_ASPECT_RATIOS;
 
   useLayoutEffect(() => {
     if (!promptSectionRef.current) return;
@@ -103,6 +113,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     }, 3000);
   }
 
+  // Derive video aspect ratio for the player — fall back to 16:9 if "custom"
+  const videoAspect = aspectLocked ? '16/9' : data.aspectRatio.replace(':', '/');
+
   return (
     <NodeWrapper
       title="Video Generation"
@@ -116,23 +129,29 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset={`${startFrameHandleTop}px`} />
       <TypedHandle type="target" position={Position.Left} id="end_frame"   portType="image" offset={`${endFrameHandleTop}px`}   />
 
-      {/* Inline prompt */}
+      {/* Prompt */}
       <div ref={promptSectionRef} className="mb-3">
-        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
-          Prompt
-        </label>
-        <textarea
-          className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
-          rows={3}
-          placeholder="Describe the video you want to generate…"
-          value={data.prompt ?? ''}
-          onChange={(e) => updateData({ prompt: e.target.value })}
-          style={{
-            background: 'var(--color-bg-surface)',
-            border: 'var(--border-default)',
-            color: 'var(--color-white)',
-          }}
-        />
+        {data.promptConnected ? (
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
+            style={{ background: 'rgba(59,158,255,0.1)', border: '1px solid rgba(59,158,255,0.25)', color: 'var(--color-accent)' }}
+          >
+            <span style={{ fontSize: 10 }}>T</span>
+            Prompt connected
+          </div>
+        ) : (
+          <>
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Prompt</label>
+            <textarea
+              className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
+              rows={3}
+              placeholder="Describe the video you want to generate…"
+              value={data.prompt ?? ''}
+              onChange={(e) => updateData({ prompt: e.target.value })}
+              style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+            />
+          </>
+        )}
       </div>
 
       {/* Model selector */}
@@ -150,7 +169,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         </select>
       </div>
 
-      {data.model === 'seedance-2' && (
+      {isSeedance && (
         <div
           className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg mb-2 text-xs nodrag"
           style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#eab308' }}
@@ -160,25 +179,28 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         </div>
       )}
 
-      {data.startFrameUrl && (
-        <div className="mb-2 text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>
-          Mode: Image-to-Video
-        </div>
-      )}
-
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
-          <select
-            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
-            value={data.aspectRatio}
-            onChange={(e) => updateData({ aspectRatio: e.target.value })}
-            style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
-          >
-            {ASPECT_RATIOS.slice(0, 3).map((r) => (
-              <option key={r.value} value={r.value}>{r.value}</option>
-            ))}
-          </select>
+          {aspectLocked ? (
+            <div
+              className="w-full px-2 py-1.5 rounded-lg text-xs"
+              style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white-muted)' }}
+            >
+              Custom (from image)
+            </div>
+          ) : (
+            <select
+              className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+              value={data.aspectRatio}
+              onChange={(e) => updateData({ aspectRatio: e.target.value })}
+              style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
+            >
+              {aspectRatios.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Duration</label>
@@ -239,9 +261,12 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       </div>
 
       {data.videoUrl && (
-        <div className="-mx-3 mb-3" style={{ aspectRatio: data.aspectRatio.replace(':', '/'), maxHeight: 240 }}>
-          <video src={data.videoUrl} controls className="w-full h-full object-cover" />
-        </div>
+        <video
+          src={data.videoUrl}
+          controls
+          className="w-full block rounded-lg mb-3 nodrag"
+          style={{ aspectRatio: videoAspect }}
+        />
       )}
 
       <button

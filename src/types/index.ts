@@ -127,6 +127,7 @@ export interface ImageGenNodeData extends Record<string, unknown> {
   resolution: string;
   numImages: number;
   prompt?: string;
+  promptConnected?: boolean;
   inputImageUrls?: string[];
   imagePortCount?: number;
   generatedImages?: string[];
@@ -139,6 +140,7 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   aspectRatio: string;
   duration?: number;
   prompt?: string;
+  promptConnected?: boolean;
   startFrameUrl?: string;
   endFrameUrl?: string;
   videoUrl?: string;

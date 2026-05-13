@@ -13,6 +13,8 @@ import {
   type IsValidConnection,
   type Edge,
   type EdgeChange,
+  type OnConnectStart,
+  type FinalConnectionState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -81,6 +83,7 @@ export function FlowCanvas() {
   const clipboardRef                    = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] } | null>(null);
   const nodesRef                        = useRef(nodes);
   const edgesRef                        = useRef(edges);
+  const pendingConnectionRef            = useRef<{ nodeId: string; handleId: string | null; handleType: string | null } | null>(null);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
@@ -278,15 +281,48 @@ export function FlowCanvas() {
     [screenToFlowPosition]
   );
 
+  function getAutoConnectTargetHandle(sourceHandleId: string | null, targetNodeType: NodeType): string | null {
+    if (sourceHandleId === 'prompt') {
+      if (targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode') return 'prompt';
+    }
+    if (sourceHandleId === 'image') {
+      if (targetNodeType === 'videoGenNode')  return 'start_frame';
+      if (targetNodeType === 'imageGenNode')  return 'ref_0';
+      if (targetNodeType === 'upscaleNode')   return 'image';
+      if (targetNodeType === 'outputNode')    return 'image';
+    }
+    if (sourceHandleId === 'video') {
+      if (targetNodeType === 'outputNode') return 'video';
+    }
+    return null;
+  }
+
   function handleAddNode(type: NodeType, position?: { x: number; y: number }) {
     const pos = position ?? (contextMenu ? { x: contextMenu.canvasX, y: contextMenu.canvasY } : { x: 200, y: 200 });
+    const nodeId = `${type}-${Date.now()}`;
     addNode({
-      id: `${type}-${Date.now()}`,
+      id: nodeId,
       type,
       position: pos,
       data: { ...DEFAULT_NODE_DATA[type] },
       ...(type === 'groupNode' ? { style: { width: 400, height: 300 } } : {}),
     } as Node<NodeData>);
+
+    // Auto-connect if the menu was opened by dragging from a source handle
+    const pending = pendingConnectionRef.current;
+    if (pending?.nodeId && pending.handleType === 'source') {
+      const targetHandle = getAutoConnectTargetHandle(pending.handleId, type);
+      if (targetHandle) {
+        const connection: Connection = {
+          source:       pending.nodeId,
+          sourceHandle: pending.handleId,
+          target:       nodeId,
+          targetHandle,
+        };
+        onConnectHandler(connection);
+      }
+    }
+    pendingConnectionRef.current = null;
   }
 
   const propagateImageToTarget = useCallback(
@@ -336,7 +372,7 @@ export function FlowCanvas() {
         const sourceNode = nodes.find((n) => n.id === connection.source);
         if (sourceNode?.type === 'promptNode') {
           const { prompt } = sourceNode.data as { prompt?: string };
-          updateNodeData(connection.target, { prompt: prompt ?? '' });
+          updateNodeData(connection.target, { prompt: prompt ?? '', promptConnected: true });
         }
       }
 
@@ -362,13 +398,44 @@ export function FlowCanvas() {
       for (const change of changes) {
         if (change.type !== 'remove') continue;
         const edge = edges.find((e) => e.id === change.id);
-        if (!edge || edge.sourceHandle !== 'image') continue;
-        propagateImageToTarget(edge.source, edge, null);
+        if (!edge) continue;
+        if (edge.sourceHandle === 'image') {
+          propagateImageToTarget(edge.source, edge, null);
+        }
+        if (edge.sourceHandle === 'prompt') {
+          // Check if the target still has another prompt edge after this removal
+          const remaining = edges.filter((e) => e.id !== edge.id && e.target === edge.target && e.sourceHandle === 'prompt');
+          if (remaining.length === 0) {
+            updateNodeData(edge.target, { promptConnected: false });
+          }
+        }
       }
       onEdgesChange(changes);
     },
-    [edges, onEdgesChange, propagateImageToTarget]
+    [edges, onEdgesChange, propagateImageToTarget, updateNodeData]
   );
+
+  const onConnectStart: OnConnectStart = useCallback((_, params) => {
+    pendingConnectionRef.current = {
+      nodeId:     params.nodeId     ?? '',
+      handleId:   params.handleId   ?? null,
+      handleType: params.handleType ?? null,
+    };
+  }, []);
+
+  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
+    // Only open menu when the drag ends without connecting to a valid target
+    if (connectionState.isValid === true) {
+      pendingConnectionRef.current = null;
+      return;
+    }
+    const pending = pendingConnectionRef.current;
+    if (!pending?.nodeId) return;
+
+    const e = event as MouseEvent;
+    const canvasPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    setContextMenu({ x: e.clientX, y: e.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y });
+  }, [screenToFlowPosition]);
 
   function onDragOver(e: React.DragEvent) {
     const hasImageFile = Array.from(e.dataTransfer.items).some(
@@ -444,6 +511,8 @@ export function FlowCanvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChangeHandler}
         onConnect={onConnectHandler}
+        onConnectStart={onConnectStart}
+        onConnectEnd={onConnectEnd}
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}

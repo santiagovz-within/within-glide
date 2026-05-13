@@ -150,21 +150,33 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* ── Inline prompt ────────────────────────────────────── */}
       <div ref={promptSectionRef} className="mb-3">
-        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
-          Prompt
-        </label>
-        <textarea
-          className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
-          rows={3}
-          placeholder="Describe what you want to generate…"
-          value={data.prompt ?? ''}
-          onChange={(e) => updateData({ prompt: e.target.value })}
-          style={{
-            background: 'var(--color-bg-surface)',
-            border: 'var(--border-default)',
-            color: 'var(--color-white)',
-          }}
-        />
+        {data.promptConnected ? (
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
+            style={{ background: 'rgba(59,158,255,0.1)', border: '1px solid rgba(59,158,255,0.25)', color: 'var(--color-accent)' }}
+          >
+            <span style={{ fontSize: 10 }}>T</span>
+            Prompt connected
+          </div>
+        ) : (
+          <>
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
+              Prompt
+            </label>
+            <textarea
+              className="w-full text-xs resize-y rounded-lg p-2 outline-none nodrag"
+              rows={3}
+              placeholder="Describe what you want to generate…"
+              value={data.prompt ?? ''}
+              onChange={(e) => updateData({ prompt: e.target.value })}
+              style={{
+                background: 'var(--color-bg-surface)',
+                border: 'var(--border-default)',
+                color: 'var(--color-white)',
+              }}
+            />
+          </>
+        )}
       </div>
 
       {/* ── Model selector ───────────────────────────────────── */}
