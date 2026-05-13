@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Film, Play } from 'lucide-react';
+import { Film, Play, AlertTriangle } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -48,8 +48,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     updateData({ status: 'processing' });
 
     try {
-      const endpoint = data.model === 'veo-3.1' ? '/api/google/veo' : '/api/fal/generate';
-      const res = await fetch(endpoint, {
+      const res = await fetch('/api/fal/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -150,6 +149,22 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           ))}
         </select>
       </div>
+
+      {data.model === 'seedance-2' && (
+        <div
+          className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg mb-2 text-xs nodrag"
+          style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#eab308' }}
+        >
+          <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+          This is a very expensive model to use, please use wisely.
+        </div>
+      )}
+
+      {data.startFrameUrl && (
+        <div className="mb-2 text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>
+          Mode: Image-to-Video
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>

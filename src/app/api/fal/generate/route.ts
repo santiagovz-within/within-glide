@@ -40,7 +40,11 @@ export async function POST(request: NextRequest) {
 
     if (modelConfig.type === 'video') {
       // Video generation — submit async job
-      const endpoint = referenceImageUrls.length > 0 && 'imageToVideoEndpoint' in modelConfig
+      const startFrameUrl = (body as GenerateRequestBody & { startFrameUrl?: string }).startFrameUrl;
+      const endFrameUrl   = (body as GenerateRequestBody & { endFrameUrl?: string }).endFrameUrl;
+      const hasImage = !!startFrameUrl;
+
+      const endpoint = hasImage && 'imageToVideoEndpoint' in modelConfig
         ? modelConfig.imageToVideoEndpoint
         : modelConfig.endpoint;
 
@@ -49,7 +53,8 @@ export async function POST(request: NextRequest) {
           prompt,
           aspect_ratio: aspectRatio,
           duration: body.duration ?? 5,
-          ...(referenceImageUrls[0] ? { image_url: referenceImageUrls[0] } : {}),
+          ...(startFrameUrl ? { image_url: startFrameUrl } : {}),
+          ...(endFrameUrl   ? { tail_image_url: endFrameUrl } : {}),
         },
       });
 
