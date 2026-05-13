@@ -70,7 +70,7 @@ export function Sidebar() {
         />
         {!collapsed && (
           <span
-            className="text-sm whitespace-nowrap transition-colors"
+            className="text-sm font-bold whitespace-nowrap transition-colors"
             style={{ color: active ? 'var(--color-white)' : 'var(--color-white-muted)' }}
           >
             {label}
@@ -132,7 +132,7 @@ export function Sidebar() {
           />
           {!collapsed && (
             <span
-              className="text-sm whitespace-nowrap"
+              className="text-sm font-bold whitespace-nowrap"
               style={{ color: 'var(--color-white-muted)' }}
             >
               JamBox
@@ -173,7 +173,7 @@ export function Sidebar() {
           />
           {!collapsed && (
             <span
-              className="text-sm whitespace-nowrap"
+              className="text-sm font-bold whitespace-nowrap"
               style={{ color: pathname === '/dashboard/settings' ? 'var(--color-white)' : 'var(--color-white-muted)' }}
             >
               Settings

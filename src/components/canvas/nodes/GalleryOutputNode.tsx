@@ -37,6 +37,10 @@ function getMediaFromNode(node: { type?: string; data: Record<string, unknown> }
     const url = (node.data as VideoGenNodeData).videoUrl;
     return url ? [{ url, type: 'video', sourceNodeId: '' }] : [];
   }
+  if (node.type === 'modifyNode') {
+    const url = (node.data as { outputImageUrl?: string }).outputImageUrl;
+    return url ? [{ url, type: 'image', sourceNodeId: '' }] : [];
+  }
   return [];
 }
 

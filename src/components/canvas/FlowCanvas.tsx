@@ -52,7 +52,7 @@ const edgeTypes = {
 const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   promptNode:         { prompt: '' },
   imageInputNode:     {},
-  imageGenNode:       { model: 'flux-2-pro', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
+  imageGenNode:       { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
   videoGenNode:       { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
   modifyNode:         { model: 'nano-banana-2', status: 'idle' },
