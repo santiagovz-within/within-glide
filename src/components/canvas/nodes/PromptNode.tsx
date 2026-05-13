@@ -151,7 +151,7 @@ function ChipOverlay({
           background: c?.hex ? `${c.hex}28` : 'rgba(255,255,255,0.12)',
           color: c?.hex ?? 'var(--color-white)',
           borderRadius: 3,
-          padding: '1px 3px 1px 6px',
+          padding: '1px 5px',
           fontSize: 10,
         }}
       >
@@ -174,6 +174,9 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   const [geminiModel, setGeminiModel] = useState('gemini-3-flash-preview');
   const [length, setLength] = useState('auto');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Tracks the cursor position at which we last auto-inserted a space after a tag,
+  // so Backspace-then-retype doesn't cause an infinite insert loop.
+  const lastAutoSpacedAt = useRef<number | null>(null);
 
   const paletteEnabled = data.paletteEnabled ?? false;
   const palette: PaletteColor[] = data.palette ?? [];
@@ -198,14 +201,31 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     autoResize(e.target);
     const newValue = e.target.value;
     const cursorPos = e.target.selectionStart ?? newValue.length;
+
+    if (paletteEnabled && palette.length) {
+      const ending = tagEndingAt(newValue, cursorPos, palette);
+      if (ending !== null) {
+        const charAfter = newValue[cursorPos];
+        // Auto-insert a space so the cursor hops cleanly outside the chip.
+        // Skip if a space is already there OR we already fired for this exact position.
+        if (charAfter !== ' ' && charAfter !== '\n' && lastAutoSpacedAt.current !== cursorPos) {
+          lastAutoSpacedAt.current = cursorPos;
+          const withSpace = newValue.slice(0, cursorPos) + ' ' + newValue.slice(cursorPos);
+          dispatchUpdate({ prompt: withSpace });
+          propagatePrompt(withSpace);
+          setTimeout(() => {
+            const ta = textareaRef.current;
+            if (ta) ta.setSelectionRange(cursorPos + 1, cursorPos + 1);
+          }, 0);
+          return;
+        }
+      } else {
+        lastAutoSpacedAt.current = null;
+      }
+    }
+
     dispatchUpdate({ prompt: newValue });
     propagatePrompt(newValue);
-    // When the user just finished typing a complete tag, reaffirm cursor position
-    // after React re-renders so the caret lands cleanly past the chip.
-    if (paletteEnabled && palette.length && tagEndingAt(newValue, cursorPos, palette)) {
-      const ta = e.target;
-      setTimeout(() => ta.setSelectionRange(cursorPos, cursorPos), 0);
-    }
   }
 
   useEffect(() => {
@@ -338,8 +358,11 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     const selEnd = ta.selectionEnd ?? 0;
     if (pos !== selEnd) return;
     const inside = tagAtPosition(ta.value, pos, palette);
-    // Synchronous — no setTimeout so there's no risk of firing after the user has moved on.
-    if (inside) ta.setSelectionRange(inside.end, inside.end);
+    if (inside) {
+      // Skip past the auto-space that follows the tag if it exists.
+      const target = ta.value[inside.end] === ' ' ? inside.end + 1 : inside.end;
+      ta.setSelectionRange(target, target);
+    }
   }
 
   const selectStyle: React.CSSProperties = {
