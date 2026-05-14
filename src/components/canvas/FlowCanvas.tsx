@@ -33,6 +33,7 @@ import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
 import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData } from '@/types';
+import { MODELS } from '@/lib/api/models';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -353,7 +354,8 @@ export function FlowCanvas() {
           urls[0] = imageUrl ?? '';
         }
         const filled = urls.filter(Boolean).length;
-        updateNodeData(targetEdge.target, { inputImageUrls: urls, imagePortCount: Math.min(filled + 1, 14) });
+        const maxRefs = MODELS[currentData.model as keyof typeof MODELS]?.maxReferenceImages ?? 14;
+        updateNodeData(targetEdge.target, { inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) });
       }
     },
     [nodes, updateNodeData]

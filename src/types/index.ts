@@ -230,6 +230,7 @@ export interface ModelConfig {
   supportsImageInput: boolean;
   supportsNegativePrompt: boolean;
   estimatedTimeSeconds: number;
+  maxReferenceImages?: number;
 }
 
 export interface GenerateImageRequest {

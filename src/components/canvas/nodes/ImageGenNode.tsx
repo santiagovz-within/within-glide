@@ -11,7 +11,7 @@ import { IMAGE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 
 const RESOLUTIONS = ['1K', '2K', '4K'];
-const MAX_REF_IMAGES = 14;
+const DEFAULT_MAX_REF_IMAGES = 14;
 const REF_ROW_HEIGHT = 36;
 const ROW_GAP = 25;
 
@@ -263,7 +263,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {isMultiImageModel && (
         <div className="mb-3">
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
-            Reference Images{connectedCount > 0 ? ` (${connectedCount}/${MAX_REF_IMAGES})` : ''}
+            Reference Images{connectedCount > 0 ? ` (${connectedCount}/${modelConfig?.maxReferenceImages ?? DEFAULT_MAX_REF_IMAGES})` : ''}
           </label>
           <div ref={rowsListRef}>
           {Array.from({ length: portCount }, (_, i) => {

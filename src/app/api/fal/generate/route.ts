@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
     const usesAspectRatio = 'usesAspectRatio' in modelConfig && modelConfig.usesAspectRatio;
     const supportsResolution = 'supportsResolution' in modelConfig && (modelConfig as { supportsResolution: boolean }).supportsResolution;
     const editImageParam = 'editImageParam' in modelConfig ? (modelConfig as { editImageParam: string }).editImageParam : null;
+    const hasOwnQuality = 'hasOwnQuality' in modelConfig && (modelConfig as { hasOwnQuality: boolean }).hasOwnQuality;
 
     console.log('[fal/generate] endpoint:', endpoint, '| refs:', referenceImageUrls.length, '| usesAspectRatio:', usesAspectRatio, '| editImageParam:', editImageParam);
 
@@ -99,7 +100,9 @@ export async function POST(request: NextRequest) {
         prompt,
         ...(usesAspectRatio
           ? { aspect_ratio: aspectRatio, ...(supportsResolution ? { resolution } : {}) }
-          : { image_size: { width, height }, num_inference_steps: body.quality === 'high' ? 40 : body.quality === 'low' ? 20 : 28 }),
+          : hasOwnQuality
+            ? { image_size: { width, height }, quality: body.quality ?? 'high' }
+            : { image_size: { width, height }, num_inference_steps: body.quality === 'high' ? 40 : body.quality === 'low' ? 20 : 28 }),
         ...(body.negativePrompt ? { negative_prompt: body.negativePrompt } : {}),
       };
 

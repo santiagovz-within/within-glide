@@ -20,6 +20,13 @@ export const FAL_MODELS = {
     editImageParam: 'image_urls',
     type: 'image' as const,
   },
+  'gpt-image-2': {
+    endpoint: 'openai/gpt-image-2',
+    editEndpoint: 'openai/gpt-image-2/edit',
+    editImageParam: 'image_urls',
+    hasOwnQuality: true,
+    type: 'image' as const,
+  },
   'flux-2-pro': {
     endpoint: 'fal-ai/flux-pro/v1.1-ultra',
     usesAspectRatio: true,
@@ -73,6 +80,19 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsImageInput: true,
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 12,
+  },
+  'gpt-image-2': {
+    id: 'gpt-image-2',
+    name: 'GPT Image 2',
+    provider: 'fal',
+    type: 'image',
+    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+    supportedResolutions: ['1K', '2K', '4K'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 15,
+    maxReferenceImages: 16,
   },
   'flux-2-pro': {
     id: 'flux-2-pro',
