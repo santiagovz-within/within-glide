@@ -32,7 +32,7 @@ import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 
 const nodeTypes = {
@@ -58,7 +58,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   imageGenNode:       { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
   videoGenNode:       { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
-  modifyNode:         { model: 'nano-banana-2', status: 'idle' },
+  modifyNode:         { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', status: 'idle' },
   selectNode:         {},
   outputNode:         {},
   galleryOutputNode:  {},
@@ -335,7 +335,9 @@ export function FlowCanvas() {
 
   const propagateImageToTarget = useCallback(
     (sourceNodeId: string, targetEdge: Edge, imageUrl: string | null) => {
-      const targetNode = nodes.find((n) => n.id === targetEdge.target);
+      // Always read fresh node data to avoid stale React closure issues
+      const freshNodes = useFlowStore.getState().nodes;
+      const targetNode = freshNodes.find((n) => n.id === targetEdge.target);
       if (!targetNode) return;
       const handle = targetEdge.targetHandle ?? '';
 
@@ -358,7 +360,7 @@ export function FlowCanvas() {
         updateNodeData(targetEdge.target, { inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) });
       }
     },
-    [nodes, updateNodeData]
+    [updateNodeData]
   );
 
   useEffect(() => {
@@ -386,12 +388,15 @@ export function FlowCanvas() {
       }
 
       if (connection.sourceHandle === 'image') {
-        const sourceNode = nodes.find((n) => n.id === connection.source);
+        // Use fresh store data — React closure may lag behind Zustand after a recent generation
+        const freshNodes = useFlowStore.getState().nodes;
+        const sourceNode = freshNodes.find((n) => n.id === connection.source);
         let imageUrl: string | undefined;
         if (sourceNode?.type === 'imageInputNode') imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
         else if (sourceNode?.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
         else if (sourceNode?.type === 'upscaleNode') imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
         else if (sourceNode?.type === 'modifyNode') imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
+        else if (sourceNode?.type === 'selectNode') imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
         if (imageUrl) {
           propagateImageToTarget(connection.source, {
             id: '', source: connection.source, target: connection.target,
@@ -400,7 +405,7 @@ export function FlowCanvas() {
         }
       }
     },
-    [onConnect, nodes, updateNodeData, propagateImageToTarget]
+    [onConnect, nodes, updateNodeData, propagateImageToTarget]  // keep `nodes` for prompt propagation
   );
 
   const onEdgesChangeHandler = useCallback(

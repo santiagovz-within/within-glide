@@ -194,6 +194,8 @@ export interface ModifyNodeData extends Record<string, unknown> {
   promptConnected?: boolean;
   inputImageUrl?: string;
   outputImageUrl?: string;
+  aspectRatio?: string;
+  resolution?: string;
   status: NodeStatus;
   label?: string;
 }

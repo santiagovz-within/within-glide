@@ -47,13 +47,17 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
   const currentUrl = availableImages[selectedIndex] ?? videoUrl;
   const mediaType: 'image' | 'video' = videoUrl ? 'video' : 'image';
 
-  // Keep selectedImageUrl in store in sync so downstream nodes can read it
+  // Keep selectedImageUrl in store in sync and propagate to downstream nodes
   useEffect(() => {
     if (currentUrl !== data.selectedImageUrl) {
       document.dispatchEvent(new CustomEvent('node:update', {
         detail: { nodeId: id, data: { selectedImageUrl: currentUrl } },
       }));
     }
+    // Notify downstream nodes (e.g. imageGenNode reference inputs)
+    document.dispatchEvent(new CustomEvent('node:image-propagate', {
+      detail: { sourceNodeId: id, imageUrl: currentUrl ?? null },
+    }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUrl]);
 

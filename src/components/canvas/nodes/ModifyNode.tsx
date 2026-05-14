@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { useFlowStore } from '@/lib/stores/flowStore';
+import { ASPECT_RATIOS, RESOLUTIONS } from '@/lib/utils/constants';
 import type { ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData, SelectNodeData } from '@/types';
 
 const MODIFY_MODELS = [
@@ -80,6 +81,36 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const selectedImage = availableImages[safeIndex];
   const hasImage = !!selectedImage;
 
+  // Derive aspect ratio and resolution from source node (sync, like VideoGenNode pattern)
+  const derivedAspect = (() => {
+    if (sourceNode?.type === 'imageGenNode') return (sourceNode.data as ImageGenNodeData).aspectRatio ?? undefined;
+    if (sourceNode?.type === 'imageInputNode') {
+      const nd = sourceNode.data as ImageInputNodeData;
+      if (nd.naturalWidth && nd.naturalHeight) return nearestAspectRatio(nd.naturalWidth, nd.naturalHeight);
+    }
+    return undefined;
+  })();
+
+  const derivedResolution = (() => {
+    if (sourceNode?.type === 'imageGenNode') return (sourceNode.data as ImageGenNodeData).resolution ?? undefined;
+    if (sourceNode?.type === 'imageInputNode') {
+      const nd = sourceNode.data as ImageInputNodeData;
+      if (nd.naturalWidth) return nd.naturalWidth >= 3000 ? '4K' : nd.naturalWidth >= 1800 ? '2K' : '1K';
+    }
+    return undefined;
+  })();
+
+  // Sync derived values to node data when they change
+  useEffect(() => {
+    if (derivedAspect && derivedAspect !== data.aspectRatio) updateData({ aspectRatio: derivedAspect });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedAspect]);
+
+  useEffect(() => {
+    if (derivedResolution && derivedResolution !== data.resolution) updateData({ resolution: derivedResolution });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedResolution]);
+
   // Reset selected index when source disconnects
   useEffect(() => {
     if (availableImages.length === 0) setSelectedIndex(0);
@@ -110,17 +141,8 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     setIsGenerating(true);
     updateData({ status: 'processing' });
 
-    // Re-derive at call time so values are current
-    const edge = storeEdges.find(e => e.target === id && e.targetHandle === 'image');
-    const src = edge ? storeNodes.find(n => n.id === edge.source) : undefined;
-    let ar = '1:1', res = '1K';
-    if (src?.type === 'imageGenNode') {
-      ar = (src.data as ImageGenNodeData).aspectRatio ?? '1:1';
-      res = (src.data as ImageGenNodeData).resolution ?? '1K';
-    } else if (src?.type === 'imageInputNode') {
-      const nd = src.data as ImageInputNodeData;
-      if (nd.naturalWidth && nd.naturalHeight) ar = nearestAspectRatio(nd.naturalWidth, nd.naturalHeight);
-    }
+    const aspectRatio = data.aspectRatio ?? '1:1';
+    const resolution = data.resolution ?? '1K';
 
     try {
       const res2 = await fetch('/api/fal/generate', {
@@ -129,8 +151,8 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         body: JSON.stringify({
           model: data.model,
           prompt: data.prompt ?? '',
-          aspectRatio: ar,
-          resolution: res,
+          aspectRatio,
+          resolution,
           numImages: 1,
           referenceImageUrls: [selectedImage],
           sourceType: 'canvas',
@@ -254,6 +276,36 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>
+      </div>
+
+      {/* Aspect ratio + resolution row */}
+      <div className="flex gap-2 mb-3">
+        <div className="flex-1">
+          <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
+          <select
+            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+            value={data.aspectRatio ?? '1:1'}
+            onChange={(e) => updateData({ aspectRatio: e.target.value })}
+            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
+          >
+            {ASPECT_RATIOS.map((r) => (
+              <option key={r.value} value={r.value}>{r.value}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex-1">
+          <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Resolution</label>
+          <select
+            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+            value={data.resolution ?? '1K'}
+            onChange={(e) => updateData({ resolution: e.target.value })}
+            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
+          >
+            {RESOLUTIONS.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Output preview */}
