@@ -129,11 +129,18 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
 
   const paletteEnabled = data.paletteEnabled ?? false;
   const palette: PaletteColor[] = data.palette ?? [];
-  const hasColorRefs = paletteEnabled && palette.some((_, i) => (data.prompt ?? '').includes(`@color${i + 1}`));
+
+  const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
+  const isFocused = useRef(false);
+  useEffect(() => {
+    if (!isFocused.current) setLocalPrompt(data.prompt ?? '');
+  }, [data.prompt]);
+
+  const hasColorRefs = paletteEnabled && palette.some((_, i) => localPrompt.includes(`@color${i + 1}`));
 
   useEffect(() => {
     if (textareaRef.current) autoResize(textareaRef.current);
-  }, [data.prompt]);
+  }, [localPrompt]);
 
   function dispatchUpdate(updates: Partial<PromptNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
@@ -147,9 +154,11 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   }
 
   function handlePromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const v = e.target.value;
+    setLocalPrompt(v);
     autoResize(e.target);
-    dispatchUpdate({ prompt: e.target.value });
-    propagatePrompt(e.target.value);
+    dispatchUpdate({ prompt: v });
+    propagatePrompt(v);
   }
 
   useEffect(() => {
@@ -173,6 +182,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
       });
       const { enhancedPrompt } = await res.json();
       if (enhancedPrompt) {
+        setLocalPrompt(enhancedPrompt);
         dispatchUpdate({ prompt: enhancedPrompt });
         propagatePrompt(enhancedPrompt);
       }
@@ -189,7 +199,8 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   function removeColor(i: number) {
     const ref = `@color${i + 1}`;
     const newPalette = palette.filter((_, idx) => idx !== i);
-    const newPrompt = (data.prompt ?? '').replaceAll(ref, '').replace(/  +/g, ' ').trim();
+    const newPrompt = localPrompt.replaceAll(ref, '').replace(/  +/g, ' ').trim();
+    setLocalPrompt(newPrompt);
     dispatchUpdate({ palette: newPalette, prompt: newPrompt });
     propagatePrompt(newPrompt);
   }
@@ -223,7 +234,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
               overflow: 'hidden',
             }}
           >
-            <ColorTextOverlay text={data.prompt ?? ''} palette={palette} />
+            <ColorTextOverlay text={localPrompt} palette={palette} />
           </div>
         )}
         <textarea
@@ -231,7 +242,9 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           className="w-full text-xs outline-none nodrag"
           rows={2}
           placeholder="Write your prompt here…"
-          value={data.prompt ?? ''}
+          value={localPrompt}
+          onFocus={() => { isFocused.current = true; }}
+          onBlur={() => { isFocused.current = false; }}
           onChange={handlePromptChange}
           style={{
             background: 'transparent',

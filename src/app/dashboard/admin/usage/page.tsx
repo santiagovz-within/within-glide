@@ -11,7 +11,28 @@ interface UsageData {
   mediaTypeSplit: { image: number; video: number };
 }
 
-function BarRow({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+// Deterministic per-model colors
+const MODEL_COLOR_MAP: Record<string, string> = {
+  'nano-banana-2':   '#a855f7',
+  'nano-banana-pro': '#c084fc',
+  'gpt-image-2':     '#22d3ee',
+  'flux-2-pro':      '#f59e0b',
+  'kling-3-pro':     '#34d399',
+  'seedance-2':      '#60a5fa',
+  'seedvr2':         '#fb923c',
+  'topaz':           '#f472b6',
+};
+
+function modelColor(model: string): string {
+  if (MODEL_COLOR_MAP[model]) return MODEL_COLOR_MAP[model];
+  // Hash unknown models to one of several fallback colors
+  const fallbacks = ['#818cf8', '#38bdf8', '#4ade80', '#fbbf24', '#f87171'];
+  let h = 0;
+  for (let i = 0; i < model.length; i++) h = (h * 31 + model.charCodeAt(i)) >>> 0;
+  return fallbacks[h % fallbacks.length];
+}
+
+function BarRow({ label, value, max, gradient, color }: { label: string; value: number; max: number; gradient?: boolean; color?: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
     <div className="flex items-center gap-3 py-1.5">
@@ -25,12 +46,23 @@ function BarRow({ label, value, max, color }: { label: string; value: number; ma
       <div className="flex-1 flex items-center gap-2">
         <div
           className="rounded-full overflow-hidden"
-          style={{ flex: 1, height: 6, background: 'var(--color-bg-surface)' }}
+          style={{ flex: 1, height: 6, background: 'var(--color-bg-surface)', position: 'relative' }}
         >
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{ width: `${pct}%`, background: color }}
-          />
+          {gradient ? (
+            // Full-width gradient clipped to fill percentage so hue is stable
+            <div
+              className="absolute inset-y-0 left-0 w-full rounded-full transition-all duration-500"
+              style={{
+                background: 'linear-gradient(to right, #fde68a, #c4b5fd)',
+                clipPath: `inset(0 ${100 - pct}% 0 0)`,
+              }}
+            />
+          ) : (
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${pct}%`, background: color }}
+            />
+          )}
         </div>
         <span className="text-xs tabular-nums w-8 text-right" style={{ color: 'var(--color-white)' }}>
           {value}
@@ -176,7 +208,7 @@ export default function AdminUsagePage() {
                   label={m.model}
                   value={m.count}
                   max={maxModelCount}
-                  color="var(--color-accent)"
+                  color={modelColor(m.model)}
                 />
               ))}
             </div>
@@ -196,7 +228,7 @@ export default function AdminUsagePage() {
                   label={u.username}
                   value={u.count}
                   max={maxUserCount}
-                  color="var(--color-processing)"
+                  gradient
                 />
               ))}
             </div>

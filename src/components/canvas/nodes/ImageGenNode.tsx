@@ -28,9 +28,17 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [rowsStartTop, setRowsStartTop] = useState(220);
 
+  // Local prompt state prevents cursor-jump caused by Zustand→React re-renders
+  // resetting a controlled textarea's cursor position.
+  const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
+  const isFocused = useRef(false);
+  useEffect(() => {
+    if (!isFocused.current) setLocalPrompt(data.prompt ?? '');
+  }, [data.prompt]);
+
   useEffect(() => {
     if (promptTextareaRef.current) autoResize(promptTextareaRef.current);
-  }, [data.prompt]);
+  }, [localPrompt]);
 
   const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
   const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
@@ -174,8 +182,10 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             className="w-full text-xs outline-none nodrag"
             rows={2}
             placeholder="Write your prompt here…"
-            value={data.prompt ?? ''}
-            onChange={(e) => { autoResize(e.target); updateData({ prompt: e.target.value }); }}
+            value={localPrompt}
+            onFocus={() => { isFocused.current = true; }}
+            onBlur={() => { isFocused.current = false; }}
+            onChange={(e) => { const v = e.target.value; setLocalPrompt(v); autoResize(e.target); updateData({ prompt: v }); }}
             style={{
               background: 'transparent',
               border: 'none',

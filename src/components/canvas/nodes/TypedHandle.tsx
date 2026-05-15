@@ -84,7 +84,7 @@ export function TypedHandle({ portType, offset, position, badge, ...rest }: Type
         height: 36,
         borderRadius: '50%',
         background: hovered ? color : tint,
-        border: `1.5px solid ${color}`,
+        border: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

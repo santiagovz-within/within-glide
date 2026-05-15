@@ -35,9 +35,15 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const [startFrameHandleTop, setStartFrameHandleTop] = useState(200);
   const [endFrameHandleTop, setEndFrameHandleTop] = useState(261);
 
+  const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
+  const isFocused = useRef(false);
+  useEffect(() => {
+    if (!isFocused.current) setLocalPrompt(data.prompt ?? '');
+  }, [data.prompt]);
+
   useEffect(() => {
     if (promptTextareaRef.current) autoResize(promptTextareaRef.current);
-  }, [data.prompt]);
+  }, [localPrompt]);
 
   const isKling     = data.model === 'kling-3-pro';
   const isSeedance  = data.model === 'seedance-2';
@@ -203,8 +209,10 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             className="w-full text-xs outline-none nodrag"
             rows={2}
             placeholder="Write your prompt here…"
-            value={data.prompt ?? ''}
-            onChange={(e) => { autoResize(e.target); updateData({ prompt: e.target.value }); }}
+            value={localPrompt}
+            onFocus={() => { isFocused.current = true; }}
+            onBlur={() => { isFocused.current = false; }}
+            onChange={(e) => { const v = e.target.value; setLocalPrompt(v); autoResize(e.target); updateData({ prompt: v }); }}
             style={{
               background: 'transparent',
               border: 'none',
