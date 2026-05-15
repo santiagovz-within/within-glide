@@ -50,7 +50,6 @@ function GalleryPicker({ onSelect, onClose }: { onSelect: (url: string) => void;
         className="relative rounded-xl overflow-hidden flex flex-col"
         style={{
           width: 560,
-          maxHeight: '80vh',
           background: 'var(--color-bg-elevated)',
           border: 'var(--border-default)',
           boxShadow: 'var(--shadow-modal)',
@@ -67,8 +66,8 @@ function GalleryPicker({ onSelect, onClose }: { onSelect: (url: string) => void;
           </button>
         </div>
 
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto p-3">
+        {/* Grid — fixed height shows 5 rows of 4, scroll for more */}
+        <div className="overflow-y-auto p-3" style={{ maxHeight: 696 }}>
           {loading ? (
             <div className="flex items-center justify-center h-40">
               <RefreshCw size={20} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} />
