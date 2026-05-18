@@ -32,8 +32,9 @@ import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
+import { processImageFile, buildUploadFormData } from '@/lib/utils/imageProcessing';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -468,7 +469,7 @@ export function FlowCanvas() {
     }
   }
 
-  async function onDrop(e: React.DragEvent) {
+  function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragOver(false);
 
@@ -477,25 +478,66 @@ export function FlowCanvas() {
 
     const canvasPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    files.forEach((file, i) => {
       const position = { x: canvasPos.x + i * 280, y: canvasPos.y };
       const nodeId = `imageInputNode-${Date.now()}-${i}`;
 
-      addNode({ id: nodeId, type: 'imageInputNode', position, data: {} } as Node<NodeData>);
+      // Create node immediately with validating status so it renders the processing UI
+      addNode({
+        id: nodeId,
+        type: 'imageInputNode',
+        position,
+        data: { uploadStatus: 'validating' } as ImageInputNodeData,
+      } as Node<NodeData>);
 
-      const formData = new FormData();
-      formData.append('file', file);
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        const { url } = await res.json();
-        if (url) {
-          document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId, data: { imageUrl: url } } }));
-        }
-      } catch {
-        // node stays empty — user can upload manually
+      function setStatus(updates: Partial<ImageInputNodeData>) {
+        document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId, data: updates } }));
       }
-    }
+
+      // Run validation + compression + upload in its own async context per file
+      (async () => {
+        let processed: File;
+        try {
+          processed = await processImageFile(file, (stage, percent) => {
+            if (stage === 'compressing') {
+              setStatus({ uploadStatus: 'compressing', uploadProgress: percent ?? 0 });
+            } else {
+              setStatus({ uploadStatus: stage });
+            }
+          });
+        } catch (err) {
+          setStatus({
+            uploadStatus: 'error',
+            uploadError: err instanceof Error ? err.message : 'Failed to process image.',
+            uploadProgress: undefined,
+          });
+          return;
+        }
+
+        setStatus({ uploadStatus: 'uploading', uploadProgress: undefined });
+
+        try {
+          const res = await fetch('/api/upload', { method: 'POST', body: buildUploadFormData(processed) });
+          if (!res.ok) {
+            const msg = await res.text().catch(() => '');
+            throw new Error(`Upload failed (${res.status})${msg ? ': ' + msg.slice(0, 120) : ''}.`);
+          }
+          const { url } = await res.json();
+          if (url) {
+            setStatus({ imageUrl: url, uploadStatus: undefined, uploadProgress: undefined, uploadError: undefined });
+            document.dispatchEvent(new CustomEvent('node:image-propagate', {
+              detail: { sourceNodeId: nodeId, imageUrl: url },
+            }));
+          }
+        } catch (err) {
+          setStatus({
+            uploadStatus: 'error',
+            uploadError: err instanceof Error ? err.message : 'Upload failed.',
+            uploadProgress: undefined,
+          });
+        }
+      })();
+    });
   }
 
   const selectedCount = nodes.filter((n) => n.selected && n.type !== 'groupNode').length;

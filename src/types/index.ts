@@ -128,6 +128,10 @@ export interface ImageInputNodeData extends Record<string, unknown> {
   naturalWidth?: number;
   naturalHeight?: number;
   label?: string;
+  // Set by FlowCanvas during canvas-drag uploads to drive status display in the node
+  uploadStatus?: 'validating' | 'compressing' | 'uploading' | 'error';
+  uploadProgress?: number;
+  uploadError?: string;
 }
 
 export interface ImageGenNodeData extends Record<string, unknown> {

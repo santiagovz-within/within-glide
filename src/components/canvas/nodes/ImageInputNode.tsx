@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Image, Upload, X, RefreshCw, Layout } from 'lucide-react';
+import { Image, Upload, X, RefreshCw, Layout, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { NodeWrapper } from './NodeWrapper';
@@ -9,6 +9,14 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageInputNodeData } from '@/types';
 import { ACCEPTED_IMAGE_TYPES, MAX_UPLOAD_SIZE_BYTES } from '@/lib/utils/constants';
 import { createClient } from '@/lib/supabase/client';
+import { processImageFile, buildUploadFormData } from '@/lib/utils/imageProcessing';
+import type { ProcessStage } from '@/lib/utils/imageProcessing';
+
+// ── Stage types ──────────────────────────────────────────────────────────────
+
+type LocalStage = ProcessStage | 'error' | null;
+
+// ── GalleryPicker (unchanged) ─────────────────────────────────────────────────
 
 interface GalleryImage {
   id: string;
@@ -99,54 +107,98 @@ function GalleryPicker({ onSelect, onClose }: { onSelect: (url: string) => void;
   );
 }
 
+// ── ProgressBar ───────────────────────────────────────────────────────────────
+
+function ProgressBar({ percent }: { percent: number }) {
+  return (
+    <div className="w-full mt-2">
+      <div
+        className="w-full rounded-full overflow-hidden"
+        style={{ height: 4, background: 'rgba(255,255,255,0.1)' }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-300 ease-out"
+          style={{ width: `${Math.max(2, percent)}%`, background: 'var(--color-accent)' }}
+        />
+      </div>
+      <p className="text-right text-xs mt-1" style={{ color: 'var(--color-white-muted)', fontSize: 10 }}>
+        {percent}%
+      </p>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function ImageInputNode({ data, selected, id }: NodeProps & { data: ImageInputNodeData }) {
-  const [uploading, setUploading] = useState(false);
+  const [localStage, setLocalStage] = useState<LocalStage>(null);
+  const [localProgress, setLocalProgress] = useState(0);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [showGallery, setShowGallery] = useState(false);
 
-  const onDrop = useCallback(
-    async (files: File[]) => {
-      const file = files[0];
-      if (!file) return;
+  function dispatchNodeUpdate(updates: Partial<ImageInputNodeData>) {
+    document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
+  }
 
-      const localPreview = URL.createObjectURL(file);
-      setPreviewUrl(localPreview);
-      setUploading(true);
+  // ── Core upload pipeline ────────────────────────────────────────────────────
 
-      // Strip original filename to avoid multipart parsing failures caused by
-      // special characters, non-ASCII names, or filenames that collide with
-      // the multipart boundary pattern.
-      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png';
-      const safeFile = new File([file], `upload.${ext}`, { type: file.type });
+  const processAndUpload = useCallback(async (file: File) => {
+    // Stash the file so the user can retry on network failures
+    setPendingFile(file);
+    setLocalError(null);
 
-      const formData = new FormData();
-      formData.append('file', safeFile);
+    const preview = URL.createObjectURL(file);
+    setPreviewUrl(preview);
 
-      try {
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (!res.ok) {
-          const errText = await res.text().catch(() => '(no body)');
-          console.error(`Upload failed [HTTP ${res.status}]:`, errText.slice(0, 300));
-          return;
-        }
-        const { url } = await res.json();
+    let processed: File;
+    try {
+      processed = await processImageFile(file, (stage, percent) => {
+        setLocalStage(stage);
+        if (stage === 'compressing') setLocalProgress(percent ?? 0);
+      });
+    } catch (err) {
+      URL.revokeObjectURL(preview);
+      setPreviewUrl(null);
+      setLocalStage('error');
+      setLocalError(err instanceof Error ? err.message : 'Failed to process image.');
+      return;
+    }
 
-        if (url) {
-          document.dispatchEvent(new CustomEvent('node:update', {
-            detail: { nodeId: id, data: { imageUrl: url } },
-          }));
-          document.dispatchEvent(new CustomEvent('node:image-propagate', {
-            detail: { sourceNodeId: id, imageUrl: url },
-          }));
-        }
-      } finally {
-        setUploading(false);
-        URL.revokeObjectURL(localPreview);
-        setPreviewUrl(null);
+    setLocalStage('uploading');
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: buildUploadFormData(processed) });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '');
+        throw new Error(`Upload failed (${res.status})${msg ? ': ' + msg.slice(0, 120) : ''}.`);
       }
-    },
-    [id]
-  );
+      const { url } = await res.json();
+      if (url) {
+        dispatchNodeUpdate({ imageUrl: url });
+        document.dispatchEvent(new CustomEvent('node:image-propagate', {
+          detail: { sourceNodeId: id, imageUrl: url },
+        }));
+      }
+      setLocalStage(null);
+      setLocalError(null);
+    } catch (err) {
+      setLocalStage('error');
+      setLocalError(err instanceof Error ? err.message : 'Upload failed.');
+    } finally {
+      URL.revokeObjectURL(preview);
+      setPreviewUrl(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // ── Dropzone ────────────────────────────────────────────────────────────────
+
+  const onDrop = useCallback((files: File[]) => {
+    const file = files[0];
+    if (file) processAndUpload(file);
+  }, [processAndUpload]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -155,10 +207,10 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
     maxFiles: 1,
   });
 
+  // ── Other actions ───────────────────────────────────────────────────────────
+
   function clearImage() {
-    document.dispatchEvent(new CustomEvent('node:update', {
-      detail: { nodeId: id, data: { imageUrl: undefined, naturalWidth: undefined, naturalHeight: undefined } },
-    }));
+    dispatchNodeUpdate({ imageUrl: undefined, naturalWidth: undefined, naturalHeight: undefined });
     document.dispatchEvent(new CustomEvent('node:image-propagate', {
       detail: { sourceNodeId: id, imageUrl: null },
     }));
@@ -166,40 +218,114 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
 
   function handleImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const { naturalWidth, naturalHeight } = e.currentTarget;
-    document.dispatchEvent(new CustomEvent('node:update', {
-      detail: { nodeId: id, data: { naturalWidth, naturalHeight } },
-    }));
+    dispatchNodeUpdate({ naturalWidth, naturalHeight });
   }
 
   function handleGallerySelect(url: string) {
     setShowGallery(false);
-    document.dispatchEvent(new CustomEvent('node:update', {
-      detail: { nodeId: id, data: { imageUrl: url, naturalWidth: undefined, naturalHeight: undefined } },
-    }));
+    dispatchNodeUpdate({ imageUrl: url, naturalWidth: undefined, naturalHeight: undefined });
     document.dispatchEvent(new CustomEvent('node:image-propagate', {
       detail: { sourceNodeId: id, imageUrl: url },
     }));
   }
 
+  async function handleRetry() {
+    if (pendingFile) {
+      // Local error with a file we can retry
+      setLocalStage(null);
+      setLocalError(null);
+      await processAndUpload(pendingFile);
+    } else {
+      // External error (canvas drop) — clear and let user upload manually
+      dispatchNodeUpdate({ uploadStatus: undefined, uploadError: undefined, uploadProgress: undefined });
+    }
+  }
+
+  // ── Determine effective display state ───────────────────────────────────────
+  // Local state takes precedence over data-driven state from canvas drops.
+
+  const activeStage: LocalStage = localStage ?? (data.uploadStatus as LocalStage ?? null);
+  const activeProgress = localStage !== null ? localProgress : (data.uploadProgress ?? 0);
+  const activeError =
+    localStage === 'error'
+      ? localError
+      : data.uploadStatus === 'error'
+        ? (data.uploadError ?? 'An error occurred.')
+        : null;
+
+  const isProcessing = activeStage !== null && activeStage !== 'error';
+
+  const stageLabel: Record<ProcessStage, string> = {
+    validating: 'Validating image…',
+    compressing: 'Compressing image…',
+    uploading: 'Uploading…',
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
   return (
     <NodeWrapper title="Image Input" icon={<Image size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.image}>
-      {uploading && previewUrl ? (
-        <div className="relative -m-3 overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={previewUrl}
-            alt="Uploading"
-            className="w-full block nodrag"
-            style={{ height: 'auto', filter: 'blur(6px)', transform: 'scale(1.05)' }}
-          />
+
+      {/* ── Processing state ───────────────────────────────────────────── */}
+      {isProcessing && (
+        <div className="relative -m-3 overflow-hidden rounded-b-xl" style={{ minHeight: 90 }}>
+          {/* Blurred preview background (only for local drops that have a preview) */}
+          {previewUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ filter: 'blur(8px)', transform: 'scale(1.1)' }}
+            />
+          )}
           <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.35)' }}
+            className="relative flex flex-col items-center justify-center gap-2 p-4"
+            style={{
+              minHeight: 90,
+              background: previewUrl ? 'rgba(0,0,0,0.5)' : 'var(--color-bg-surface)',
+            }}
           >
-            <RefreshCw size={28} className="animate-spin" style={{ color: '#fff' }} />
+            <RefreshCw
+              size={18}
+              className="animate-spin"
+              style={{ color: 'var(--color-accent)' }}
+            />
+            <p className="text-xs font-medium text-center" style={{ color: '#fff' }}>
+              {stageLabel[activeStage as ProcessStage]}
+            </p>
+            {activeStage === 'compressing' && (
+              <div className="w-full px-2">
+                <ProgressBar percent={activeProgress} />
+              </div>
+            )}
           </div>
         </div>
-      ) : data.imageUrl ? (
+      )}
+
+      {/* ── Error state ────────────────────────────────────────────────── */}
+      {!isProcessing && activeError && (
+        <div
+          className="-m-3 p-4 rounded-b-xl flex flex-col items-center gap-3"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderTop: 'none' }}
+        >
+          <AlertTriangle size={20} style={{ color: '#f87171', flexShrink: 0 }} />
+          <p className="text-xs text-center leading-relaxed" style={{ color: '#fca5a5' }}>
+            {activeError}
+          </p>
+          <button
+            onClick={handleRetry}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium nodrag transition-opacity hover:opacity-80"
+            style={{ background: 'rgba(239,68,68,0.2)', color: '#fca5a5' }}
+          >
+            <RotateCcw size={11} />
+            {pendingFile ? 'Try Again' : 'Dismiss'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Image display ──────────────────────────────────────────────── */}
+      {!isProcessing && !activeError && data.imageUrl && (
         <div
           className="relative -m-3 overflow-hidden"
           style={{
@@ -224,7 +350,10 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
             <X size={12} style={{ color: 'var(--color-white)' }} />
           </button>
         </div>
-      ) : (
+      )}
+
+      {/* ── Empty / upload zone ────────────────────────────────────────── */}
+      {!isProcessing && !activeError && !data.imageUrl && (
         <>
           <div
             {...getRootProps()}
@@ -259,12 +388,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
         </>
       )}
 
-      <TypedHandle
-        type="source"
-        position={Position.Right}
-        id="image"
-        portType="image"
-      />
+      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
 
       {showGallery && (
         <GalleryPicker onSelect={handleGallerySelect} onClose={() => setShowGallery(false)} />
