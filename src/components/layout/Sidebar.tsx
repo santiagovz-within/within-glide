@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Users,
   BarChart2,
+  Bug,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { createClient } from '@/lib/supabase/client';
@@ -159,6 +160,7 @@ export function Sidebar() {
 
       {/* Bottom section */}
       <div className="px-2 pb-4 space-y-1" style={{ borderTop: 'var(--border-default)', paddingTop: '12px' }}>
+        {renderNavItem('Bug Reports', Bug, '/dashboard/bug-reports')}
         <Link
           href="/dashboard/settings"
           className={cn(

@@ -294,6 +294,39 @@ export interface ModalState {
 export type Theme = 'dark' | 'light';
 
 // ============================================================
+// BUG REPORT TYPES
+// ============================================================
+
+export interface BugReport {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  status: 'open' | 'resolved';
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+  author_username?: string;
+  author_display_name?: string | null;
+  comment_count?: number;
+}
+
+export interface BugReportComment {
+  id: string;
+  bug_report_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  author_username?: string;
+  author_display_name?: string | null;
+}
+
+export interface BugReportDetail extends BugReport {
+  comments: BugReportComment[];
+}
+
+// ============================================================
 // CHAT TYPES
 // ============================================================
 
