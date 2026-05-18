@@ -34,7 +34,8 @@ import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
 import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
-import { processImageFile, buildUploadFormData } from '@/lib/utils/imageProcessing';
+import { processImageFile } from '@/lib/utils/imageProcessing';
+import { uploadImageToSupabase } from '@/lib/utils/uploadImage';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -517,18 +518,11 @@ export function FlowCanvas() {
         setStatus({ uploadStatus: 'uploading', uploadProgress: undefined });
 
         try {
-          const res = await fetch('/api/upload', { method: 'POST', body: buildUploadFormData(processed) });
-          if (!res.ok) {
-            const msg = await res.text().catch(() => '');
-            throw new Error(`Upload failed (${res.status})${msg ? ': ' + msg.slice(0, 120) : ''}.`);
-          }
-          const { url } = await res.json();
-          if (url) {
-            setStatus({ imageUrl: url, uploadStatus: undefined, uploadProgress: undefined, uploadError: undefined });
-            document.dispatchEvent(new CustomEvent('node:image-propagate', {
-              detail: { sourceNodeId: nodeId, imageUrl: url },
-            }));
-          }
+          const url = await uploadImageToSupabase(processed);
+          setStatus({ imageUrl: url, uploadStatus: undefined, uploadProgress: undefined, uploadError: undefined });
+          document.dispatchEvent(new CustomEvent('node:image-propagate', {
+            detail: { sourceNodeId: nodeId, imageUrl: url },
+          }));
         } catch (err) {
           setStatus({
             uploadStatus: 'error',

@@ -65,7 +65,10 @@ async function validateImage(file: File): Promise<void> {
 
 /**
  * Validates an image file (MIME type, magic header, decodability) and compresses
- * it if it is larger than the compression threshold.
+ * it if it is larger than 15 MB. The hard upload limit is 20 MB.
+ *
+ * Uploads go browser-to-Supabase directly (see uploadImage.ts), so these limits
+ * are Supabase's limits — not Vercel's 4.5 MB function payload limit.
  *
  * `onProgress` receives stage changes and, during compression, 0-100 percent.
  * Returns the file that should be uploaded — either the original or the compressed version.
@@ -127,18 +130,4 @@ export async function processImageFile(
   }
 
   return result;
-}
-
-/**
- * Wraps a processed File in a safe filename (strips special characters that
- * could break multipart boundary parsing) and returns a FormData ready to POST.
- */
-export function buildUploadFormData(file: File): FormData {
-  const ext =
-    file.type === 'image/jpeg' ? 'jpg' :
-    file.type === 'image/png'  ? 'png' : 'webp';
-  const safeFile = new File([file], `upload.${ext}`, { type: file.type });
-  const fd = new FormData();
-  fd.append('file', safeFile);
-  return fd;
 }

@@ -9,8 +9,9 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageInputNodeData } from '@/types';
 import { ACCEPTED_IMAGE_TYPES, MAX_UPLOAD_SIZE_BYTES } from '@/lib/utils/constants';
 import { createClient } from '@/lib/supabase/client';
-import { processImageFile, buildUploadFormData } from '@/lib/utils/imageProcessing';
+import { processImageFile } from '@/lib/utils/imageProcessing';
 import type { ProcessStage } from '@/lib/utils/imageProcessing';
+import { uploadImageToSupabase } from '@/lib/utils/uploadImage';
 
 // ── Stage types ──────────────────────────────────────────────────────────────
 
@@ -169,18 +170,11 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
     setLocalStage('uploading');
 
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: buildUploadFormData(processed) });
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '');
-        throw new Error(`Upload failed (${res.status})${msg ? ': ' + msg.slice(0, 120) : ''}.`);
-      }
-      const { url } = await res.json();
-      if (url) {
-        dispatchNodeUpdate({ imageUrl: url });
-        document.dispatchEvent(new CustomEvent('node:image-propagate', {
-          detail: { sourceNodeId: id, imageUrl: url },
-        }));
-      }
+      const url = await uploadImageToSupabase(processed);
+      dispatchNodeUpdate({ imageUrl: url });
+      document.dispatchEvent(new CustomEvent('node:image-propagate', {
+        detail: { sourceNodeId: id, imageUrl: url },
+      }));
       setLocalStage(null);
       setLocalError(null);
     } catch (err) {
