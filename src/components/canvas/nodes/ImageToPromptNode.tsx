@@ -2,14 +2,24 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Wand2, RefreshCw, Copy, Check, AlertTriangle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageToPromptNodeData } from '@/types';
 
+function autoResize(el: HTMLTextAreaElement) {
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: ImageToPromptNodeData }) {
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    if (textareaRef.current) autoResize(textareaRef.current);
+  }, [data.generatedPrompt]);
 
   function updateData(updates: Partial<ImageToPromptNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
@@ -119,9 +129,10 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       {hasPrompt && (
         <div className="relative">
           <textarea
+            ref={textareaRef}
             readOnly
             value={data.generatedPrompt}
-            rows={4}
+            rows={1}
             className="w-full text-xs outline-none nodrag resize-none"
             style={{
               background: 'var(--color-bg-surface)',
@@ -130,6 +141,7 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
               color: 'var(--color-white)',
               padding: '8px 32px 8px 10px',
               lineHeight: 1.6,
+              overflow: 'hidden',
             }}
           />
           <button
