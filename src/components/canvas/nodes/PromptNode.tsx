@@ -275,7 +275,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
             <ChevronLeft size={13} />
           </button>
           <span className="text-xs" style={{ color: isViewingHistory ? 'var(--color-accent)' : 'var(--color-white-muted)', fontSize: 10 }}>
-            {isViewingHistory ? `v${historyIdx + 1} of ${promptHistory.length}` : `v${promptHistory.length}`}
+            {`VERSION ${historyIdx + 1}`}
           </span>
           <button
             onClick={() => navigateHistory(Math.min(promptHistory.length - 1, historyIdx + 1))}

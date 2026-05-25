@@ -350,7 +350,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             <ChevronLeft size={13} />
           </button>
           <span className="text-xs" style={{ color: histIdx < videoHistory.length - 1 ? 'var(--color-accent)' : 'var(--color-white-muted)', fontSize: 10 }}>
-            {histIdx < videoHistory.length - 1 ? `gen ${histIdx + 1} of ${videoHistory.length}` : `gen ${videoHistory.length}`}
+            {`VERSION ${histIdx + 1}`}
           </span>
           <button
             onClick={() => setHistIdx(i => Math.min(videoHistory.length - 1, i + 1))}

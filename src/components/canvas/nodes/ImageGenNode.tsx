@@ -326,7 +326,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             <ChevronLeft size={13} />
           </button>
           <span className="text-xs" style={{ color: histIdx < genHistory.length - 1 ? 'var(--color-accent)' : 'var(--color-white-muted)', fontSize: 10 }}>
-            {histIdx < genHistory.length - 1 ? `gen ${histIdx + 1} of ${genHistory.length}` : `gen ${genHistory.length}`}
+            {`VERSION ${histIdx + 1}`}
           </span>
           <button
             onClick={() => setHistIdx(i => Math.min(genHistory.length - 1, i + 1))}
