@@ -73,6 +73,7 @@ export interface ChatMessage {
 export type NodeType =
   | 'promptNode'
   | 'imageInputNode'
+  | 'imageToPromptNode'
   | 'imageGenNode'
   | 'videoGenNode'
   | 'upscaleNode'
@@ -121,6 +122,7 @@ export interface PromptNodeData extends Record<string, unknown> {
   label?: string;
   paletteEnabled?: boolean;
   palette?: PaletteColor[];
+  promptHistory?: string[];
 }
 
 export interface ImageInputNodeData extends Record<string, unknown> {
@@ -144,6 +146,7 @@ export interface ImageGenNodeData extends Record<string, unknown> {
   inputImageUrls?: string[];
   imagePortCount?: number;
   generatedImages?: string[];
+  generationHistory?: string[][];
   status: NodeStatus;
   label?: string;
 }
@@ -158,6 +161,7 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   startFrameUrl?: string;
   endFrameUrl?: string;
   videoUrl?: string;
+  videoHistory?: string[];
   status: NodeStatus;
   label?: string;
 }
@@ -192,6 +196,13 @@ export interface GroupNodeData extends Record<string, unknown> {
   color?: string;
 }
 
+export interface ImageToPromptNodeData extends Record<string, unknown> {
+  inputImageUrl?: string;
+  generatedPrompt?: string;
+  status: NodeStatus;
+  label?: string;
+}
+
 export interface ModifyNodeData extends Record<string, unknown> {
   model: string;
   prompt?: string;
@@ -207,6 +218,7 @@ export interface ModifyNodeData extends Record<string, unknown> {
 export type NodeData =
   | PromptNodeData
   | ImageInputNodeData
+  | ImageToPromptNodeData
   | ImageGenNodeData
   | VideoGenNodeData
   | UpscaleNodeData

@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { PromptNode } from './nodes/PromptNode';
 import { ImageInputNode } from './nodes/ImageInputNode';
+import { ImageToPromptNode } from './nodes/ImageToPromptNode';
 import { ImageGenNode } from './nodes/ImageGenNode';
 import { VideoGenNode } from './nodes/VideoGenNode';
 import { UpscaleNode } from './nodes/UpscaleNode';
@@ -32,7 +33,7 @@ import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToSupabase } from '@/lib/utils/uploadImage';
@@ -40,6 +41,7 @@ import { uploadImageToSupabase } from '@/lib/utils/uploadImage';
 const nodeTypes = {
   promptNode: PromptNode,
   imageInputNode: ImageInputNode,
+  imageToPromptNode: ImageToPromptNode,
   imageGenNode: ImageGenNode,
   videoGenNode: VideoGenNode,
   upscaleNode: UpscaleNode,
@@ -57,6 +59,7 @@ const edgeTypes = {
 const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   promptNode:         { prompt: '' },
   imageInputNode:     {},
+  imageToPromptNode:  { status: 'idle' },
   imageGenNode:       { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
   videoGenNode:       { model: 'kling-3-pro', aspectRatio: '16:9', duration: 5, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
@@ -295,11 +298,12 @@ export function FlowCanvas() {
       if (targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode' || targetNodeType === 'modifyNode') return 'prompt';
     }
     if (sourceHandleId === 'image') {
-      if (targetNodeType === 'videoGenNode')  return 'start_frame';
-      if (targetNodeType === 'imageGenNode')  return 'ref_0';
-      if (targetNodeType === 'upscaleNode')   return 'image';
-      if (targetNodeType === 'modifyNode')    return 'image';
-      if (targetNodeType === 'outputNode')    return 'image';
+      if (targetNodeType === 'videoGenNode')      return 'start_frame';
+      if (targetNodeType === 'imageGenNode')      return 'ref_0';
+      if (targetNodeType === 'upscaleNode')       return 'image';
+      if (targetNodeType === 'modifyNode')        return 'image';
+      if (targetNodeType === 'outputNode')        return 'image';
+      if (targetNodeType === 'imageToPromptNode') return 'image';
     }
     if (sourceHandleId === 'video') {
       if (targetNodeType === 'outputNode') return 'video';
@@ -345,6 +349,8 @@ export function FlowCanvas() {
 
       if (targetNode.type === 'upscaleNode' || targetNode.type === 'modifyNode') {
         updateNodeData(targetEdge.target, { inputImageUrl: imageUrl ?? undefined });
+      } else if (targetNode.type === 'imageToPromptNode') {
+        updateNodeData(targetEdge.target, { inputImageUrl: imageUrl ?? undefined });
       } else if (targetNode.type === 'videoGenNode') {
         if (handle === 'start_frame') updateNodeData(targetEdge.target, { startFrameUrl: imageUrl ?? undefined });
         else if (handle === 'end_frame') updateNodeData(targetEdge.target, { endFrameUrl: imageUrl ?? undefined });
@@ -379,20 +385,45 @@ export function FlowCanvas() {
 
   const onConnectHandler = useCallback(
     (connection: Connection) => {
+      // ── Single-connection enforcement ────────────────────────────────
+      // All target handles accept at most one incoming edge, except galleryOutputNode.
+      const freshNodes = useFlowStore.getState().nodes;
+      const freshEdges = useFlowStore.getState().edges;
+      const targetNode = freshNodes.find((n) => n.id === connection.target);
+
+      if (targetNode?.type !== 'galleryOutputNode') {
+        const existing = freshEdges.filter(
+          (e) => e.target === connection.target && e.targetHandle === connection.targetHandle
+        );
+        if (existing.length > 0) {
+          for (const edge of existing) {
+            if (edge.sourceHandle === 'image') propagateImageToTarget(edge.source, edge, null);
+            if (edge.sourceHandle === 'prompt') updateNodeData(edge.target, { promptConnected: false });
+          }
+          const removedIds = new Set(existing.map((e) => e.id));
+          useFlowStore.getState().setEdges(freshEdges.filter((e) => !removedIds.has(e.id)));
+        }
+      }
+
+      // Add the new edge (reads fresh edges from store after the setEdges above)
       onConnect(connection);
 
+      // ── Post-connect propagation ─────────────────────────────────────
       if (connection.sourceHandle === 'prompt') {
         const sourceNode = nodes.find((n) => n.id === connection.source);
         if (sourceNode?.type === 'promptNode') {
           const { prompt } = sourceNode.data as { prompt?: string };
           updateNodeData(connection.target, { prompt: prompt ?? '', promptConnected: true });
+        } else if (sourceNode?.type === 'imageToPromptNode') {
+          const { generatedPrompt } = sourceNode.data as ImageToPromptNodeData;
+          updateNodeData(connection.target, { prompt: generatedPrompt ?? '', promptConnected: true });
         }
       }
 
       if (connection.sourceHandle === 'image') {
         // Use fresh store data — React closure may lag behind Zustand after a recent generation
-        const freshNodes = useFlowStore.getState().nodes;
-        const sourceNode = freshNodes.find((n) => n.id === connection.source);
+        const latestNodes = useFlowStore.getState().nodes;
+        const sourceNode = latestNodes.find((n) => n.id === connection.source);
         let imageUrl: string | undefined;
         if (sourceNode?.type === 'imageInputNode') imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
         else if (sourceNode?.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];

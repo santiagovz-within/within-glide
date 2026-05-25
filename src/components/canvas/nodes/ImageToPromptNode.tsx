@@ -1,0 +1,147 @@
+'use client';
+
+import { Position, type NodeProps } from '@xyflow/react';
+import { Wand2, RefreshCw, Copy, Check, AlertTriangle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { NodeWrapper } from './NodeWrapper';
+import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import type { ImageToPromptNodeData } from '@/types';
+
+export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: ImageToPromptNodeData }) {
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function updateData(updates: Partial<ImageToPromptNodeData>) {
+    document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
+  }
+
+  async function handleAnalyze() {
+    if (!data.inputImageUrl || data.status === 'processing') return;
+    updateData({ status: 'processing', generatedPrompt: undefined });
+
+    try {
+      const res = await fetch('/api/google/image-to-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: data.inputImageUrl }),
+      });
+      const result = await res.json();
+      if (result.prompt) {
+        updateData({ status: 'completed', generatedPrompt: result.prompt });
+        document.dispatchEvent(new CustomEvent('node:prompt-propagate', {
+          detail: { sourceNodeId: id, prompt: result.prompt },
+        }));
+      } else {
+        updateData({ status: 'error' });
+      }
+    } catch {
+      updateData({ status: 'error' });
+    }
+  }
+
+  function handleCopy() {
+    if (!data.generatedPrompt) return;
+    navigator.clipboard.writeText(data.generatedPrompt);
+    setCopied(true);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+  }
+
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+
+  const isProcessing = data.status === 'processing';
+  const hasPrompt = !!data.generatedPrompt;
+  const hasImage = !!data.inputImageUrl;
+
+  return (
+    <NodeWrapper
+      title="Image → Prompt"
+      icon={<Wand2 size={14} />}
+      status={data.status}
+      selected={selected}
+      minWidth={280}
+      accentColor={PORT_COLORS.text}
+    >
+      <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
+      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" />
+
+      {/* Image preview */}
+      {hasImage ? (
+        <div
+          className="-mx-3 mb-3 overflow-hidden"
+          style={{ height: 90, position: 'relative',
+            backgroundImage: 'conic-gradient(#3a3a3a 90deg, #2a2a2a 90deg 180deg, #3a3a3a 180deg 270deg, #2a2a2a 270deg)',
+            backgroundSize: '14px 14px',
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={data.inputImageUrl}
+            alt="Input"
+            className="w-full h-full object-contain block nodrag"
+          />
+        </div>
+      ) : (
+        <div
+          className="flex items-center justify-center mb-3 rounded-lg text-xs"
+          style={{ height: 72, background: 'var(--color-bg-surface)', border: '1px dashed rgba(255,255,255,0.15)', color: 'var(--color-white-muted)' }}
+        >
+          Connect an image to analyze
+        </div>
+      )}
+
+      {/* Analyze button */}
+      <button
+        onClick={handleAnalyze}
+        disabled={!hasImage || isProcessing}
+        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag mb-2"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+      >
+        {isProcessing ? (
+          <><RefreshCw size={11} className="animate-spin" /> Analyzing…</>
+        ) : (
+          <><Wand2 size={11} /> Analyze Image</>
+        )}
+      </button>
+
+      {/* Error state */}
+      {data.status === 'error' && !hasPrompt && (
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs mb-2"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}
+        >
+          <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+          Analysis failed. Try again.
+        </div>
+      )}
+
+      {/* Generated prompt */}
+      {hasPrompt && (
+        <div className="relative">
+          <textarea
+            readOnly
+            value={data.generatedPrompt}
+            rows={4}
+            className="w-full text-xs outline-none nodrag resize-none"
+            style={{
+              background: 'var(--color-bg-surface)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 8,
+              color: 'var(--color-white)',
+              padding: '8px 32px 8px 10px',
+              lineHeight: 1.6,
+            }}
+          />
+          <button
+            onClick={handleCopy}
+            className="absolute top-1.5 right-1.5 p-1 rounded nodrag transition-opacity hover:opacity-80"
+            style={{ color: 'var(--color-white-muted)' }}
+            title="Copy prompt"
+          >
+            {copied ? <Check size={11} /> : <Copy size={11} />}
+          </button>
+        </div>
+      )}
+    </NodeWrapper>
+  );
+}

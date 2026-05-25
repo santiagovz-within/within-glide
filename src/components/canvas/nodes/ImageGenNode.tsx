@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Aperture, Play, Download } from 'lucide-react';
+import { Aperture, Play, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { NodeWrapper } from './NodeWrapper';
@@ -22,6 +22,14 @@ function autoResize(el: HTMLTextAreaElement) {
 
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const genHistory = data.generationHistory ?? [];
+  const [histIdx, setHistIdx] = useState(() => Math.max(0, genHistory.length - 1));
+  const prevHistLen = useRef(genHistory.length);
+
+  useEffect(() => {
+    if (genHistory.length > prevHistLen.current) setHistIdx(genHistory.length - 1);
+    prevHistLen.current = genHistory.length;
+  }, [genHistory.length]);
   const promptSectionRef = useRef<HTMLDivElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const rowsListRef = useRef<HTMLDivElement>(null);
@@ -119,7 +127,8 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       console.log('[ImageGenNode] API response ←', result);
 
       if (result.mediaUrls?.length) {
-        updateData({ generatedImages: result.mediaUrls, status: 'completed' });
+        const newHistory = [...(data.generationHistory ?? []), result.mediaUrls as string[]];
+        updateData({ generatedImages: result.mediaUrls, generationHistory: newHistory, status: 'completed' });
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
@@ -134,7 +143,8 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     }
   }
 
-  const generatedImages = data.generatedImages ?? [];
+  // What we display depends on which history entry is viewed
+  const displayImages = genHistory.length > 0 ? (genHistory[histIdx] ?? []) : (data.generatedImages ?? []);
 
   return (
     <NodeWrapper
@@ -304,17 +314,42 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </div>
       )}
 
+      {/* ── Generation history navigation ─────────────────────── */}
+      {genHistory.length > 1 && (
+        <div className="flex items-center justify-between mb-1">
+          <button
+            onClick={() => setHistIdx(i => Math.max(0, i - 1))}
+            disabled={histIdx === 0}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronLeft size={13} />
+          </button>
+          <span className="text-xs" style={{ color: histIdx < genHistory.length - 1 ? 'var(--color-accent)' : 'var(--color-white-muted)', fontSize: 10 }}>
+            {histIdx < genHistory.length - 1 ? `gen ${histIdx + 1} of ${genHistory.length}` : `gen ${genHistory.length}`}
+          </span>
+          <button
+            onClick={() => setHistIdx(i => Math.min(genHistory.length - 1, i + 1))}
+            disabled={histIdx === genHistory.length - 1}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      )}
+
       {/* ── Generated previews ───────────────────────────────── */}
-      {generatedImages.length > 0 && (
+      {displayImages.length > 0 && (
         <div
           className="-mx-3 mb-3"
           style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(generatedImages.length, 2)}, 1fr)`,
+            gridTemplateColumns: `repeat(${Math.min(displayImages.length, 2)}, 1fr)`,
             gap: '1px',
           }}
         >
-          {generatedImages.map((url, i) => (
+          {displayImages.map((url, i) => (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               key={i}
@@ -338,9 +373,9 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
 
-      {generatedImages.length > 0 && (
+      {displayImages.length > 0 && (
         <button
-          onClick={() => downloadFromUrl(generatedImages[0])}
+          onClick={() => downloadFromUrl(displayImages[0])}
           className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
           style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
         >

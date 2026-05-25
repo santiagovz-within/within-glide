@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Type, Sunrise, Droplet, Plus, X } from 'lucide-react';
+import { Type, Sunrise, Droplet, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -84,8 +84,6 @@ function buildEnrichedPrompt(rawPrompt: string, palette: PaletteColor[]): string
   return enriched;
 }
 
-// Renders the prompt text with @colorN refs shown in their palette color + bold.
-// The rest of the text is transparent so the textarea's caret aligns naturally.
 function ColorTextOverlay({ text, palette }: { text: string; palette: PaletteColor[] }) {
   const refs = palette.map((_, i) => `@color${i + 1}`);
   const parts: React.ReactNode[] = [];
@@ -129,9 +127,25 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
 
   const paletteEnabled = data.paletteEnabled ?? false;
   const palette: PaletteColor[] = data.palette ?? [];
+  const promptHistory: string[] = data.promptHistory ?? [];
 
   const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
   const isFocused = useRef(false);
+  const focusedValue = useRef('');
+  // Which history entry is currently being viewed (0-indexed, last = latest)
+  const [historyIdx, setHistoryIdx] = useState(() => Math.max(0, promptHistory.length - 1));
+  const isViewingHistory = promptHistory.length > 1 && historyIdx < promptHistory.length - 1;
+
+  // Stay at latest when history grows (new entries appended)
+  const prevHistoryLen = useRef(promptHistory.length);
+  useEffect(() => {
+    if (promptHistory.length > prevHistoryLen.current) {
+      setHistoryIdx(promptHistory.length - 1);
+    }
+    prevHistoryLen.current = promptHistory.length;
+  }, [promptHistory.length]);
+
+  // Sync localPrompt from Zustand when not focused (external changes)
   useEffect(() => {
     if (!isFocused.current) setLocalPrompt(data.prompt ?? '');
   }, [data.prompt]);
@@ -153,12 +167,30 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     document.dispatchEvent(new CustomEvent('node:prompt-propagate', { detail: { sourceNodeId: id, prompt: enriched } }));
   }
 
+  function addToHistory(value: string) {
+    const history = data.promptHistory ?? [];
+    if (history[history.length - 1] === value) return;
+    dispatchUpdate({ promptHistory: [...history, value] });
+  }
+
   function handlePromptChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const v = e.target.value;
     setLocalPrompt(v);
     autoResize(e.target);
     dispatchUpdate({ prompt: v });
     propagatePrompt(v);
+  }
+
+  function handleFocus() {
+    isFocused.current = true;
+    focusedValue.current = localPrompt;
+  }
+
+  function handleBlur() {
+    isFocused.current = false;
+    if (localPrompt !== focusedValue.current || (data.promptHistory ?? []).length === 0) {
+      addToHistory(localPrompt);
+    }
   }
 
   useEffect(() => {
@@ -185,10 +217,20 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
         setLocalPrompt(enhancedPrompt);
         dispatchUpdate({ prompt: enhancedPrompt });
         propagatePrompt(enhancedPrompt);
+        addToHistory(enhancedPrompt);
       }
     } finally {
       setEnhancing(false);
     }
+  }
+
+  function navigateHistory(idx: number) {
+    setHistoryIdx(idx);
+    const entry = promptHistory[idx] ?? '';
+    setLocalPrompt(entry);
+    // Restore this version as the active prompt
+    dispatchUpdate({ prompt: entry });
+    propagatePrompt(entry);
   }
 
   function addColor() {
@@ -221,7 +263,32 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   return (
     <NodeWrapper title="Prompt" icon={<Type size={14} />} selected={selected} accentColor={PORT_COLORS.text}>
 
-      {/* Prompt area — overlay renders @colorN bold+colored; textarea captures input */}
+      {/* History navigation */}
+      {promptHistory.length > 1 && (
+        <div className="flex items-center justify-between mb-1.5">
+          <button
+            onClick={() => navigateHistory(Math.max(0, historyIdx - 1))}
+            disabled={historyIdx === 0}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronLeft size={13} />
+          </button>
+          <span className="text-xs" style={{ color: isViewingHistory ? 'var(--color-accent)' : 'var(--color-white-muted)', fontSize: 10 }}>
+            {isViewingHistory ? `v${historyIdx + 1} of ${promptHistory.length}` : `v${promptHistory.length}`}
+          </span>
+          <button
+            onClick={() => navigateHistory(Math.min(promptHistory.length - 1, historyIdx + 1))}
+            disabled={historyIdx === promptHistory.length - 1}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Prompt area */}
       <div className="relative mb-2">
         {hasColorRefs && (
           <div
@@ -243,8 +310,8 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           rows={2}
           placeholder="Write your prompt here…"
           value={localPrompt}
-          onFocus={() => { isFocused.current = true; }}
-          onBlur={() => { isFocused.current = false; }}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           onChange={handlePromptChange}
           style={{
             background: 'transparent',

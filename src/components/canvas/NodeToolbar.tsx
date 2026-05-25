@@ -1,6 +1,6 @@
 'use client';
 
-import { Type, Image, Aperture, Film, Zap, Monitor, Grid, Layers, Sliders, Pointer } from 'lucide-react';
+import { Type, Image, Aperture, Film, Zap, Monitor, Grid, Layers, Sliders, Pointer, Wand2 } from 'lucide-react';
 import type { NodeType } from '@/types';
 
 interface NodeOption {
@@ -13,6 +13,7 @@ interface NodeOption {
 const NODE_OPTIONS: NodeOption[] = [
   { type: 'promptNode',        label: 'Prompt',           icon: <Type size={14} />,     category: 'Input'    },
   { type: 'imageInputNode',    label: 'Image Input',      icon: <Image size={14} />,    category: 'Input'    },
+  { type: 'imageToPromptNode', label: 'Image to Prompt',  icon: <Wand2 size={14} />,    category: 'Input'    },
   { type: 'imageGenNode',      label: 'Image Generation', icon: <Aperture size={14} />, category: 'Generate' },
   { type: 'videoGenNode',      label: 'Video Generation', icon: <Film size={14} />,     category: 'Generate' },
   { type: 'upscaleNode',       label: 'Upscale',          icon: <Zap size={14} />,      category: 'Enhance'  },

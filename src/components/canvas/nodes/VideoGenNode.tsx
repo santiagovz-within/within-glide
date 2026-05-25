@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Film, Play, AlertTriangle, Download } from 'lucide-react';
+import { Film, Play, AlertTriangle, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
@@ -27,6 +27,14 @@ function autoResize(el: HTMLTextAreaElement) {
 
 export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const videoHistory = data.videoHistory ?? [];
+  const [histIdx, setHistIdx] = useState(() => Math.max(0, videoHistory.length - 1));
+  const prevHistLen = useRef(videoHistory.length);
+
+  useEffect(() => {
+    if (videoHistory.length > prevHistLen.current) setHistIdx(videoHistory.length - 1);
+    prevHistLen.current = videoHistory.length;
+  }, [videoHistory.length]);
   const promptSectionRef = useRef<HTMLDivElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const startFrameRowRef = useRef<HTMLDivElement>(null);
@@ -133,7 +141,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       const result = await res.json();
 
       if (result.mediaUrls?.[0]) {
-        updateData({ videoUrl: result.mediaUrls[0], status: 'completed' });
+        const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
+        updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
       } else if (result.requestId) {
         pollForResult(result.requestId);
       } else {
@@ -160,7 +169,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         const result = await res.json();
         if (result.status === 'completed' && result.mediaUrls?.[0]) {
           clearInterval(interval);
-          updateData({ videoUrl: result.mediaUrls[0], status: 'completed' });
+          const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
+          updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
           setIsGenerating(false);
         } else if (result.status === 'failed') {
           clearInterval(interval);
@@ -171,7 +181,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     }, 3000);
   }
 
-  // Derive video aspect ratio for the player
+  const displayVideoUrl = videoHistory.length > 0 ? (videoHistory[histIdx] ?? data.videoUrl) : data.videoUrl;
+
   const videoAspect = (() => {
     const parts = data.aspectRatio.split(':');
     if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
@@ -327,9 +338,34 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         </div>
       </div>
 
-      {data.videoUrl && (
+      {/* Video history navigation */}
+      {videoHistory.length > 1 && (
+        <div className="flex items-center justify-between mb-1">
+          <button
+            onClick={() => setHistIdx(i => Math.max(0, i - 1))}
+            disabled={histIdx === 0}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronLeft size={13} />
+          </button>
+          <span className="text-xs" style={{ color: histIdx < videoHistory.length - 1 ? 'var(--color-accent)' : 'var(--color-white-muted)', fontSize: 10 }}>
+            {histIdx < videoHistory.length - 1 ? `gen ${histIdx + 1} of ${videoHistory.length}` : `gen ${videoHistory.length}`}
+          </span>
+          <button
+            onClick={() => setHistIdx(i => Math.min(videoHistory.length - 1, i + 1))}
+            disabled={histIdx === videoHistory.length - 1}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      )}
+
+      {displayVideoUrl && (
         <video
-          src={data.videoUrl}
+          src={displayVideoUrl}
           controls
           className="w-full block rounded-lg mb-3 nodrag"
           style={{ aspectRatio: videoAspect }}
@@ -346,9 +382,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
 
-      {data.videoUrl && (
+      {displayVideoUrl && (
         <button
-          onClick={() => downloadFromUrl(data.videoUrl!)}
+          onClick={() => downloadFromUrl(displayVideoUrl)}
           className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
           style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
         >

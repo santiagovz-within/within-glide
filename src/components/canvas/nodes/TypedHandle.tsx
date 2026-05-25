@@ -39,6 +39,8 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
   'modifyNode:prompt:target':              'text',
   'modifyNode:image:target':              'image',
   'modifyNode:image:source':              'image',
+  'imageToPromptNode:image:target':        'image',
+  'imageToPromptNode:prompt:source':       'text',
   'selectNode:input:target':              'image',
   'selectNode:image:source':             'image',
   'outputNode:image:target':               'image',
