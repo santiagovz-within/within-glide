@@ -6,6 +6,7 @@ import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
 import type { Generation } from '@/types';
 import { formatDate } from '@/lib/utils/date';
+import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
 
 export default function GalleryPage() {
   const { generations, setGenerations, removeGeneration, filter, setFilter, sort, setSort, filteredGenerations, isLoading, setIsLoading } = useGalleryStore();
@@ -22,16 +23,27 @@ export default function GalleryPage() {
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'completed')
+        .neq('media_type', 'prompt')
         .order('created_at', { ascending: false });
-      setGenerations(data ?? []);
+
+      const rows = data ?? [];
+
+      // Batch-resolve any GCS refs to signed URLs
+      const gcsMap = await resolveGcsRefs(rows.map((g) => g.media_url));
+      const resolved = rows.map((g) =>
+        gcsMap.has(g.media_url) ? { ...g, media_url: gcsMap.get(g.media_url)! } : g
+      );
+
+      setGenerations(resolved);
       setIsLoading(false);
     }
     loadGenerations();
-  }, [supabase, setGenerations, setIsLoading]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleDelete(gen: Generation) {
     if (!confirm('Delete this generation?')) return;
-    await supabase.from('generations').delete().eq('id', gen.id);
+    await fetch(`/api/generations/${gen.id}`, { method: 'DELETE' });
     removeGeneration(gen.id);
     if (selectedGen?.id === gen.id) setSelectedGen(null);
   }

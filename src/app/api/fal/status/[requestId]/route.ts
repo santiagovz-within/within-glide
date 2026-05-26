@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fal } from '@fal-ai/client';
+import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -29,23 +30,17 @@ export async function GET(
         return NextResponse.json({ status: 'failed' });
       }
 
-      // Download and store
       const videoRes = await fetch(videoUrl);
       const videoBuffer = await videoRes.arrayBuffer();
       const genId = crypto.randomUUID();
-      const storagePath = `${user.id}/${genId}.mp4`;
+      const objectPath = `${user.id}/${genId}.mp4`;
+      const gcsRef = await uploadToGCS(videoBuffer, objectPath, 'video/mp4');
+      const signedUrl = await getSignedReadUrl(objectPath);
 
-      await supabase.storage
-        .from('generations')
-        .upload(storagePath, videoBuffer, { contentType: 'video/mp4', upsert: false });
-
-      const { data: { publicUrl } } = supabase.storage.from('generations').getPublicUrl(storagePath);
-
-      // Update the pending generation record
       await supabase
         .from('generations')
         .update({
-          media_url: publicUrl,
+          media_url: gcsRef,
           status: 'completed',
           fal_request_id: requestId,
         })
@@ -60,7 +55,7 @@ export async function GET(
 
       return NextResponse.json({
         status: 'completed',
-        mediaUrls: [publicUrl],
+        mediaUrls: [signedUrl],
         generationId: gen?.id,
       });
     }

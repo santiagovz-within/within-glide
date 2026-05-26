@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fal } from '@fal-ai/client';
 import { FAL_MODELS } from '@/lib/api/models';
+import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -41,20 +42,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Upscale returned no image' }, { status: 500 });
     }
 
-    // Download and store
     const imageRes = await fetch(outputUrl);
     const imageBuffer = await imageRes.arrayBuffer();
     const contentType = imageRes.headers.get('content-type') ?? 'image/webp';
     const ext = contentType.split('/')[1] ?? 'webp';
 
     const genId = crypto.randomUUID();
-    const storagePath = `${user.id}/${genId}.${ext}`;
-
-    await supabase.storage
-      .from('generations')
-      .upload(storagePath, imageBuffer, { contentType, upsert: false });
-
-    const { data: { publicUrl } } = supabase.storage.from('generations').getPublicUrl(storagePath);
+    const objectPath = `${user.id}/${genId}.${ext}`;
+    const gcsRef = await uploadToGCS(imageBuffer, objectPath, contentType);
+    const signedUrl = await getSignedReadUrl(objectPath);
 
     await supabase.from('generations').insert({
       id: genId,
@@ -64,11 +60,11 @@ export async function POST(request: NextRequest) {
       model,
       parameters: { scaleFactor },
       media_type: 'image',
-      media_url: publicUrl,
+      media_url: gcsRef,
       status: 'completed',
     });
 
-    return NextResponse.json({ mediaUrls: [publicUrl], status: 'completed' });
+    return NextResponse.json({ mediaUrls: [signedUrl], status: 'completed' });
   } catch (err) {
     console.error('Upscale error:', err);
     return NextResponse.json({ error: 'Upscale failed', details: String(err) }, { status: 500 });

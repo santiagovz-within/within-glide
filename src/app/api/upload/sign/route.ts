@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
+import { getSignedUploadUrl, getSignedReadUrl } from '@/lib/gcs';
 
 const ALLOWED_TYPES: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -8,8 +9,8 @@ const ALLOWED_TYPES: Record<string, string> = {
 };
 
 // POST /api/upload/sign
-// Returns a one-time signed upload token so the browser can PUT the file
-// directly to Supabase Storage — the file bytes never cross a Vercel function.
+// Returns a one-time signed write URL so the browser can PUT the file
+// directly to GCS — file bytes never cross a Vercel function.
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -21,18 +22,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 });
   }
 
-  const path = `${user.id}/refs/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-  const admin = createAdminClient();
+  const objectPath = `${user.id}/refs/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-  const { data, error } = await admin.storage
-    .from('uploads')
-    .createSignedUploadUrl(path);
+  const [uploadUrl, readUrl] = await Promise.all([
+    getSignedUploadUrl(objectPath, contentType as string),
+    getSignedReadUrl(objectPath),
+  ]);
 
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? 'Failed to create upload URL' }, { status: 500 });
-  }
-
-  const { data: { publicUrl } } = admin.storage.from('uploads').getPublicUrl(path);
-
-  return NextResponse.json({ path: data.path, token: data.token, publicUrl });
+  return NextResponse.json({ uploadUrl, readUrl });
 }

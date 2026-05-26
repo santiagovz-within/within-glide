@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenAI } from '@google/genai';
+import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +13,6 @@ export async function POST(request: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
-    // Veo 3 video generation
     const operation = await ai.models.generateVideos({
       model: 'veo-3.0',
       prompt,
@@ -21,7 +21,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Poll for completion
     let pollOp = operation;
     let attempts = 0;
     while (!pollOp.done && attempts < 60) {
@@ -38,20 +37,15 @@ export async function POST(request: NextRequest) {
     const videoUri = videoData.video?.uri;
     if (!videoUri) return NextResponse.json({ error: 'No video URI returned' }, { status: 500 });
 
-    // Download and store
     const videoRes = await fetch(videoUri, {
       headers: { Authorization: `Bearer ${process.env.GOOGLE_AI_API_KEY}` },
     });
     const videoBuffer = await videoRes.arrayBuffer();
 
     const genId = crypto.randomUUID();
-    const storagePath = `${user.id}/${genId}.mp4`;
-
-    await supabase.storage
-      .from('generations')
-      .upload(storagePath, videoBuffer, { contentType: 'video/mp4', upsert: false });
-
-    const { data: { publicUrl } } = supabase.storage.from('generations').getPublicUrl(storagePath);
+    const objectPath = `${user.id}/${genId}.mp4`;
+    const gcsRef = await uploadToGCS(videoBuffer, objectPath, 'video/mp4');
+    const signedUrl = await getSignedReadUrl(objectPath);
 
     const { data: gen } = await supabase
       .from('generations')
@@ -65,13 +59,13 @@ export async function POST(request: NextRequest) {
         prompt,
         parameters: { aspectRatio },
         media_type: 'video',
-        media_url: publicUrl,
+        media_url: gcsRef,
         status: 'completed',
       })
       .select()
       .single();
 
-    return NextResponse.json({ generationId: gen?.id, mediaUrls: [publicUrl], status: 'completed' });
+    return NextResponse.json({ generationId: gen?.id, mediaUrls: [signedUrl], status: 'completed' });
   } catch (err) {
     console.error('Veo generation error:', err);
     return NextResponse.json({ error: 'Video generation failed', details: String(err) }, { status: 500 });

@@ -35,7 +35,7 @@ export interface Generation {
   negative_prompt: string | null;
   parameters: Record<string, unknown>;
   reference_image_urls: string[] | null;
-  media_type: 'image' | 'video';
+  media_type: 'image' | 'video' | 'prompt';
   media_url: string;
   thumbnail_url: string | null;
   width: number | null;

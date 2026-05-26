@@ -36,7 +36,7 @@ import { PORT_TYPE_MAP } from './nodes/TypedHandle';
 import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
-import { uploadImageToSupabase } from '@/lib/utils/uploadImage';
+import { uploadImageToStorage } from '@/lib/utils/uploadImage';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -549,7 +549,7 @@ export function FlowCanvas() {
         setStatus({ uploadStatus: 'uploading', uploadProgress: undefined });
 
         try {
-          const url = await uploadImageToSupabase(processed);
+          const url = await uploadImageToStorage(processed);
           setStatus({ imageUrl: url, uploadStatus: undefined, uploadProgress: undefined, uploadError: undefined });
           document.dispatchEvent(new CustomEvent('node:image-propagate', {
             detail: { sourceNodeId: nodeId, imageUrl: url },

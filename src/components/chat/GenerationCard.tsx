@@ -1,8 +1,9 @@
 'use client';
 
 import { Download, Maximize2, Play } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Generation } from '@/types';
+import { resolveMediaUrl } from '@/lib/utils/mediaUtils';
 
 interface GenerationCardProps {
   generation: Generation;
@@ -11,7 +12,12 @@ interface GenerationCardProps {
 
 export function GenerationCard({ generation, onClick }: GenerationCardProps) {
   const [hover, setHover] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState(generation.media_url);
   const isVideo = generation.media_type === 'video';
+
+  useEffect(() => {
+    resolveMediaUrl(generation.media_url).then(setResolvedUrl);
+  }, [generation.media_url]);
 
   return (
     <div
@@ -27,14 +33,14 @@ export function GenerationCard({ generation, onClick }: GenerationCardProps) {
     >
       {isVideo ? (
         <video
-          src={generation.media_url}
+          src={resolvedUrl}
           className="w-full h-full object-cover"
           preload="metadata"
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={generation.media_url}
+          src={resolvedUrl}
           alt={generation.prompt ?? ''}
           className="w-full h-full object-cover"
         />
@@ -54,7 +60,7 @@ export function GenerationCard({ generation, onClick }: GenerationCardProps) {
       {hover && (
         <div className="absolute inset-0 flex items-end justify-end p-2 gap-1.5" style={{ background: 'rgba(0,0,0,0.4)' }}>
           <a
-            href={generation.media_url}
+            href={resolvedUrl}
             download
             className="p-1.5 rounded-lg transition-colors hover:bg-white/20"
             style={{ background: 'rgba(0,0,0,0.4)' }}

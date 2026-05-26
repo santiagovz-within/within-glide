@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fal } from '@fal-ai/client';
 import { FAL_MODELS } from '@/lib/api/models';
+import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 import type { GenerateImageRequest } from '@/types';
 
 fal.config({ credentials: process.env.FAL_KEY });
@@ -51,7 +52,6 @@ export async function POST(request: NextRequest) {
       const { request_id } = await fal.queue.submit(endpoint as string, {
         input: {
           prompt,
-          // aspect_ratio only applies to text-to-video; image-to-video derives it from the input image
           ...(!hasImage ? { aspect_ratio: aspectRatio } : {}),
           duration: String(body.duration ?? 5),
           ...(startFrameUrl ? { start_image_url: startFrameUrl } : {}),
@@ -59,7 +59,6 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Create a pending generation record
       const { data: gen } = await supabase
         .from('generations')
         .insert({
@@ -106,7 +105,6 @@ export async function POST(request: NextRequest) {
         ...(body.negativePrompt ? { negative_prompt: body.negativePrompt } : {}),
       };
 
-      // Reference image: nano-banana edit uses image_urls[], other fal models use image_url
       if (referenceImageUrls[0]) {
         if (editImageParam === 'image_urls') {
           baseInput.image_urls = referenceImageUrls.filter(Boolean);
@@ -115,30 +113,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const falInput = baseInput;
-      console.log(`[fal/generate] image ${i + 1}/${numImages} input:`, JSON.stringify(falInput));
-      const result = await fal.subscribe(endpoint as string, { input: falInput });
+      console.log(`[fal/generate] image ${i + 1}/${numImages} input:`, JSON.stringify(baseInput));
+      const result = await fal.subscribe(endpoint as string, { input: baseInput });
 
       const falResult = result.data as { images?: Array<{ url: string }>; image?: { url: string } };
       const imageUrl = falResult.images?.[0]?.url ?? falResult.image?.url;
       if (!imageUrl) continue;
 
-      // Download and store in Supabase Storage
       const imageRes = await fetch(imageUrl);
       const imageBuffer = await imageRes.arrayBuffer();
       const contentType = imageRes.headers.get('content-type') ?? 'image/webp';
       const ext = contentType.split('/')[1] ?? 'webp';
 
       const genId = crypto.randomUUID();
-      const storagePath = `${user.id}/${genId}.${ext}`;
+      const objectPath = `${user.id}/${genId}.${ext}`;
+      const gcsRef = await uploadToGCS(imageBuffer, objectPath, contentType);
+      const signedUrl = await getSignedReadUrl(objectPath);
 
-      await supabase.storage
-        .from('generations')
-        .upload(storagePath, imageBuffer, { contentType, upsert: false });
-
-      const { data: { publicUrl } } = supabase.storage.from('generations').getPublicUrl(storagePath);
-
-      const { data: gen } = await supabase
+      await supabase
         .from('generations')
         .insert({
           id: genId,
@@ -151,22 +143,19 @@ export async function POST(request: NextRequest) {
           parameters: { aspectRatio, resolution },
           reference_image_urls: referenceImageUrls,
           media_type: 'image',
-          media_url: publicUrl,
+          media_url: gcsRef,
           width,
           height,
           status: 'completed',
-        })
-        .select()
-        .single();
+        });
 
-      if (gen) results.push(publicUrl);
+      results.push(signedUrl);
     }
 
     if (results.length === 0) {
       return NextResponse.json({ error: 'Generation failed' }, { status: 500 });
     }
 
-    // Return the generationId of the last created generation
     const { data: lastGen } = await supabase
       .from('generations')
       .select('id')

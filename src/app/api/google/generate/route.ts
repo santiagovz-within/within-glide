@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenAI } from '@google/genai';
 import { GOOGLE_IMAGE_MODELS } from '@/lib/api/models';
+import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 
 interface GenerateBody {
   model: string;
@@ -48,7 +49,6 @@ export async function POST(request: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
-    // Fetch all reference images in parallel (once, reused across numImages loop)
     const validRefUrls = referenceImageUrls.filter(Boolean);
     const imageParts = validRefUrls.length > 0
       ? await Promise.all(validRefUrls.map(fetchAsInlineData))
@@ -79,13 +79,9 @@ export async function POST(request: NextRequest) {
         const binary = Buffer.from(imageBytes, 'base64');
 
         const genId = crypto.randomUUID();
-        const storagePath = `${user.id}/${genId}.${ext}`;
-
-        await supabase.storage
-          .from('generations')
-          .upload(storagePath, binary, { contentType: mimeType, upsert: false });
-
-        const { data: { publicUrl } } = supabase.storage.from('generations').getPublicUrl(storagePath);
+        const objectPath = `${user.id}/${genId}.${ext}`;
+        const gcsRef = await uploadToGCS(binary, objectPath, mimeType);
+        const signedUrl = await getSignedReadUrl(objectPath);
 
         await supabase.from('generations').insert({
           id: genId,
@@ -97,12 +93,12 @@ export async function POST(request: NextRequest) {
           prompt,
           parameters: { aspectRatio, referenceCount: imageParts.length },
           media_type: 'image',
-          media_url: publicUrl,
+          media_url: gcsRef,
           status: 'completed',
         });
 
-        mediaUrls.push(publicUrl);
-        break; // one image part per generateContent response
+        mediaUrls.push(signedUrl);
+        break;
       }
     }
 

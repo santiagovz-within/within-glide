@@ -11,7 +11,8 @@ import { ACCEPTED_IMAGE_TYPES, MAX_UPLOAD_SIZE_BYTES } from '@/lib/utils/constan
 import { createClient } from '@/lib/supabase/client';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import type { ProcessStage } from '@/lib/utils/imageProcessing';
-import { uploadImageToSupabase } from '@/lib/utils/uploadImage';
+import { uploadImageToStorage } from '@/lib/utils/uploadImage';
+import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
 
 // ── Stage types ──────────────────────────────────────────────────────────────
 
@@ -43,7 +44,12 @@ function GalleryPicker({ onSelect, onClose }: { onSelect: (url: string) => void;
         .eq('media_type', 'image')
         .order('created_at', { ascending: false })
         .limit(60);
-      setImages(data ?? []);
+      const rows = data ?? [];
+      const gcsMap = await resolveGcsRefs(rows.map((g) => g.media_url));
+      const resolved = rows.map((g) =>
+        gcsMap.has(g.media_url) ? { ...g, media_url: gcsMap.get(g.media_url)! } : g
+      );
+      setImages(resolved);
       setLoading(false);
     }
     load();
@@ -170,7 +176,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
     setLocalStage('uploading');
 
     try {
-      const url = await uploadImageToSupabase(processed);
+      const url = await uploadImageToStorage(processed);
       dispatchNodeUpdate({ imageUrl: url });
       document.dispatchEvent(new CustomEvent('node:image-propagate', {
         detail: { sourceNodeId: id, imageUrl: url },

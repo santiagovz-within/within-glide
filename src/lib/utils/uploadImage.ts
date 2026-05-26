@@ -1,15 +1,12 @@
-import { createClient } from '@/lib/supabase/client';
-
 /**
- * Uploads an image file directly from the browser to Supabase Storage,
+ * Uploads an image file directly from the browser to Google Cloud Storage,
  * completely bypassing Vercel's serverless function payload limit (4.5 MB).
  *
  * Flow:
- *   1. POST /api/upload/sign  →  tiny JSON exchange, gets a signed token
- *   2. supabase.storage.uploadToSignedUrl  →  browser-to-Supabase PUT, no Vercel involved
+ *   1. POST /api/upload/sign  →  tiny JSON exchange, gets signed write + read URLs
+ *   2. fetch(uploadUrl, PUT)  →  browser-to-GCS PUT, no Vercel involved
  */
-export async function uploadImageToSupabase(file: File): Promise<string> {
-  // Step 1 — get a signed upload slot from our server (no file bytes)
+export async function uploadImageToStorage(file: File): Promise<string> {
   const signRes = await fetch('/api/upload/sign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,17 +20,17 @@ export async function uploadImageToSupabase(file: File): Promise<string> {
     );
   }
 
-  const { path, token, publicUrl } = await signRes.json();
+  const { uploadUrl, readUrl } = await signRes.json() as { uploadUrl: string; readUrl: string };
 
-  // Step 2 — upload directly from the browser to Supabase (bypasses Vercel)
-  const supabase = createClient();
-  const { error } = await supabase.storage
-    .from('uploads')
-    .uploadToSignedUrl(path, token, file, { contentType: file.type });
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': file.type },
+  });
 
-  if (error) {
-    throw new Error(`Storage upload failed: ${error.message}`);
+  if (!putRes.ok) {
+    throw new Error(`Storage upload failed: ${putRes.status} ${putRes.statusText}`);
   }
 
-  return publicUrl as string;
+  return readUrl;
 }
