@@ -17,8 +17,17 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { imageUrl } = await request.json();
+    const { imageUrl, length = 'auto' } = await request.json();
     if (!imageUrl) return NextResponse.json({ error: 'imageUrl is required' }, { status: 400 });
+
+    const lengthInstruction: Record<string, string> = {
+      auto:   'Write a detailed, accurate text-to-image prompt that would recreate it. Describe the subject, composition, lighting, style, colors, and mood. Be precise and specific.',
+      short:  'Write a concise text-to-image prompt in 1–2 sentences capturing the essential subject, style, and mood.',
+      medium: 'Write a text-to-image prompt of moderate detail (around 40–60 words) covering the subject, composition, lighting, and style.',
+      long:   'Write a comprehensive, highly detailed text-to-image prompt (80+ words) covering every visual element: subject, pose, composition, lighting, color palette, textures, background, style, and mood.',
+    };
+
+    const instruction = lengthInstruction[length] ?? lengthInstruction.auto;
 
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
     const imagePart = await fetchAsInlineData(imageUrl);
@@ -30,7 +39,7 @@ export async function POST(request: NextRequest) {
         parts: [
           imagePart,
           {
-            text: 'Analyze this image and write a detailed, accurate text-to-image prompt that would recreate it. Describe the subject, composition, lighting, style, colors, and mood. Be precise and specific. Return only the prompt text, nothing else.',
+            text: `Analyze this image and ${instruction} Return only the prompt text, nothing else.`,
           },
         ],
       }],

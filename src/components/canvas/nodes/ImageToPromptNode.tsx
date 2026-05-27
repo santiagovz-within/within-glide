@@ -12,8 +12,16 @@ function autoResize(el: HTMLTextAreaElement) {
   el.style.height = `${el.scrollHeight}px`;
 }
 
+const LENGTH_OPTIONS = [
+  { id: 'auto',   label: 'Auto' },
+  { id: 'short',  label: 'Short' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'long',   label: 'Long' },
+];
+
 export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: ImageToPromptNodeData }) {
   const [copied, setCopied] = useState(false);
+  const [length, setLength] = useState('auto');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -50,7 +58,7 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       const res = await fetch('/api/google/image-to-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: data.inputImageUrl }),
+        body: JSON.stringify({ imageUrl: data.inputImageUrl, length }),
       });
       const result = await res.json();
       if (result.prompt) {
@@ -149,19 +157,30 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
         </div>
       )}
 
-      {/* Analyze button */}
-      <button
-        onClick={handleAnalyze}
-        disabled={!hasImage || isProcessing}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag mb-2"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-      >
-        {isProcessing ? (
-          <><RefreshCw size={11} className="animate-spin" /> Analyzing…</>
-        ) : (
-          <><Wand2 size={11} /> Analyze Image</>
-        )}
-      </button>
+      {/* Length selector + Analyze button */}
+      <div className="flex gap-1.5 mb-2">
+        <select
+          value={length}
+          onChange={(e) => setLength(e.target.value)}
+          disabled={isProcessing}
+          className="px-2 py-2 text-xs outline-none nodrag shrink-0"
+          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
+        >
+          {LENGTH_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+        <button
+          onClick={handleAnalyze}
+          disabled={!hasImage || isProcessing}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+          style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+        >
+          {isProcessing ? (
+            <><RefreshCw size={11} className="animate-spin" /> Analyzing…</>
+          ) : (
+            <><Wand2 size={11} /> Analyze Image</>
+          )}
+        </button>
+      </div>
 
       {/* Error state */}
       {data.status === 'error' && !hasPrompt && (
