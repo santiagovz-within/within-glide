@@ -47,6 +47,8 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
   'outputNode:video:target':               'video',
   'videoToGifNode:video:target':           'video',
   'videoToGifNode:gif:source':             'image',
+  'removeBgNode:image:target':             'image',
+  'removeBgNode:image:source':             'image',
 };
 
 function PortIcon({ type, size = 9 }: { type: PortType; size?: number }) {

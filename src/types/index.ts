@@ -82,6 +82,7 @@ export type NodeType =
   | 'outputNode'
   | 'galleryOutputNode'
   | 'videoToGifNode'
+  | 'removeBgNode'
   | 'groupNode';
 
 export interface FlowViewport {
@@ -204,6 +205,13 @@ export interface ImageToPromptNodeData extends Record<string, unknown> {
   label?: string;
 }
 
+export interface RemoveBgNodeData extends Record<string, unknown> {
+  inputImageUrl?: string;
+  outputImageUrl?: string;
+  status: NodeStatus;
+  label?: string;
+}
+
 export interface VideoToGifNodeData extends Record<string, unknown> {
   videoUrl?: string;
   fps?: number;
@@ -239,6 +247,7 @@ export type NodeData =
   | OutputNodeData
   | GalleryOutputNodeData
   | VideoToGifNodeData
+  | RemoveBgNodeData
   | GroupNodeData;
 
 export type NodeStatus = 'idle' | 'processing' | 'completed' | 'error';

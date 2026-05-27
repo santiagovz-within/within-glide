@@ -54,6 +54,10 @@ export const FAL_MODELS = {
     scaleOptions: [2, 4],
     type: 'upscale' as const,
   },
+  'ideogram-remove-bg': {
+    endpoint: 'fal-ai/ideogram/remove-background',
+    type: 'remove-bg' as const,
+  },
 } as const;
 
 export const MODELS: Record<string, ModelConfig> = {

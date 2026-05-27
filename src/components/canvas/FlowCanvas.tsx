@@ -30,11 +30,12 @@ import { SelectNode } from './nodes/SelectNode';
 import { OutputNode } from './nodes/OutputNode';
 import { GalleryOutputNode } from './nodes/GalleryOutputNode';
 import { VideoToGifNode } from './nodes/VideoToGifNode';
+import { RemoveBgNode } from './nodes/RemoveBgNode';
 import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, RemoveBgNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
@@ -51,6 +52,7 @@ const nodeTypes = {
   outputNode: OutputNode,
   galleryOutputNode: GalleryOutputNode,
   videoToGifNode: VideoToGifNode,
+  removeBgNode: RemoveBgNode,
   groupNode: GroupNode,
 };
 
@@ -70,6 +72,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   outputNode:         {},
   galleryOutputNode:  {},
   videoToGifNode:     { fps: 12, outputWidth: 480, startTime: 0, duration: 10, ditherLevel: 4 },
+  removeBgNode:       { status: 'idle' },
   groupNode:          { label: 'Group', color: 'Blue' },
 };
 
@@ -305,6 +308,7 @@ export function FlowCanvas() {
       if (targetNodeType === 'imageGenNode')      return 'ref_0';
       if (targetNodeType === 'upscaleNode')       return 'image';
       if (targetNodeType === 'modifyNode')        return 'image';
+      if (targetNodeType === 'removeBgNode')      return 'image';
       if (targetNodeType === 'outputNode')        return 'image';
       if (targetNodeType === 'imageToPromptNode') return 'image';
     }
@@ -351,7 +355,7 @@ export function FlowCanvas() {
       if (!targetNode) return;
       const handle = targetEdge.targetHandle ?? '';
 
-      if (targetNode.type === 'upscaleNode' || targetNode.type === 'modifyNode') {
+      if (targetNode.type === 'upscaleNode' || targetNode.type === 'modifyNode' || targetNode.type === 'removeBgNode') {
         updateNodeData(targetEdge.target, { inputImageUrl: imageUrl ?? undefined });
       } else if (targetNode.type === 'imageToPromptNode') {
         updateNodeData(targetEdge.target, { inputImageUrl: imageUrl ?? undefined });
@@ -443,9 +447,10 @@ export function FlowCanvas() {
         let imageUrl: string | undefined;
         if (sourceNode?.type === 'imageInputNode') imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
         else if (sourceNode?.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
-        else if (sourceNode?.type === 'upscaleNode') imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
-        else if (sourceNode?.type === 'modifyNode') imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
-        else if (sourceNode?.type === 'selectNode') imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
+        else if (sourceNode?.type === 'upscaleNode')  imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+        else if (sourceNode?.type === 'modifyNode')   imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
+        else if (sourceNode?.type === 'selectNode')   imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
+        else if (sourceNode?.type === 'removeBgNode') imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
         if (imageUrl) {
           propagateImageToTarget(connection.source, {
             id: '', source: connection.source, target: connection.target,
