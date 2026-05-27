@@ -176,12 +176,12 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       await ffmpeg.writeFile('input.mp4', await fetchFile(data.videoUrl));
       setProgress(10);
 
-      const ditherFilter = DITHER_FILTERS[(dither - 1)] ?? 'floyd_steinberg';
-      const scale        = `scale=${width}:-1:flags=lanczos`;
-      const fpsFilter    = `fps=${fps}`;
-      const vfPalette    = `${fpsFilter},${scale},palettegen=stats_mode=diff`;
-      const vfGif        = `${fpsFilter},${scale},paletteuse=dither=${ditherFilter}`;
-      const ssArgs       = ['-ss', String(startTime), '-t', String(duration)];
+      const ditherFilter  = DITHER_FILTERS[(dither - 1)] ?? 'floyd_steinberg';
+      const scale         = `scale=${width}:-1:flags=lanczos`;
+      const fpsFilter     = `fps=${fps}`;
+      const vfPalette     = `${fpsFilter},${scale},palettegen=stats_mode=diff`;
+      const filterComplex = `[0:v]${fpsFilter},${scale}[x];[x][1:v]paletteuse=dither=${ditherFilter}`;
+      const ssArgs        = ['-ss', String(startTime), '-t', String(duration)];
 
       // ── Pass 1: generate palette ────────────────────────────────────────
       setProgressLabel('Pass 1: generating palette…');
@@ -201,7 +201,7 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
         ...ssArgs,
         '-i', 'input.mp4',
         '-i', 'palette.png',
-        '-filter_complex', `[0:v][1:v]${vfGif}`,
+        '-filter_complex', filterComplex,
         '-y', 'output.gif',
       ]);
       ffmpeg.off('progress', onP2);

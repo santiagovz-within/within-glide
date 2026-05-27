@@ -201,6 +201,7 @@ export interface GroupNodeData extends Record<string, unknown> {
 export interface ImageToPromptNodeData extends Record<string, unknown> {
   inputImageUrl?: string;
   generatedPrompt?: string;
+  promptHistory?: string[];
   status: NodeStatus;
   label?: string;
 }

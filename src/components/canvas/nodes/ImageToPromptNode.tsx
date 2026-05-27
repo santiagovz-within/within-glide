@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Wand2, RefreshCw, Copy, Check, AlertTriangle } from 'lucide-react';
+import { Wand2, RefreshCw, Copy, Check, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -17,12 +17,29 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const promptHistory: string[] = data.promptHistory ?? [];
+  const [historyIdx, setHistoryIdx] = useState(() => Math.max(0, promptHistory.length - 1));
+  const isViewingHistory = promptHistory.length > 1 && historyIdx < promptHistory.length - 1;
+
+  // Stay at latest when a new result is appended
+  const prevLen = useRef(promptHistory.length);
+  useEffect(() => {
+    if (promptHistory.length > prevLen.current) setHistoryIdx(promptHistory.length - 1);
+    prevLen.current = promptHistory.length;
+  }, [promptHistory.length]);
+
   useLayoutEffect(() => {
     if (textareaRef.current) autoResize(textareaRef.current);
-  }, [data.generatedPrompt]);
+  }, [data.generatedPrompt, historyIdx]);
 
   function updateData(updates: Partial<ImageToPromptNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
+  }
+
+  function propagate(prompt: string) {
+    document.dispatchEvent(new CustomEvent('node:prompt-propagate', {
+      detail: { sourceNodeId: id, prompt },
+    }));
   }
 
   async function handleAnalyze() {
@@ -37,16 +54,23 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       });
       const result = await res.json();
       if (result.prompt) {
-        updateData({ status: 'completed', generatedPrompt: result.prompt });
-        document.dispatchEvent(new CustomEvent('node:prompt-propagate', {
-          detail: { sourceNodeId: id, prompt: result.prompt },
-        }));
+        const history = data.promptHistory ?? [];
+        const newHistory = [...history, result.prompt];
+        updateData({ status: 'completed', generatedPrompt: result.prompt, promptHistory: newHistory });
+        propagate(result.prompt);
       } else {
         updateData({ status: 'error' });
       }
     } catch {
       updateData({ status: 'error' });
     }
+  }
+
+  function navigateHistory(idx: number) {
+    setHistoryIdx(idx);
+    const entry = promptHistory[idx] ?? '';
+    updateData({ generatedPrompt: entry });
+    propagate(entry);
   }
 
   function handleCopy() {
@@ -65,7 +89,7 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
 
   return (
     <NodeWrapper
-      title="Image → Prompt"
+      title="Image to Prompt"
       icon={<Wand2 size={14} />}
       status={data.status}
       selected={selected}
@@ -74,6 +98,31 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
     >
       <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
       <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" />
+
+      {/* Version history navigation */}
+      {promptHistory.length > 1 && (
+        <div className="flex items-center justify-between mb-1.5">
+          <button
+            onClick={() => navigateHistory(Math.max(0, historyIdx - 1))}
+            disabled={historyIdx === 0}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronLeft size={13} />
+          </button>
+          <span className="text-xs" style={{ color: isViewingHistory ? 'var(--color-accent)' : 'var(--color-white-muted)', fontSize: 10 }}>
+            {`VERSION ${historyIdx + 1}`}
+          </span>
+          <button
+            onClick={() => navigateHistory(Math.min(promptHistory.length - 1, historyIdx + 1))}
+            disabled={historyIdx === promptHistory.length - 1}
+            className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
+            style={{ color: 'var(--color-white-muted)' }}
+          >
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      )}
 
       {/* Image preview */}
       {hasImage ? (
