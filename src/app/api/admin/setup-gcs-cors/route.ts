@@ -43,16 +43,21 @@ export async function POST() {
 
   const storage = new Storage({ credentials });
 
-  await storage.bucket(bucketName).setMetadata({
-    cors: [
-      {
-        origin: ['*'],
-        method: ['GET', 'PUT', 'HEAD', 'OPTIONS'],
-        responseHeader: ['Content-Type', 'Access-Control-Allow-Origin'],
-        maxAgeSeconds: 3600,
-      },
-    ],
-  });
+  try {
+    await storage.bucket(bucketName).setMetadata({
+      cors: [
+        {
+          origin: ['*'],
+          method: ['GET', 'PUT', 'HEAD', 'OPTIONS'],
+          responseHeader: ['Content-Type', 'Access-Control-Allow-Origin'],
+          maxAgeSeconds: 3600,
+        },
+      ],
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   return NextResponse.json({ success: true, bucket: bucketName });
 }
