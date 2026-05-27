@@ -143,6 +143,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       if (result.mediaUrls?.[0]) {
         const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
         updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
+        document.dispatchEvent(new CustomEvent('node:video-propagate', {
+          detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
+        }));
       } else if (result.requestId) {
         pollForResult(result.requestId);
       } else {
@@ -171,6 +174,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           clearInterval(interval);
           const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
           updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
+          document.dispatchEvent(new CustomEvent('node:video-propagate', {
+            detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
+          }));
           setIsGenerating(false);
         } else if (result.status === 'failed') {
           clearInterval(interval);

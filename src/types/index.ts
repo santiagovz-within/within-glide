@@ -81,6 +81,7 @@ export type NodeType =
   | 'selectNode'
   | 'outputNode'
   | 'galleryOutputNode'
+  | 'videoToGifNode'
   | 'groupNode';
 
 export interface FlowViewport {
@@ -203,6 +204,17 @@ export interface ImageToPromptNodeData extends Record<string, unknown> {
   label?: string;
 }
 
+export interface VideoToGifNodeData extends Record<string, unknown> {
+  videoUrl?: string;
+  fps?: number;
+  outputWidth?: number;
+  startTime?: number;
+  duration?: number;
+  ditherLevel?: number;
+  gifUrl?: string;
+  label?: string;
+}
+
 export interface ModifyNodeData extends Record<string, unknown> {
   model: string;
   prompt?: string;
@@ -226,6 +238,7 @@ export type NodeData =
   | SelectNodeData
   | OutputNodeData
   | GalleryOutputNodeData
+  | VideoToGifNodeData
   | GroupNodeData;
 
 export type NodeStatus = 'idle' | 'processing' | 'completed' | 'error';

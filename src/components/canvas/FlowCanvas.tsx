@@ -29,11 +29,12 @@ import { ModifyNode } from './nodes/ModifyNode';
 import { SelectNode } from './nodes/SelectNode';
 import { OutputNode } from './nodes/OutputNode';
 import { GalleryOutputNode } from './nodes/GalleryOutputNode';
+import { VideoToGifNode } from './nodes/VideoToGifNode';
 import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
@@ -49,6 +50,7 @@ const nodeTypes = {
   selectNode: SelectNode,
   outputNode: OutputNode,
   galleryOutputNode: GalleryOutputNode,
+  videoToGifNode: VideoToGifNode,
   groupNode: GroupNode,
 };
 
@@ -67,6 +69,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   selectNode:         {},
   outputNode:         {},
   galleryOutputNode:  {},
+  videoToGifNode:     { fps: 12, outputWidth: 480, startTime: 0, duration: 10, ditherLevel: 4 },
   groupNode:          { label: 'Group', color: 'Blue' },
 };
 
@@ -306,7 +309,8 @@ export function FlowCanvas() {
       if (targetNodeType === 'imageToPromptNode') return 'image';
     }
     if (sourceHandleId === 'video') {
-      if (targetNodeType === 'outputNode') return 'video';
+      if (targetNodeType === 'outputNode')     return 'video';
+      if (targetNodeType === 'videoToGifNode') return 'video';
     }
     return null;
   }
@@ -383,6 +387,18 @@ export function FlowCanvas() {
     return () => document.removeEventListener('node:image-propagate', handleImagePropagate);
   }, [edges, propagateImageToTarget]);
 
+  useEffect(() => {
+    function handleVideoPropagate(e: Event) {
+      const { sourceNodeId, videoUrl } = (e as CustomEvent).detail as { sourceNodeId: string; videoUrl: string };
+      const connectedEdges = edges.filter((edge) => edge.source === sourceNodeId && edge.sourceHandle === 'video');
+      for (const edge of connectedEdges) {
+        if (edge.targetHandle === 'video') updateNodeData(edge.target, { videoUrl });
+      }
+    }
+    document.addEventListener('node:video-propagate', handleVideoPropagate);
+    return () => document.removeEventListener('node:video-propagate', handleVideoPropagate);
+  }, [edges, updateNodeData]);
+
   const onConnectHandler = useCallback(
     (connection: Connection) => {
       // ── Single-connection enforcement ────────────────────────────────
@@ -437,6 +453,15 @@ export function FlowCanvas() {
           }, imageUrl);
         }
       }
+
+      if (connection.sourceHandle === 'video' && connection.targetHandle === 'video') {
+        const latestNodes = useFlowStore.getState().nodes;
+        const sourceNode = latestNodes.find((n) => n.id === connection.source);
+        const videoUrl = sourceNode?.type === 'videoGenNode'
+          ? (sourceNode.data as VideoGenNodeData).videoUrl
+          : undefined;
+        if (videoUrl) updateNodeData(connection.target, { videoUrl });
+      }
     },
     [onConnect, nodes, updateNodeData, propagateImageToTarget]  // keep `nodes` for prompt propagation
   );
@@ -449,6 +474,9 @@ export function FlowCanvas() {
         if (!edge) continue;
         if (edge.sourceHandle === 'image') {
           propagateImageToTarget(edge.source, edge, null);
+        }
+        if (edge.sourceHandle === 'video' && edge.targetHandle === 'video') {
+          updateNodeData(edge.target, { videoUrl: undefined });
         }
         if (edge.sourceHandle === 'prompt') {
           // Check if the target still has another prompt edge after this removal

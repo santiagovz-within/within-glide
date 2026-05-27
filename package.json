@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@fal-ai/client": "^1.10.1",
+    "@ffmpeg/ffmpeg": "^0.12.10",
+    "@ffmpeg/util": "^0.12.1",
     "@google-cloud/storage": "^7.19.0",
     "@google/genai": "^2.0.0",
     "@supabase/ssr": "^0.10.3",
