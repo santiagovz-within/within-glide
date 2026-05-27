@@ -7,7 +7,8 @@
     "build": "node ./node_modules/next/dist/bin/next build",
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "setup-gcs-cors": "node --env-file=.env.local scripts/setup-gcs-cors.mjs"
   },
   "dependencies": {
     "@fal-ai/client": "^1.10.1",
