@@ -3,9 +3,13 @@ import { createClient } from '@/lib/supabase/server';
 import { getSignedUploadUrl, getSignedReadUrl } from '@/lib/gcs';
 
 const ALLOWED_TYPES: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png':  'png',
-  'image/webp': 'webp',
+  'image/jpeg':      'jpg',
+  'image/png':       'png',
+  'image/webp':      'webp',
+  'video/mp4':       'mp4',
+  'video/webm':      'webm',
+  'video/quicktime': 'mov',
+  'video/mpeg':      'mpeg',
 };
 
 // POST /api/upload/sign

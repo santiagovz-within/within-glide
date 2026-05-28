@@ -76,6 +76,8 @@ export type NodeType =
   | 'imageToPromptNode'
   | 'imageGenNode'
   | 'videoGenNode'
+  | 'videoInputNode'
+  | 'videoUpscaleNode'
   | 'upscaleNode'
   | 'modifyNode'
   | 'selectNode'
@@ -236,12 +238,29 @@ export interface ModifyNodeData extends Record<string, unknown> {
   label?: string;
 }
 
+export interface VideoInputNodeData extends Record<string, unknown> {
+  videoUrl?: string;
+  label?: string;
+  uploadStatus?: 'compressing' | 'uploading' | 'error';
+  uploadProgress?: number;
+  uploadError?: string;
+}
+
+export interface VideoUpscaleNodeData extends Record<string, unknown> {
+  videoUrl?: string;
+  upscaleFactor?: number;
+  status: NodeStatus;
+  label?: string;
+}
+
 export type NodeData =
   | PromptNodeData
   | ImageInputNodeData
   | ImageToPromptNodeData
   | ImageGenNodeData
   | VideoGenNodeData
+  | VideoInputNodeData
+  | VideoUpscaleNodeData
   | UpscaleNodeData
   | ModifyNodeData
   | SelectNodeData

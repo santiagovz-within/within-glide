@@ -1,0 +1,49 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { fal } from '@fal-ai/client';
+
+fal.config({ credentials: process.env.FAL_KEY });
+
+const FAL_ENDPOINT = 'fal-ai/topaz/upscale/video';
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { videoUrl, upscaleFactor = 2, nodeId } = await request.json();
+
+    if (!videoUrl) {
+      return NextResponse.json({ error: 'videoUrl is required' }, { status: 400 });
+    }
+
+    if (![2, 3, 4].includes(upscaleFactor)) {
+      return NextResponse.json({ error: 'upscaleFactor must be 2, 3, or 4' }, { status: 400 });
+    }
+
+    const { request_id } = await fal.queue.submit(FAL_ENDPOINT, {
+      input: {
+        video_url: videoUrl,
+        upscale_factor: upscaleFactor,
+      },
+    });
+
+    await supabase.from('generations').insert({
+      user_id: user.id,
+      source_type: 'canvas',
+      node_id: nodeId,
+      model: FAL_ENDPOINT,
+      parameters: { upscaleFactor },
+      media_type: 'video',
+      media_url: '',
+      status: 'processing',
+      fal_request_id: request_id,
+    });
+
+    return NextResponse.json({ requestId: request_id, status: 'pending' });
+  } catch (err) {
+    console.error('[video-upscale] submit error:', err);
+    return NextResponse.json({ error: 'Failed to submit upscale job', details: String(err) }, { status: 500 });
+  }
+}
