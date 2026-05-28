@@ -71,7 +71,7 @@ function BarRow({ label, value, max, gradient, color }: { label: string; value: 
     <div className="flex items-center gap-3 py-1.5">
       <span
         className="text-xs truncate"
-        style={{ color: 'var(--color-white-muted)', minWidth: 120, maxWidth: 120 }}
+        style={{ color: 'var(--color-white-muted)', minWidth: 160, maxWidth: 160 }}
         title={label}
       >
         {label}
@@ -228,7 +228,7 @@ export default function AdminUsagePage() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 gap-4 mb-4">
         {/* Model usage */}
         <div style={cardStyle}>
           <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>Model Usage</p>
@@ -269,25 +269,26 @@ export default function AdminUsagePage() {
           )}
         </div>
 
-        {/* Node usage */}
-        <div style={cardStyle}>
-          <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>Node Usage</p>
-          {(data.nodeUsage ?? []).length === 0 ? (
-            <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No data yet</p>
-          ) : (
-            <div>
-              {(data.nodeUsage ?? []).map((n) => (
-                <BarRow
-                  key={n.nodeType}
-                  label={NODE_LABELS[n.nodeType] ?? n.nodeType}
-                  value={n.count}
-                  max={maxNodeCount}
-                  color={NODE_COLORS[n.nodeType] ?? '#818cf8'}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+      </div>
+
+      {/* Node usage */}
+      <div style={{ ...cardStyle, marginBottom: 16 }}>
+        <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>Node Usage</p>
+        {(data.nodeUsage ?? []).length === 0 ? (
+          <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No data yet</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-8">
+            {(data.nodeUsage ?? []).map((n) => (
+              <BarRow
+                key={n.nodeType}
+                label={NODE_LABELS[n.nodeType] ?? n.nodeType}
+                value={n.count}
+                max={maxNodeCount}
+                color={NODE_COLORS[n.nodeType] ?? '#818cf8'}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Hourly traffic */}
