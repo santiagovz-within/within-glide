@@ -39,8 +39,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to obtain realtime token' }, { status: 500 });
     }
 
-    // FAL returns the token string directly as the response body
-    const token = await response.text();
+    // FAL returns the token as a JSON-encoded string (e.g. `"eyJ..."` with quotes).
+    // Parsing as JSON strips the surrounding quotes to give the bare JWT string.
+    const raw = await response.text();
+    const token: string = raw.startsWith('"') ? JSON.parse(raw) : raw;
 
     return NextResponse.json({ token });
   } catch (err) {
