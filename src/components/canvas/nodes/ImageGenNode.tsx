@@ -83,6 +83,18 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     }));
   }
 
+  function navigateHistory(idx: number) {
+    setHistIdx(idx);
+    const images = genHistory[idx] ?? [];
+    // Make the selected version the active output so downstream nodes receive it
+    updateData({ generatedImages: images });
+    if (images[0]) {
+      document.dispatchEvent(new CustomEvent('node:image-propagate', {
+        detail: { sourceNodeId: id, imageUrl: images[0] },
+      }));
+    }
+  }
+
   function handleModelChange(newModel: string) {
     const newFalConfig = FAL_MODELS[newModel as keyof typeof FAL_MODELS];
     const newConfig = IMAGE_MODELS.find((m) => m.id === newModel);
@@ -318,7 +330,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {genHistory.length > 1 && (
         <div className="flex items-center justify-between mb-1">
           <button
-            onClick={() => setHistIdx(i => Math.max(0, i - 1))}
+            onClick={() => navigateHistory(Math.max(0, histIdx - 1))}
             disabled={histIdx === 0}
             className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
             style={{ color: 'var(--color-white-muted)' }}
@@ -329,7 +341,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             {`VERSION ${histIdx + 1}`}
           </span>
           <button
-            onClick={() => setHistIdx(i => Math.min(genHistory.length - 1, i + 1))}
+            onClick={() => navigateHistory(Math.min(genHistory.length - 1, histIdx + 1))}
             disabled={histIdx === genHistory.length - 1}
             className="flex items-center p-0.5 rounded transition-opacity disabled:opacity-30 nodrag"
             style={{ color: 'var(--color-white-muted)' }}
