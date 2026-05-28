@@ -7,7 +7,7 @@ import { Brush, Camera, Download, Eraser, Upload, Trash2, Zap } from 'lucide-rea
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const CAP_USD = 10;
+const CAP_USD = 4;
 const COMPUTE_SECONDS_ESTIMATE = 2; // estimate per request for cost tracking
 
 const IMAGE_SIZES = {
@@ -359,14 +359,14 @@ export function RealtimePage() {
           <Zap size={12} style={{ color: 'var(--color-accent)' }} />
           <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-accent)' }}>Beta</span>
           <span className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
-            Realtime generation is in beta — daily usage is capped at $10.
+            Realtime generation is in beta — daily usage is capped at $4.
           </span>
         </div>
         <div className="flex items-center gap-3 ml-auto shrink-0">
           {isCapExceeded ? (
             <span className="text-xs font-medium" style={{ color: '#f87171' }}>Daily limit reached · resets at midnight UTC</span>
           ) : (
-            <span className="text-xs tabular-nums" style={{ color: 'var(--color-white-muted)' }}>${usage.costUsd.toFixed(4)} / $10.00</span>
+            <span className="text-xs tabular-nums" style={{ color: 'var(--color-white-muted)' }}>${usage.costUsd.toFixed(4)} / $4.00</span>
           )}
           <div style={{ width: 120, height: 6, borderRadius: 3, background: 'var(--color-bg-surface)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ height: '100%', width: `${usagePct}%`, borderRadius: 3, background: isCapExceeded ? '#ef4444' : usagePct > 80 ? '#f59e0b' : 'var(--color-accent)', transition: 'width 0.4s ease-out' }} />
