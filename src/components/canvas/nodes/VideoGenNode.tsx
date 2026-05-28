@@ -122,7 +122,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     setHistIdx(idx);
     const url = videoHistory[idx];
     if (url) {
-      updateData({ videoUrl: url });
+      // Update store directly so downstream nodes re-render before propagation fires.
+      useFlowStore.getState().updateNodeData(id, { videoUrl: url });
       document.dispatchEvent(new CustomEvent('node:video-propagate', {
         detail: { sourceNodeId: id, videoUrl: url },
       }));

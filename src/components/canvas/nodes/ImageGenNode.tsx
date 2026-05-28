@@ -9,6 +9,7 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
 import { IMAGE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 const RESOLUTIONS = ['1K', '2K', '4K'];
 const DEFAULT_MAX_REF_IMAGES = 14;
@@ -86,8 +87,9 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   function navigateHistory(idx: number) {
     setHistIdx(idx);
     const images = genHistory[idx] ?? [];
-    // Make the selected version the active output so downstream nodes receive it
-    updateData({ generatedImages: images });
+    // Update store directly so downstream nodes that read from Zustand (OutputNode, SelectNode,
+    // GalleryOutputNode) re-render before the propagation event fires.
+    useFlowStore.getState().updateNodeData(id, { generatedImages: images });
     if (images[0]) {
       document.dispatchEvent(new CustomEvent('node:image-propagate', {
         detail: { sourceNodeId: id, imageUrl: images[0] },
