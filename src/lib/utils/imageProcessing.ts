@@ -1,8 +1,10 @@
 import imageCompression from 'browser-image-compression';
 
 // --- Thresholds ---
-const COMPRESSION_THRESHOLD = 15 * 1024 * 1024; // compress if > 15 MB
-const HARD_LIMIT = 20 * 1024 * 1024;            // never upload > 20 MB
+const COMPRESSION_THRESHOLD = 500 * 1024; // compress if > 500 KB
+const HARD_LIMIT = 20 * 1024 * 1024;      // never upload > 20 MB
+const UPLOAD_MAX_SIZE_MB = 2;              // target upload size
+const UPLOAD_MAX_PX = 2048;               // target max dimension
 
 // Accepted MIME types (must match the server's allowedTypes in /api/upload)
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
@@ -81,46 +83,26 @@ export async function processImageFile(
   onProgress('validating');
   await validateImage(file);
 
-  // Small files: skip compression entirely
+  // Small files that are already compact: skip re-encoding
   if (file.size <= COMPRESSION_THRESHOLD) {
     return file;
   }
 
-  // --- Compress: first pass, target 14 MB ---
+  // --- Compress: target ≤ 2 MB, ≤ 2048 px (good quality for AI model reference images) ---
   onProgress('compressing', 0);
 
   let result: File;
   try {
     result = await imageCompression(file, {
-      maxSizeMB: 14,
-      maxWidthOrHeight: 8192,
+      maxSizeMB: UPLOAD_MAX_SIZE_MB,
+      maxWidthOrHeight: UPLOAD_MAX_PX,
       useWebWorker: true,
-      maxIteration: 15,
       onProgress: (p) => onProgress('compressing', p),
     });
   } catch (err) {
     throw new Error(
       `Compression failed: ${err instanceof Error ? err.message : 'unknown error'}.`,
     );
-  }
-
-  // --- Compress: second pass if first pass couldn't get under the hard limit ---
-  if (result.size > HARD_LIMIT) {
-    onProgress('compressing', 0);
-    try {
-      result = await imageCompression(file, {
-        maxSizeMB: 19,
-        maxWidthOrHeight: 2048,
-        initialQuality: 0.5,
-        useWebWorker: true,
-        maxIteration: 20,
-        onProgress: (p) => onProgress('compressing', p),
-      });
-    } catch (err) {
-      throw new Error(
-        `Compression failed: ${err instanceof Error ? err.message : 'unknown error'}.`,
-      );
-    }
   }
 
   if (result.size > HARD_LIMIT) {
@@ -130,4 +112,33 @@ export async function processImageFile(
   }
 
   return result;
+}
+
+/**
+ * Fetches an image URL, draws it onto an off-screen canvas at ≤640px, and returns
+ * a compressed JPEG data URL suitable for storing as a flow thumbnail.
+ * Returns null silently on any failure (CORS not set up, network error, etc.).
+ */
+export async function compressToThumbnailDataUrl(imageUrl: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const MAX = 640;
+        const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.round(img.naturalWidth * scale);
+        const h = Math.round(img.naturalHeight * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = imageUrl;
+  });
 }

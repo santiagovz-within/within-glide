@@ -9,6 +9,7 @@ import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
 import { AUTOSAVE_DEBOUNCE_MS } from '@/lib/utils/constants';
 import type { NodeData, ImageGenNodeData, UpscaleNodeData, ImageInputNodeData } from '@/types';
+import { compressToThumbnailDataUrl } from '@/lib/utils/imageProcessing';
 
 /** Returns the first available generated/uploaded image URL from the canvas nodes */
 function extractThumbnail(nodes: Node<NodeData>[]): string | null {
@@ -58,7 +59,8 @@ export default function FlowEditorPage() {
     const timer = setTimeout(async () => {
       setSaving(true);
       try {
-        const thumbnail = extractThumbnail(nodes);
+        const rawThumb = extractThumbnail(nodes);
+        const thumbnail = rawThumb ? (await compressToThumbnailDataUrl(rawThumb) ?? rawThumb) : null;
         await supabase
           .from('flows')
           .update({

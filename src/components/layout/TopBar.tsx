@@ -7,6 +7,7 @@ import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
 import type { Node } from '@xyflow/react';
 import type { NodeData, ImageGenNodeData, UpscaleNodeData, ImageInputNodeData } from '@/types';
+import { compressToThumbnailDataUrl } from '@/lib/utils/imageProcessing';
 
 function extractThumbnail(nodes: Node<NodeData>[]): string | null {
   for (const node of nodes) {
@@ -81,7 +82,8 @@ export function TopBar({ flowId }: TopBarProps) {
     if (!currentFlow || isSaving) return;
     setSaving(true);
     try {
-      const thumbnail = extractThumbnail(nodes);
+      const rawThumb = extractThumbnail(nodes);
+      const thumbnail = rawThumb ? (await compressToThumbnailDataUrl(rawThumb) ?? rawThumb) : null;
       await supabase
         .from('flows')
         .update({
@@ -109,7 +111,8 @@ export function TopBar({ flowId }: TopBarProps) {
     if (!confirm(confirmMsg)) return;
     setSavingBase(true);
     try {
-      const thumbnail = extractThumbnail(nodes);
+      const rawThumb = extractThumbnail(nodes);
+      const thumbnail = rawThumb ? (await compressToThumbnailDataUrl(rawThumb) ?? rawThumb) : null;
       await supabase.from('flows').update({
         is_template: !isBaseFlow,
         flow_data: {
