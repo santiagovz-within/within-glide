@@ -7,9 +7,42 @@ interface UsageData {
   totalGenerations: number;
   modelUsage: { model: string; count: number }[];
   userUsage: { userId: string; username: string; count: number }[];
+  nodeUsage: { nodeType: string; count: number }[];
   hourlyTraffic: number[];
   mediaTypeSplit: { image: number; video: number };
 }
+
+const NODE_LABELS: Record<string, string> = {
+  promptNode:        'Prompt',
+  imageInputNode:    'Image Input',
+  imageToPromptNode: 'Image to Prompt',
+  imageGenNode:      'Image Generation',
+  videoGenNode:      'Video Generation',
+  upscaleNode:       'Upscale',
+  modifyNode:        'Modify',
+  selectNode:        'Select',
+  removeBgNode:      'Remove Background',
+  videoToGifNode:    'Video to GIF',
+  outputNode:        'Output',
+  galleryOutputNode: 'Output Gallery',
+  groupNode:         'Group',
+};
+
+const NODE_COLORS: Record<string, string> = {
+  promptNode:        '#3b9eff',
+  imageInputNode:    '#a855f7',
+  imageToPromptNode: '#8b5cf6',
+  imageGenNode:      '#a855f7',
+  videoGenNode:      '#34d399',
+  upscaleNode:       '#f59e0b',
+  modifyNode:        '#fb923c',
+  selectNode:        '#60a5fa',
+  removeBgNode:      '#f472b6',
+  videoToGifNode:    '#4ade80',
+  outputNode:        '#94a3b8',
+  galleryOutputNode: '#cbd5e1',
+  groupNode:         '#64748b',
+};
 
 // Deterministic per-model colors
 const MODEL_COLOR_MAP: Record<string, string> = {
@@ -38,7 +71,7 @@ function BarRow({ label, value, max, gradient, color }: { label: string; value: 
     <div className="flex items-center gap-3 py-1.5">
       <span
         className="text-xs truncate"
-        style={{ color: 'var(--color-white-muted)', minWidth: 160, maxWidth: 160 }}
+        style={{ color: 'var(--color-white-muted)', minWidth: 120, maxWidth: 120 }}
         title={label}
       >
         {label}
@@ -145,6 +178,7 @@ export default function AdminUsagePage() {
 
   const maxModelCount = Math.max(...data.modelUsage.map((m) => m.count), 1);
   const maxUserCount  = Math.max(...data.userUsage.map((u) => u.count), 1);
+  const maxNodeCount  = Math.max(...(data.nodeUsage ?? []).map((n) => n.count), 1);
 
   return (
     <div className="h-full overflow-auto p-8">
@@ -194,7 +228,7 @@ export default function AdminUsagePage() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-3 gap-4 mb-4">
         {/* Model usage */}
         <div style={cardStyle}>
           <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>Model Usage</p>
@@ -229,6 +263,26 @@ export default function AdminUsagePage() {
                   value={u.count}
                   max={maxUserCount}
                   gradient
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Node usage */}
+        <div style={cardStyle}>
+          <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>Node Usage</p>
+          {(data.nodeUsage ?? []).length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No data yet</p>
+          ) : (
+            <div>
+              {(data.nodeUsage ?? []).map((n) => (
+                <BarRow
+                  key={n.nodeType}
+                  label={NODE_LABELS[n.nodeType] ?? n.nodeType}
+                  value={n.count}
+                  max={maxNodeCount}
+                  color={NODE_COLORS[n.nodeType] ?? '#818cf8'}
                 />
               ))}
             </div>

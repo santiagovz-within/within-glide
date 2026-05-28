@@ -31,6 +31,16 @@ export async function GET() {
 
   const rows = generations ?? [];
 
+  // Node usage — count how many times each node type appears across all saved flows
+  const { data: flows } = await supabase.from('flows').select('flow_data');
+  const nodeCounts: Record<string, number> = {};
+  for (const flow of flows ?? []) {
+    const nodes = (flow.flow_data as { nodes?: { type?: string }[] })?.nodes ?? [];
+    for (const node of nodes) {
+      if (node.type) nodeCounts[node.type] = (nodeCounts[node.type] ?? 0) + 1;
+    }
+  }
+
   // Model usage
   const modelCounts: Record<string, number> = {};
   for (const g of rows) {
@@ -76,5 +86,8 @@ export async function GET() {
     userUsage,
     hourlyTraffic: hourCounts,
     mediaTypeSplit: { image: imageCnt, video: videoCnt },
+    nodeUsage: Object.entries(nodeCounts)
+      .map(([nodeType, count]) => ({ nodeType, count }))
+      .sort((a, b) => b.count - a.count),
   });
 }
