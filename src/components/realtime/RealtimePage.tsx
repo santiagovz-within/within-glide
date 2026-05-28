@@ -8,7 +8,7 @@ import { Brush, Camera, Eraser, Upload, Trash2, Zap } from 'lucide-react';
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const CAP_USD = 10;
-const COST_PER_REQUEST = 2 * 0.00194; // 2 compute seconds @ $0.00194/s
+const COST_PER_REQUEST = 2 * 0.00194;
 
 const IMAGE_SIZES = {
   standard: { width: 512, height: 512 },
@@ -45,32 +45,65 @@ interface FluxImage {
 }
 type FluxResult = { images?: FluxImage[] };
 
+// ─── Shared button style ───────────────────────────────────────────────────────
+
+function pillStyle(active: boolean, disabled = false, danger = false): React.CSSProperties {
+  let bg = 'transparent';
+  let color = 'var(--color-white-muted)';
+  let border = '1px solid transparent';
+
+  if (disabled) {
+    return {
+      display: 'flex', alignItems: 'center', gap: 5,
+      padding: '7px 13px', borderRadius: 999,
+      fontSize: 11, fontWeight: 700, letterSpacing: '0.065em',
+      whiteSpace: 'nowrap', cursor: 'default',
+      opacity: 0.28, border, background: bg, color,
+      transition: 'all 0.15s',
+    };
+  }
+
+  if (danger) {
+    bg = 'rgba(239,68,68,0.15)';
+    color = '#f87171';
+    border = '1px solid rgba(239,68,68,0.3)';
+  } else if (active) {
+    bg = 'rgba(255,255,255,0.12)';
+    color = 'var(--color-white)';
+    border = '1px solid rgba(255,255,255,0.14)';
+  }
+
+  return {
+    display: 'flex', alignItems: 'center', gap: 5,
+    padding: '7px 13px', borderRadius: 999,
+    fontSize: 11, fontWeight: 700, letterSpacing: '0.065em',
+    whiteSpace: 'nowrap', cursor: 'pointer',
+    background: bg, color, border,
+    transition: 'all 0.15s',
+  };
+}
+
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function RealtimePage() {
-  // Tool state
   const [activeTool,  setActiveTool]  = useState<'brush' | 'eraser'>('brush');
   const [brushColor,  setBrushColor]  = useState('#000000');
   const [brushSize,   setBrushSize]   = useState(10);
   const [eraserSize,  setEraserSize]  = useState(20);
   const [openPopover, setOpenPopover] = useState<'brush' | 'eraser' | null>(null);
 
-  // Generation state
   const [prompt,       setPrompt]       = useState('');
   const [quality,      setQuality]      = useState<Quality>('standard');
   const [resultUrl,    setResultUrl]    = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [connError,    setConnError]    = useState<string | null>(null);
 
-  // Usage state
   const [usage, setUsage] = useState<UsageState>({ costUsd: 0, requestCount: 0 });
 
-  // Image upload
-  const [pendingImage,  setPendingImage] = useState<HTMLImageElement | null>(null);
+  const [pendingImage, setPendingImage] = useState<HTMLImageElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  // Webcam
-  const [webcamActive,  setWebcamActive] = useState(false);
+  const [webcamActive, setWebcamActive] = useState(false);
   const webcamActiveRef  = useRef(false);
   const videoRef         = useRef<HTMLVideoElement>(null);
   const streamRef        = useRef<MediaStream | null>(null);
@@ -78,27 +111,24 @@ export function RealtimePage() {
   const animFrameRef     = useRef<number>(0);
   const lastSendRef      = useRef<number>(0);
 
-  // Core refs
-  const canvasHandle     = useRef<DrawingCanvasHandle>(null);
-  const connectionRef    = useRef<ReturnType<typeof fal.realtime.connect<FluxInput, FluxResult>> | null>(null);
-  const debounceRef      = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const lastDataUriRef   = useRef<string>('');
-  const resultUrlRef     = useRef<string | null>(null);
-  const leftContainerRef = useRef<HTMLDivElement>(null);
-  const qualityRef       = useRef<Quality>('standard');
-  const promptRef        = useRef('');
+  const canvasHandle      = useRef<DrawingCanvasHandle>(null);
+  const connectionRef     = useRef<ReturnType<typeof fal.realtime.connect<FluxInput, FluxResult>> | null>(null);
+  const debounceRef       = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoverTimeoutRef   = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lastDataUriRef    = useRef<string>('');
+  const resultUrlRef      = useRef<string | null>(null);
+  const leftContainerRef  = useRef<HTMLDivElement>(null);
+  const qualityRef        = useRef<Quality>('standard');
+  const promptRef         = useRef('');
 
-  // Keep refs in sync with state
   useEffect(() => { qualityRef.current = quality; }, [quality]);
   useEffect(() => { promptRef.current = prompt; }, [prompt]);
 
   const isCapExceeded = usage.costUsd >= CAP_USD;
   const usagePct      = Math.min(100, (usage.costUsd / CAP_USD) * 100);
 
-  // Canvas display size (px), fitted to left panel
   const [canvasDisplay, setCanvasDisplay] = useState({ w: 512, h: 512 });
 
-  // ── Fetch usage on mount ────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/realtime/usage')
       .then(r => r.json())
@@ -106,16 +136,14 @@ export function RealtimePage() {
       .catch(() => {});
   }, []);
 
-  // ── Canvas display size via ResizeObserver ──────────────────────────────────
   useEffect(() => {
     const el = leftContainerRef.current;
     if (!el) return;
     const { width: pw, height: ph } = IMAGE_SIZES[quality];
-    const PADDING = 32;
 
     const compute = () => {
-      const cw = el.clientWidth  - PADDING;
-      const ch = el.clientHeight - PADDING;
+      const cw = el.clientWidth  - 32;
+      const ch = el.clientHeight - 32 - 108; // 32 normal pad + 108 for floating toolbar
       if (cw <= 0 || ch <= 0) return;
       const scale = Math.min(cw / pw, ch / ph, 1);
       setCanvasDisplay({ w: Math.floor(pw * scale), h: Math.floor(ph * scale) });
@@ -127,21 +155,18 @@ export function RealtimePage() {
     return () => ro.disconnect();
   }, [quality]);
 
-  // ── Blob URL tracking ───────────────────────────────────────────────────────
   const setAndTrackResultUrl = useCallback((url: string) => {
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
     resultUrlRef.current = url;
     setResultUrl(url);
   }, []);
 
-  // ── FAL token provider ──────────────────────────────────────────────────────
   const tokenProvider = useCallback(async (app: string) => {
     const res  = await fetch(`/api/fal/realtime-token?app=${encodeURIComponent(app)}`);
     const data = await res.json();
     return data.token as string;
   }, []);
 
-  // ── FAL realtime connection ─────────────────────────────────────────────────
   useEffect(() => {
     const conn = fal.realtime.connect<FluxInput, FluxResult>(
       'fal-ai/flux-2/klein/realtime',
@@ -172,15 +197,10 @@ export function RealtimePage() {
         },
       },
     );
-
     connectionRef.current = conn;
-    return () => {
-      conn.close();
-      connectionRef.current = null;
-    };
+    return () => { conn.close(); connectionRef.current = null; };
   }, [tokenProvider, setAndTrackResultUrl]);
 
-  // ── Debounced send after stroke ends ───────────────────────────────────────
   const handleStrokeEnd = useCallback((dataUri: string) => {
     if (isCapExceeded || !dataUri || webcamActiveRef.current) return;
     lastDataUriRef.current = dataUri;
@@ -197,7 +217,6 @@ export function RealtimePage() {
     }, 500);
   }, [isCapExceeded]);
 
-  // ── Image upload ────────────────────────────────────────────────────────────
   function handleUploadChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -214,36 +233,41 @@ export function RealtimePage() {
     setPendingImage(null);
   }
 
+  // Popover hover with delay so mouse can travel from button to popover
+  const openHover = useCallback((which: 'brush' | 'eraser') => {
+    clearTimeout(hoverTimeoutRef.current);
+    if (!webcamActiveRef.current) setOpenPopover(which);
+  }, []);
+
+  const closeHover = useCallback(() => {
+    hoverTimeoutRef.current = setTimeout(() => setOpenPopover(null), 160);
+  }, []);
+
+  const keepHover = useCallback(() => {
+    clearTimeout(hoverTimeoutRef.current);
+  }, []);
+
   // ── Webcam ──────────────────────────────────────────────────────────────────
 
   const captureFrame = useCallback((): string | null => {
     const video  = videoRef.current;
     const canvas = captureCanvasRef.current;
     if (!video || !canvas || video.readyState < 2) return null;
-
     const { width, height } = IMAGE_SIZES[qualityRef.current];
     canvas.width  = width;
     canvas.height = height;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
-
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     if (!vw || !vh) return null;
-
-    // Center-crop to square
     const side = Math.min(vw, vh);
-    const sx   = (vw - side) / 2;
-    const sy   = (vh - side) / 2;
-    ctx.drawImage(video, sx, sy, side, side, 0, 0, width, height);
-
+    ctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, width, height);
     return canvas.toDataURL('image/jpeg', 0.85);
   }, []);
 
   const webcamLoop = useCallback(() => {
     if (!webcamActiveRef.current) return;
-
     const now = Date.now();
     if (now - lastSendRef.current >= 300) {
       const frame = captureFrame();
@@ -258,7 +282,6 @@ export function RealtimePage() {
         });
       }
     }
-
     animFrameRef.current = requestAnimationFrame(webcamLoop);
   }, [captureFrame]);
 
@@ -266,10 +289,7 @@ export function RealtimePage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
       webcamActiveRef.current = true;
       setWebcamActive(true);
       lastSendRef.current = 0;
@@ -288,11 +308,11 @@ export function RealtimePage() {
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       disableWebcam();
       clearTimeout(debounceRef.current);
+      clearTimeout(hoverTimeoutRef.current);
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
     };
   }, [disableWebcam]);
@@ -316,294 +336,232 @@ export function RealtimePage() {
             Realtime generation is in beta — daily usage is capped at $10.
           </span>
         </div>
-
         <div className="flex items-center gap-3 ml-auto shrink-0">
           {isCapExceeded ? (
-            <span className="text-xs font-medium" style={{ color: '#f87171' }}>
-              Daily limit reached · resets at midnight UTC
-            </span>
+            <span className="text-xs font-medium" style={{ color: '#f87171' }}>Daily limit reached · resets at midnight UTC</span>
           ) : (
-            <span className="text-xs tabular-nums" style={{ color: 'var(--color-white-muted)' }}>
-              ${usage.costUsd.toFixed(4)} / $10.00
-            </span>
+            <span className="text-xs tabular-nums" style={{ color: 'var(--color-white-muted)' }}>${usage.costUsd.toFixed(4)} / $10.00</span>
           )}
           <div style={{ width: 120, height: 6, borderRadius: 3, background: 'var(--color-bg-surface)', overflow: 'hidden', flexShrink: 0 }}>
-            <div
-              style={{
-                height: '100%',
-                width: `${usagePct}%`,
-                borderRadius: 3,
-                background: isCapExceeded ? '#ef4444' : usagePct > 80 ? '#f59e0b' : 'var(--color-accent)',
-                transition: 'width 0.4s ease-out',
-              }}
-            />
+            <div style={{ height: '100%', width: `${usagePct}%`, borderRadius: 3, background: isCapExceeded ? '#ef4444' : usagePct > 80 ? '#f59e0b' : 'var(--color-accent)', transition: 'width 0.4s ease-out' }} />
           </div>
         </div>
       </div>
 
-      {/* ── Split view ────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* ── Main area with floating toolbar ──────────────────────────────── */}
+      <div className="flex-1 relative overflow-hidden">
 
-        {/* Left: Drawing canvas or webcam feed */}
-        <div
-          ref={leftContainerRef}
-          className="flex-1 flex items-center justify-center overflow-hidden"
-          style={{ borderRight: 'var(--border-default)', padding: 16 }}
-        >
-          {webcamActive ? (
-            <div style={{ position: 'relative', width: canvasDisplay.w, height: canvasDisplay.h, flexShrink: 0 }}>
-              <video
-                ref={videoRef}
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 4 }}
-                playsInline
-                muted
+        {/* Split view */}
+        <div className="flex h-full">
+
+          {/* Left: canvas / webcam */}
+          <div
+            ref={leftContainerRef}
+            className="flex-1 flex items-center justify-center overflow-hidden"
+            style={{ borderRight: 'var(--border-default)', padding: 16 }}
+          >
+            {webcamActive ? (
+              <div style={{ position: 'relative', width: canvasDisplay.w, height: canvasDisplay.h, flexShrink: 0 }}>
+                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 6 }} playsInline muted />
+                <div style={{ position: 'absolute', top: 8, left: 8, background: '#ef4444', borderRadius: 4, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#fff', letterSpacing: '0.05em' }}>LIVE</div>
+              </div>
+            ) : (
+              <DrawingCanvas
+                ref={canvasHandle}
+                imageSize={IMAGE_SIZES[quality]}
+                activeTool={activeTool}
+                brushColor={brushColor}
+                brushSize={brushSize}
+                eraserSize={eraserSize}
+                onStrokeEnd={handleStrokeEnd}
+                pendingImage={pendingImage}
+                onImagePlaced={handleImagePlaced}
+                disabled={isCapExceeded}
+                wrapperStyle={{ width: canvasDisplay.w, height: canvasDisplay.h }}
               />
-              <div
-                style={{
-                  position: 'absolute', top: 8, left: 8,
-                  background: '#ef4444', borderRadius: 4,
-                  padding: '2px 8px', fontSize: 10, fontWeight: 700,
-                  color: '#fff', letterSpacing: '0.05em',
-                }}
-              >
-                LIVE
+            )}
+          </div>
+
+          {/* Right: AI preview */}
+          <div className="flex-1 flex items-center justify-center overflow-hidden" style={{ padding: 16 }}>
+            {connError ? (
+              <div className="flex flex-col items-center gap-3 rounded-xl p-6 text-center" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', maxWidth: 320 }}>
+                <p className="text-xs font-medium" style={{ color: '#fca5a5' }}>{connError}</p>
+                <button onClick={() => setConnError(null)} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.2)', color: '#fca5a5' }}>Dismiss</button>
               </div>
-            </div>
-          ) : (
-            <DrawingCanvas
-              ref={canvasHandle}
-              imageSize={IMAGE_SIZES[quality]}
-              activeTool={activeTool}
-              brushColor={brushColor}
-              brushSize={brushSize}
-              eraserSize={eraserSize}
-              onStrokeEnd={handleStrokeEnd}
-              pendingImage={pendingImage}
-              onImagePlaced={handleImagePlaced}
-              disabled={isCapExceeded}
-              wrapperStyle={{ width: canvasDisplay.w, height: canvasDisplay.h }}
-            />
-          )}
+            ) : (
+              <div style={{ position: 'relative', width: canvasDisplay.w, height: canvasDisplay.h, flexShrink: 0 }}>
+                {resultUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={resultUrl} alt="Generated" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', borderRadius: 6 }} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', background: 'var(--color-bg-surface)', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    <Zap size={28} style={{ color: 'var(--color-white-muted)', opacity: 0.3 }} />
+                    <p className="text-xs text-center px-6" style={{ color: 'var(--color-white-muted)' }}>
+                      {webcamActive ? 'Point your camera to see live AI generation' : 'Draw on the canvas to see live generations'}
+                    </p>
+                  </div>
+                )}
+                {isGenerating && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 6 }}>
+                    <div className="animate-spin" style={{ width: 22, height: 22, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.2)', borderTopColor: '#fff' }} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Right: AI preview */}
+        {/* ── Floating island toolbar ────────────────────────────────────── */}
         <div
-          className="flex-1 flex items-center justify-center overflow-hidden"
-          style={{ padding: 16 }}
+          className="absolute bottom-5 left-1/2 -translate-x-1/2"
+          style={{ zIndex: 50, width: 'min(700px, calc(100% - 40px))' }}
         >
-          {connError ? (
-            <div
-              className="flex flex-col items-center gap-3 rounded-xl p-6 text-center"
-              style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', maxWidth: 320 }}
-            >
-              <p className="text-xs font-medium" style={{ color: '#fca5a5' }}>{connError}</p>
-              <button
-                onClick={() => setConnError(null)}
-                className="text-xs px-3 py-1.5 rounded-lg"
-                style={{ background: 'rgba(239,68,68,0.2)', color: '#fca5a5' }}
-              >
-                Dismiss
-              </button>
-            </div>
-          ) : (
-            <div style={{ position: 'relative', width: canvasDisplay.w, height: canvasDisplay.h, flexShrink: 0 }}>
-              {resultUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={resultUrl}
-                  alt="Generated"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', borderRadius: 4 }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: '100%', height: '100%',
-                    background: 'var(--color-bg-surface)', borderRadius: 8,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
-                  }}
-                >
-                  <Zap size={28} style={{ color: 'var(--color-white-muted)', opacity: 0.3 }} />
-                  <p className="text-xs text-center px-6" style={{ color: 'var(--color-white-muted)' }}>
-                    {webcamActive ? 'Point your camera to see live AI generation' : 'Draw on the canvas to see live generations'}
-                  </p>
-                </div>
-              )}
-
-              {isGenerating && (
-                <div
-                  style={{
-                    position: 'absolute', inset: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'rgba(0,0,0,0.25)', borderRadius: 4,
-                  }}
-                >
-                  <div
-                    className="animate-spin"
-                    style={{
-                      width: 22, height: 22, borderRadius: '50%',
-                      border: '2.5px solid rgba(255,255,255,0.2)',
-                      borderTopColor: '#fff',
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Bottom toolbar ─────────────────────────────────────────────────── */}
-      <div className="shrink-0" style={{ borderTop: 'var(--border-default)', background: 'var(--color-bg-elevated)' }}>
-
-        {/* Row 1: Drawing tools */}
-        <div className="flex items-center gap-1 px-4" style={{ height: 44, borderBottom: 'var(--border-default)' }}>
-
-          {/* Brush */}
           <div
-            className="relative"
-            onMouseEnter={() => { if (!webcamActive) setOpenPopover('brush'); }}
-            onMouseLeave={() => setOpenPopover(null)}
-          >
-            <button
-              onClick={() => { if (!webcamActive) setActiveTool('brush'); }}
-              disabled={webcamActive}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-30"
-              style={{
-                background: activeTool === 'brush' && !webcamActive ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: activeTool === 'brush' && !webcamActive ? 'var(--color-white)' : 'var(--color-white-muted)',
-                border: activeTool === 'brush' && !webcamActive ? 'var(--border-default)' : '1px solid transparent',
-              }}
-            >
-              <Brush size={13} />
-              Brush
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: brushColor, border: '1.5px solid rgba(255,255,255,0.25)', flexShrink: 0, display: 'inline-block' }} />
-            </button>
-
-            {openPopover === 'brush' && !webcamActive && (
-              <div
-                className="absolute bottom-full mb-2 left-0 rounded-xl p-3"
-                style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', minWidth: 204, zIndex: 60 }}
-              >
-                <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-white-muted)' }}>Size — {brushSize}px</p>
-                <input type="range" min={1} max={60} value={brushSize} onChange={e => setBrushSize(+e.target.value)} className="w-full mb-3" style={{ accentColor: 'var(--color-accent)' }} />
-                <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-white-muted)' }}>Color</p>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {BRUSH_COLORS.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setBrushColor(c)}
-                      style={{ width: 18, height: 18, borderRadius: '50%', background: c, flexShrink: 0, border: brushColor === c ? '2px solid var(--color-accent)' : '1.5px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
-                    />
-                  ))}
-                </div>
-                <input type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} style={{ width: '100%', height: 24, cursor: 'pointer', borderRadius: 4, border: 'none' }} />
-              </div>
-            )}
-          </div>
-
-          {/* Eraser */}
-          <div
-            className="relative"
-            onMouseEnter={() => { if (!webcamActive) setOpenPopover('eraser'); }}
-            onMouseLeave={() => setOpenPopover(null)}
-          >
-            <button
-              onClick={() => { if (!webcamActive) setActiveTool('eraser'); }}
-              disabled={webcamActive}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-30"
-              style={{
-                background: activeTool === 'eraser' && !webcamActive ? 'rgba(255,255,255,0.1)' : 'transparent',
-                color: activeTool === 'eraser' && !webcamActive ? 'var(--color-white)' : 'var(--color-white-muted)',
-                border: activeTool === 'eraser' && !webcamActive ? 'var(--border-default)' : '1px solid transparent',
-              }}
-            >
-              <Eraser size={13} />
-              Eraser
-            </button>
-
-            {openPopover === 'eraser' && !webcamActive && (
-              <div
-                className="absolute bottom-full mb-2 left-0 rounded-xl p-3"
-                style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', minWidth: 180, zIndex: 60 }}
-              >
-                <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-white-muted)' }}>Size — {eraserSize}px</p>
-                <input type="range" min={5} max={100} value={eraserSize} onChange={e => setEraserSize(+e.target.value)} className="w-full" style={{ accentColor: 'var(--color-accent)' }} />
-              </div>
-            )}
-          </div>
-
-          {/* Upload */}
-          <button
-            onClick={() => uploadInputRef.current?.click()}
-            disabled={webcamActive}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-white/5 disabled:opacity-30"
-            style={{ color: 'var(--color-white-muted)', border: '1px solid transparent' }}
-          >
-            <Upload size={13} />
-            Upload
-          </button>
-          <input ref={uploadInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadChange} />
-
-          {/* Webcam toggle */}
-          <button
-            onClick={webcamActive ? disableWebcam : enableWebcam}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             style={{
-              background: webcamActive ? 'rgba(239,68,68,0.15)' : 'transparent',
-              color: webcamActive ? '#f87171' : 'var(--color-white-muted)',
-              border: webcamActive ? '1px solid rgba(239,68,68,0.3)' : '1px solid transparent',
+              borderRadius: 18,
+              background: 'rgba(14,14,18,0.95)',
+              backdropFilter: 'blur(28px)',
+              WebkitBackdropFilter: 'blur(28px)',
+              border: '1px solid rgba(255,255,255,0.09)',
+              boxShadow: '0 16px 56px rgba(0,0,0,0.7), 0 3px 14px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.025)',
             }}
           >
-            <Camera size={13} />
-            {webcamActive ? 'Stop Camera' : 'Camera'}
-          </button>
+            {/* ── Tools row ───────────────────────────────────────────────── */}
+            <div className="flex items-center gap-0.5 px-2.5 pt-2.5 pb-2">
 
-          <div className="flex-1" />
-
-          {/* Clear */}
-          <button
-            onClick={() => canvasHandle.current?.clear()}
-            disabled={webcamActive}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-white/5 disabled:opacity-30"
-            style={{ color: 'var(--color-white-muted)' }}
-          >
-            <Trash2 size={13} />
-            Clear
-          </button>
-        </div>
-
-        {/* Row 2: Prompt + quality toggle */}
-        <div className="flex items-center gap-3 px-4 py-2.5">
-          <input
-            type="text"
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            placeholder={isCapExceeded ? 'Daily limit reached — resets at midnight UTC' : 'Describe what to generate…'}
-            disabled={isCapExceeded}
-            className="flex-1 px-3 py-2 rounded-lg text-sm outline-none disabled:opacity-40"
-            style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)', color: 'var(--color-white)' }}
-          />
-
-          <div className="flex rounded-lg overflow-hidden shrink-0" style={{ border: 'var(--border-default)' }}>
-            {(['standard', 'hd'] as Quality[]).map((q, i) => (
-              <button
-                key={q}
-                onClick={() => setQuality(q)}
-                className="px-3 py-2 text-xs font-medium transition-colors"
-                style={{
-                  background: quality === q ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  color: quality === q ? 'var(--color-white)' : 'var(--color-white-muted)',
-                  borderRight: i === 0 ? 'var(--border-default)' : 'none',
-                }}
+              {/* Brush */}
+              <div
+                className="relative"
+                onMouseEnter={() => openHover('brush')}
+                onMouseLeave={closeHover}
               >
-                {q === 'standard' ? 'Standard' : 'HD'}
+                <button onClick={() => { if (!webcamActive) setActiveTool('brush'); }} style={pillStyle(activeTool === 'brush', webcamActive)}>
+                  <Brush size={12} />
+                  BRUSH
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: brushColor, border: '1px solid rgba(255,255,255,0.25)', flexShrink: 0, display: 'inline-block', marginLeft: 1 }} />
+                </button>
+
+                {openPopover === 'brush' && !webcamActive && (
+                  <div
+                    className="absolute bottom-full mb-2.5 left-0 rounded-2xl p-3.5"
+                    style={{ background: 'rgba(14,14,18,0.98)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 12px 40px rgba(0,0,0,0.7)', minWidth: 212, zIndex: 70 }}
+                    onMouseEnter={keepHover}
+                    onMouseLeave={closeHover}
+                  >
+                    <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--color-white-muted)', letterSpacing: '0.05em' }}>SIZE — {brushSize}px</p>
+                    <input type="range" min={1} max={60} value={brushSize} onChange={e => setBrushSize(+e.target.value)} className="w-full mb-3.5" style={{ accentColor: 'var(--color-accent)' }} />
+                    <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--color-white-muted)', letterSpacing: '0.05em' }}>COLOR</p>
+                    <div className="flex flex-wrap gap-1.5 mb-2.5">
+                      {BRUSH_COLORS.map(c => (
+                        <button key={c} onClick={() => setBrushColor(c)} style={{ width: 20, height: 20, borderRadius: '50%', background: c, flexShrink: 0, border: brushColor === c ? '2px solid var(--color-accent)' : '1.5px solid rgba(255,255,255,0.18)', cursor: 'pointer' }} />
+                      ))}
+                    </div>
+                    <input type="color" value={brushColor} onChange={e => setBrushColor(e.target.value)} style={{ width: '100%', height: 26, cursor: 'pointer', borderRadius: 6, border: 'none' }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Eraser */}
+              <div
+                className="relative"
+                onMouseEnter={() => openHover('eraser')}
+                onMouseLeave={closeHover}
+              >
+                <button onClick={() => { if (!webcamActive) setActiveTool('eraser'); }} style={pillStyle(activeTool === 'eraser', webcamActive)}>
+                  <Eraser size={12} />
+                  ERASER
+                </button>
+
+                {openPopover === 'eraser' && !webcamActive && (
+                  <div
+                    className="absolute bottom-full mb-2.5 left-0 rounded-2xl p-3.5"
+                    style={{ background: 'rgba(14,14,18,0.98)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 12px 40px rgba(0,0,0,0.7)', minWidth: 188, zIndex: 70 }}
+                    onMouseEnter={keepHover}
+                    onMouseLeave={closeHover}
+                  >
+                    <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--color-white-muted)', letterSpacing: '0.05em' }}>SIZE — {eraserSize}px</p>
+                    <input type="range" min={5} max={100} value={eraserSize} onChange={e => setEraserSize(+e.target.value)} className="w-full" style={{ accentColor: 'var(--color-accent)' }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Upload */}
+              <button
+                onClick={() => uploadInputRef.current?.click()}
+                style={pillStyle(false, webcamActive)}
+                onMouseEnter={e => { if (!webcamActive) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Upload size={12} />
+                UPLOAD
               </button>
-            ))}
+              <input ref={uploadInputRef} type="file" accept="image/*" className="hidden" onChange={handleUploadChange} />
+
+              {/* Camera */}
+              <button
+                onClick={webcamActive ? disableWebcam : enableWebcam}
+                style={pillStyle(false, false, webcamActive)}
+                onMouseEnter={e => { if (!webcamActive) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+                onMouseLeave={e => { if (!webcamActive) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Camera size={12} />
+                {webcamActive ? 'STOP CAM' : 'CAMERA'}
+              </button>
+
+              <div style={{ flex: 1 }} />
+
+              {/* Clear */}
+              <button
+                onClick={() => canvasHandle.current?.clear()}
+                style={pillStyle(false, webcamActive)}
+                onMouseEnter={e => { if (!webcamActive) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Trash2 size={12} />
+                CLEAR
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0 12px' }} />
+
+            {/* ── Prompt row ──────────────────────────────────────────────── */}
+            <div className="flex items-center gap-2 px-3.5 py-2.5">
+              <input
+                type="text"
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                placeholder={isCapExceeded ? 'Daily limit reached — resets at midnight UTC' : 'Describe what to generate…'}
+                disabled={isCapExceeded}
+                className="flex-1 text-sm outline-none bg-transparent disabled:opacity-40"
+                style={{ border: 'none', color: 'var(--color-white)', padding: '2px 0' }}
+              />
+
+              {/* Quality toggle */}
+              <div className="flex shrink-0 rounded-full overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
+                {(['standard', 'hd'] as Quality[]).map((q, i) => (
+                  <button
+                    key={q}
+                    onClick={() => setQuality(q)}
+                    style={{
+                      padding: '5px 12px',
+                      fontSize: 11, fontWeight: 700, letterSpacing: '0.065em',
+                      background: quality === q ? 'rgba(255,255,255,0.12)' : 'transparent',
+                      color: quality === q ? 'var(--color-white)' : 'var(--color-white-muted)',
+                      borderRight: i === 0 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                  >
+                    {q === 'standard' ? 'STD' : 'HD'}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Hidden canvas for webcam frame capture */}
       <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
     </div>
   );
