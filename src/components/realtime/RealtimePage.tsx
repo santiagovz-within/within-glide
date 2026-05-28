@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fal } from '@fal-ai/client';
 import { DrawingCanvas, type DrawingCanvasHandle } from './DrawingCanvas';
-import { Brush, Camera, Eraser, Upload, Trash2, Zap } from 'lucide-react';
+import { Brush, Camera, Download, Eraser, Upload, Trash2, Zap } from 'lucide-react';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -247,6 +247,14 @@ export function RealtimePage() {
   function handleImagePlaced() {
     if (pendingImage) URL.revokeObjectURL(pendingImage.src);
     setPendingImage(null);
+  }
+
+  function handleDownload() {
+    if (!resultUrl) return;
+    const a = document.createElement('a');
+    a.href = resultUrl;
+    a.download = `realtime-${Date.now()}.jpg`;
+    a.click();
   }
 
   // Popover hover with delay so mouse can travel from button to popover
@@ -541,15 +549,15 @@ export function RealtimePage() {
 
               <div style={{ flex: 1 }} />
 
-              {/* Clear */}
+              {/* Download */}
               <button
-                onClick={() => canvasHandle.current?.clear()}
-                style={pillStyle(false, webcamActive)}
-                onMouseEnter={e => { if (!webcamActive) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+                onClick={handleDownload}
+                style={pillStyle(false, !resultUrl)}
+                onMouseEnter={e => { if (resultUrl) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
               >
-                <Trash2 size={12} />
-                CLEAR
+                <Download size={12} />
+                DOWNLOAD
               </button>
             </div>
 
@@ -590,6 +598,22 @@ export function RealtimePage() {
             </div>
           </div>
         </div>
+
+        {/* ── Floating CLEAR button — bottom-right, same margin as island ── */}
+        <button
+          className="absolute bottom-5 right-5"
+          onClick={() => canvasHandle.current?.clear()}
+          disabled={webcamActive}
+          style={{
+            ...pillStyle(false, webcamActive),
+            zIndex: 50,
+          }}
+          onMouseEnter={e => { if (!webcamActive) e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <Trash2 size={12} />
+          CLEAR
+        </button>
       </div>
 
       <canvas ref={captureCanvasRef} style={{ display: 'none' }} />
