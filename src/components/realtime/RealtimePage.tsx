@@ -201,21 +201,29 @@ export function RealtimePage() {
     return () => { conn.close(); connectionRef.current = null; };
   }, [tokenProvider, setAndTrackResultUrl]);
 
-  const handleStrokeEnd = useCallback((dataUri: string) => {
-    if (isCapExceeded || !dataUri || webcamActiveRef.current) return;
-    lastDataUriRef.current = dataUri;
+  // Unified debounce: called from both stroke end and prompt typing.
+  // Sends only after 600ms of no drawing AND no typing.
+  const scheduleSend = useCallback((dataUri?: string) => {
+    if (isCapExceeded || webcamActiveRef.current) return;
+    if (dataUri) lastDataUriRef.current = dataUri;
+    if (!lastDataUriRef.current) return; // nothing drawn yet
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      if (!lastDataUriRef.current || !connectionRef.current) return;
+      const uri = lastDataUriRef.current;
+      if (!uri || !connectionRef.current) return;
       setIsGenerating(true);
       connectionRef.current.send({
         prompt:              promptRef.current,
-        image_url:           lastDataUriRef.current,
+        image_url:           uri,
         num_inference_steps: 3,
         image_size:          FAL_IMAGE_SIZES[qualityRef.current],
       });
-    }, 500);
+    }, 600);
   }, [isCapExceeded]);
+
+  const handleStrokeEnd = useCallback((dataUri: string) => {
+    if (dataUri) scheduleSend(dataUri);
+  }, [scheduleSend]);
 
   function handleUploadChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -269,7 +277,7 @@ export function RealtimePage() {
   const webcamLoop = useCallback(() => {
     if (!webcamActiveRef.current) return;
     const now = Date.now();
-    if (now - lastSendRef.current >= 300) {
+    if (now - lastSendRef.current >= 167) { // ~6 fps
       const frame = captureFrame();
       if (frame && connectionRef.current) {
         lastSendRef.current = now;
@@ -287,9 +295,12 @@ export function RealtimePage() {
 
   const enableWebcam = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
       streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      // videoRef is always mounted — safe to access synchronously
+      const video = videoRef.current!;
+      video.srcObject = stream;
+      await video.play();
       webcamActiveRef.current = true;
       setWebcamActive(true);
       lastSendRef.current = 0;
@@ -360,26 +371,38 @@ export function RealtimePage() {
             className="flex-1 flex items-center justify-center overflow-hidden"
             style={{ borderRight: 'var(--border-default)', padding: 16 }}
           >
-            {webcamActive ? (
-              <div style={{ position: 'relative', width: canvasDisplay.w, height: canvasDisplay.h, flexShrink: 0 }}>
-                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 6 }} playsInline muted />
-                <div style={{ position: 'absolute', top: 8, left: 8, background: '#ef4444', borderRadius: 4, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#fff', letterSpacing: '0.05em' }}>LIVE</div>
-              </div>
-            ) : (
-              <DrawingCanvas
-                ref={canvasHandle}
-                imageSize={IMAGE_SIZES[quality]}
-                activeTool={activeTool}
-                brushColor={brushColor}
-                brushSize={brushSize}
-                eraserSize={eraserSize}
-                onStrokeEnd={handleStrokeEnd}
-                pendingImage={pendingImage}
-                onImagePlaced={handleImagePlaced}
-                disabled={isCapExceeded}
-                wrapperStyle={{ width: canvasDisplay.w, height: canvasDisplay.h }}
+            <div style={{ position: 'relative', width: canvasDisplay.w, height: canvasDisplay.h, flexShrink: 0 }}>
+              {/* Video always mounted so ref is valid before webcam activates */}
+              <video
+                ref={videoRef}
+                style={webcamActive ? {
+                  position: 'absolute', inset: 0, width: '100%', height: '100%',
+                  objectFit: 'cover', display: 'block', borderRadius: 6,
+                } : {
+                  position: 'absolute', width: 0, height: 0, opacity: 0,
+                }}
+                playsInline
+                muted
               />
-            )}
+              {webcamActive && (
+                <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 10, background: '#ef4444', borderRadius: 4, padding: '2px 8px', fontSize: 10, fontWeight: 700, color: '#fff', letterSpacing: '0.05em' }}>LIVE</div>
+              )}
+              {!webcamActive && (
+                <DrawingCanvas
+                  ref={canvasHandle}
+                  imageSize={IMAGE_SIZES[quality]}
+                  activeTool={activeTool}
+                  brushColor={brushColor}
+                  brushSize={brushSize}
+                  eraserSize={eraserSize}
+                  onStrokeEnd={handleStrokeEnd}
+                  pendingImage={pendingImage}
+                  onImagePlaced={handleImagePlaced}
+                  disabled={isCapExceeded}
+                  wrapperStyle={{ width: canvasDisplay.w, height: canvasDisplay.h }}
+                />
+              )}
+            </div>
           </div>
 
           {/* Right: AI preview */}
@@ -506,7 +529,7 @@ export function RealtimePage() {
                 onMouseLeave={e => { if (!webcamActive) e.currentTarget.style.background = 'transparent'; }}
               >
                 <Camera size={12} />
-                {webcamActive ? 'STOP CAM' : 'CAMERA'}
+                {webcamActive ? 'STOP CAMERA' : 'LIVE CAMERA'}
               </button>
 
               <div style={{ flex: 1 }} />
@@ -531,7 +554,7 @@ export function RealtimePage() {
               <input
                 type="text"
                 value={prompt}
-                onChange={e => setPrompt(e.target.value)}
+                onChange={e => { setPrompt(e.target.value); scheduleSend(); }}
                 placeholder={isCapExceeded ? 'Daily limit reached — resets at midnight UTC' : 'Describe what to generate…'}
                 disabled={isCapExceeded}
                 className="flex-1 text-sm outline-none bg-transparent disabled:opacity-40"
@@ -553,7 +576,7 @@ export function RealtimePage() {
                       cursor: 'pointer', transition: 'all 0.15s',
                     }}
                   >
-                    {q === 'standard' ? 'STD' : 'HD'}
+                    {q === 'standard' ? 'SD' : 'HD'}
                   </button>
                 ))}
               </div>
