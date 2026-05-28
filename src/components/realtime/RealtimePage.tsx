@@ -8,7 +8,7 @@ import { Brush, Camera, Eraser, Upload, Trash2, Zap } from 'lucide-react';
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const CAP_USD = 10;
-const COST_PER_REQUEST = 2 * 0.00194;
+const COMPUTE_SECONDS_ESTIMATE = 2; // estimate per request for cost tracking
 
 const IMAGE_SIZES = {
   standard: { width: 512, height: 512 },
@@ -183,11 +183,19 @@ export function RealtimePage() {
             setAndTrackResultUrl(url);
             setIsGenerating(false);
             setConnError(null);
-            setUsage(prev => ({
-              costUsd:      prev.costUsd + COST_PER_REQUEST,
-              requestCount: prev.requestCount + 1,
-            }));
-            fetch('/api/realtime/usage', { method: 'POST' }).catch(() => {});
+            // Sync usage from server — single source of truth, no client-side drift
+            fetch('/api/realtime/usage', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ computeSeconds: COMPUTE_SECONDS_ESTIMATE }),
+            })
+              .then(r => r.json())
+              .then(d => {
+                if (typeof d.costUsd === 'number') {
+                  setUsage({ costUsd: d.costUsd, requestCount: d.requestCount ?? 0 });
+                }
+              })
+              .catch(() => {});
           }
         },
         onError(error) {
@@ -281,7 +289,6 @@ export function RealtimePage() {
       const frame = captureFrame();
       if (frame && connectionRef.current) {
         lastSendRef.current = now;
-        setIsGenerating(true);
         connectionRef.current.send({
           prompt:              promptRef.current,
           image_url:           frame,
@@ -425,7 +432,7 @@ export function RealtimePage() {
                     </p>
                   </div>
                 )}
-                {isGenerating && (
+                {isGenerating && !webcamActive && (
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)', borderRadius: 6 }}>
                     <div className="animate-spin" style={{ width: 22, height: 22, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,0.2)', borderTopColor: '#fff' }} />
                   </div>

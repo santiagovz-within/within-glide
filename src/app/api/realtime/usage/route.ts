@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 const CAP_USD = 10;
-const COST_PER_SECOND = 0.000575;
+const COST_PER_SECOND = 0.00194; // fal-ai/flux-2/klein/realtime rate
 const DEFAULT_COMPUTE_SECONDS = 2.0;
 
 interface UsageRow {
