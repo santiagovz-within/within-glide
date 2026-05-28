@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import {
   GitBranch,
   Image,
+  Zap,
   Music,
   Grid,
   Settings,
@@ -19,9 +20,10 @@ import { cn } from '@/lib/utils/cn';
 import { createClient } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
-  { label: 'Canvas Flow', icon: GitBranch, href: '/dashboard/canvas-flow' },
-  { label: 'Image & Video', icon: Image, href: '/dashboard/image-video' },
-  { label: 'Gallery', icon: Grid, href: '/dashboard/gallery' },
+  { label: 'Canvas Flow',  icon: GitBranch, href: '/dashboard/canvas-flow'  },
+  { label: 'Image & Video',icon: Image,     href: '/dashboard/image-video'  },
+  { label: 'Realtime',     icon: Zap,       href: '/dashboard/realtime'     },
+  { label: 'Gallery',      icon: Grid,      href: '/dashboard/gallery'      },
 ];
 
 const ADMIN_ITEMS = [
