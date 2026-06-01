@@ -13,17 +13,26 @@ async function requireAdmin() {
 
 /**
  * POST /api/admin/settings/login-image
- * Returns a signed GCS write URL so the browser can PUT the image directly.
+ * Body: { contentType: string } — the exact MIME type of the file being uploaded.
+ * Returns a signed GCS write URL signed for that content type, which the browser
+ * must use verbatim in its PUT Content-Type header.
  */
-export async function POST(_request: NextRequest) {
+export async function POST(request: NextRequest) {
   const user = await requireAdmin();
   if (!user) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const gcsPath  = 'site/login-bg';
-  const uploadUrl = await getSignedUploadUrl(gcsPath, 'image/*');
+  const body = await request.json().catch(() => ({}));
+  const contentType: string = body.contentType || 'image/jpeg';
+
+  if (!contentType.startsWith('image/')) {
+    return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 });
+  }
+
+  const gcsPath   = 'site/login-bg';
+  const uploadUrl = await getSignedUploadUrl(gcsPath, contentType);
   const gcsRef    = `gcs:${gcsPath}`;
 
-  return NextResponse.json({ uploadUrl, gcsRef });
+  return NextResponse.json({ uploadUrl, gcsRef, contentType });
 }
 
 /**

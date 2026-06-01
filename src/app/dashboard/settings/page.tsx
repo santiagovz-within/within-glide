@@ -221,15 +221,19 @@ function LoginBackgroundSection() {
 
     try {
       // 1. Get signed write URL from server
-      const stageRes = await fetch('/api/admin/settings/login-image', { method: 'POST' });
+      const stageRes = await fetch('/api/admin/settings/login-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentType: file.type || 'image/jpeg' }),
+      });
       if (!stageRes.ok) throw new Error('Could not get upload URL');
-      const { uploadUrl, gcsRef } = await stageRes.json();
+      const { uploadUrl, gcsRef, contentType } = await stageRes.json();
 
-      // 2. PUT file directly to GCS
+      // 2. PUT file directly to GCS using the exact contentType the URL was signed for
       const putRes = await fetch(uploadUrl, {
         method: 'PUT',
         body: file,
-        headers: { 'Content-Type': file.type || 'image/*' },
+        headers: { 'Content-Type': contentType },
       });
       if (!putRes.ok) throw new Error(`GCS upload failed (${putRes.status})`);
 
