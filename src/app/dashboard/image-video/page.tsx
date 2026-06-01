@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useChatStore } from '@/lib/stores/chatStore';
 import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
@@ -28,6 +28,10 @@ export default function ImageVideoPage() {
 
   const supabase = createClient();
 
+  // Ref so loadSessions doesn't need activeSessionId in its deps (avoids reload loop)
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  useEffect(() => { activeSessionIdRef.current = activeSessionId; }, [activeSessionId]);
+
   const loadSessions = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -37,10 +41,10 @@ export default function ImageVideoPage() {
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
     setSessions(data ?? []);
-    if (data?.[0] && !activeSessionId) {
+    if (data?.[0] && !activeSessionIdRef.current) {
       setActiveSessionId(data[0].id);
     }
-  }, [supabase, setSessions, activeSessionId, setActiveSessionId]);
+  }, [supabase, setSessions, setActiveSessionId]);
 
   useEffect(() => {
     loadSessions();
@@ -126,9 +130,9 @@ export default function ImageVideoPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: capturedPrompt }),
-      }).then(r => r.json()).then(({ title }) => {
-        if (title) {
-          supabase.from('chat_sessions').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId!);
+      }).then(r => r.json()).then(async ({ title }) => {
+        if (title && title !== 'New Session') {
+          await supabase.from('chat_sessions').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId!);
           updateSession(sessionId!, { title });
         }
       }).catch(() => {});
@@ -188,7 +192,7 @@ export default function ImageVideoPage() {
             // Set session thumbnail from the first generated image
             const currentSession = sessions.find(s => s.id === sessionId);
             if (!currentSession?.thumbnail_url && gen.media_url) {
-              supabase.from('chat_sessions').update({ thumbnail_url: gen.media_url }).eq('id', sessionId!);
+              await supabase.from('chat_sessions').update({ thumbnail_url: gen.media_url }).eq('id', sessionId!);
               updateSession(sessionId!, { thumbnail_url: gen.media_url });
             }
           }
@@ -275,20 +279,8 @@ export default function ImageVideoPage() {
               <div key={msg.id} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                 {msg.role === 'user' ? (
                   <div className="flex items-end gap-2 max-w-lg">
-                    {/* Reference images to the left of the text bubble */}
                     {(msg.reference_image_urls ?? []).length > 0 && (
-                      <div className="flex flex-wrap gap-1 justify-end" style={{ maxWidth: 120 }}>
-                        {(msg.reference_image_urls ?? []).map((url, idx) => (
-                          <div
-                            key={idx}
-                            className="rounded-lg overflow-hidden shrink-0"
-                            style={{ width: 52, height: 52, border: 'var(--border-default)', background: 'var(--color-bg-surface)' }}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt="" className="w-full h-full object-cover" />
-                          </div>
-                        ))}
-                      </div>
+                      <RefImageStack urls={msg.reference_image_urls!} />
                     )}
                     <div
                       className="px-4 py-3 rounded-2xl rounded-tr-sm"
@@ -337,6 +329,61 @@ export default function ImageVideoPage() {
       {/* Generation detail modal */}
       {selectedGen && (
         <GenerationModal generation={selectedGen} onClose={() => setSelectedGen(null)} />
+      )}
+    </div>
+  );
+}
+
+const REF_ROTATIONS = [-7, 5, -9, 6];
+
+function RefImageStack({ urls }: { urls: string[] }) {
+  const visible = urls.slice(0, 3);
+  const extra = urls.length > 3 ? urls.length - 3 : 0;
+
+  return (
+    <div className="flex items-center" style={{ paddingBottom: 2 }}>
+      {visible.map((url, idx) => (
+        <div
+          key={idx}
+          className="shrink-0 rounded overflow-hidden"
+          style={{
+            width: 26,
+            height: 26,
+            position: 'relative',
+            marginLeft: idx > 0 ? -8 : 0,
+            zIndex: idx + 1,
+            transform: `rotate(${REF_ROTATIONS[idx]}deg)`,
+            border: '1.5px solid rgba(0,0,0,0.55)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.45)',
+            borderRadius: 5,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </div>
+      ))}
+      {extra > 0 && (
+        <div
+          className="shrink-0 flex items-center justify-center"
+          style={{
+            width: 26,
+            height: 26,
+            position: 'relative',
+            marginLeft: -8,
+            zIndex: visible.length + 1,
+            transform: `rotate(${REF_ROTATIONS[visible.length % REF_ROTATIONS.length]}deg)`,
+            background: 'var(--color-bg-surface)',
+            border: '1.5px solid rgba(0,0,0,0.55)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.45)',
+            borderRadius: 5,
+            fontSize: 9,
+            fontWeight: 600,
+            color: 'var(--color-white-muted)',
+            letterSpacing: '0.02em',
+          }}
+        >
+          +{extra}
+        </div>
       )}
     </div>
   );

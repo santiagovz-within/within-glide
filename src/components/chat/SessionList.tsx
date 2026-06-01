@@ -1,11 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Plus, MessageSquare, Trash2, Pencil, Check } from 'lucide-react';
 import { useChatStore } from '@/lib/stores/chatStore';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils/cn';
 import { formatDistanceToNow } from '@/lib/utils/date';
+import { resolveMediaUrl } from '@/lib/utils/mediaUtils';
 import type { ChatSession } from '@/types';
 
 interface SessionListProps {
@@ -88,12 +89,7 @@ export function SessionList({ onNewSession }: SessionListProps) {
                   style={{ width: 36, height: 36, background: 'var(--color-bg-surface)' }}
                 >
                   {session.thumbnail_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={session.thumbnail_url}
-                      alt=""
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    />
+                    <SessionThumbnail url={session.thumbnail_url} />
                   ) : (
                     <MessageSquare size={14} style={{ color: 'var(--color-white-muted)', opacity: 0.4 }} />
                   )}
@@ -152,5 +148,18 @@ export function SessionList({ onNewSession }: SessionListProps) {
         )}
       </div>
     </div>
+  );
+}
+
+function SessionThumbnail({ url }: { url: string }) {
+  const [resolved, setResolved] = useState(url);
+
+  useEffect(() => {
+    resolveMediaUrl(url).then(setResolved);
+  }, [url]);
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={resolved} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
   );
 }
