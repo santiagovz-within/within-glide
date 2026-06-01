@@ -2,6 +2,8 @@ import { LoginForm } from '@/components/auth/LoginForm';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getSignedReadUrl, gcsPathFromRef } from '@/lib/gcs';
 
+export const dynamic = 'force-dynamic';
+
 async function getLoginBgUrl(): Promise<string | null> {
   try {
     const admin = createAdminClient();
