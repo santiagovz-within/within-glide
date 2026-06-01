@@ -26,7 +26,7 @@ export async function GET() {
   const userIds = users.map((u) => u.id);
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, username, display_name, is_admin, created_at')
+    .select('id, username, display_name, is_admin, approved, created_at')
     .in('id', userIds);
 
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       display_name: display_name?.trim() || null,
       theme: 'dark',
       is_admin: makeAdmin,
+      approved: true,
     },
     { onConflict: 'id' }
   );

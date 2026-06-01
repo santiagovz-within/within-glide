@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Users, Plus, Trash2, Shield, ShieldOff, RefreshCw, Edit2, Check, X, AlertTriangle } from 'lucide-react';
+import { Users, Plus, Trash2, Shield, ShieldOff, RefreshCw, Edit2, Check, X, AlertTriangle, UserCheck, UserX, Clock } from 'lucide-react';
 
 interface AdminUser {
   id: string;
@@ -13,6 +13,7 @@ interface AdminUser {
     username: string;
     display_name: string | null;
     is_admin: boolean;
+    approved: boolean;
     created_at: string;
   } | null;
 }
@@ -30,7 +31,8 @@ export default function AdminUsersPage() {
   const [createWarning, setCreateWarning]   = useState('');
 
   // Per-row state
-  const [togglingId, setTogglingId]         = useState<string | null>(null);
+  const [togglingId,  setTogglingId]  = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rowErrors, setRowErrors]           = useState<Record<string, string>>({});
   const [editingNameId, setEditingNameId]   = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState('');
@@ -139,6 +141,29 @@ export default function AdminUsersPage() {
       }));
     }
     setTogglingId(null);
+  }
+
+  async function handleToggleApproved(userId: string, currentApproved: boolean) {
+    setApprovingId(userId);
+    setRowErrors((prev) => { const n = { ...prev }; delete n[userId]; return n; });
+
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved: !currentApproved }),
+    });
+
+    if (res.ok) {
+      setUsers(users.map((u) =>
+        u.id === userId && u.profile
+          ? { ...u, profile: { ...u.profile, approved: !currentApproved } }
+          : u
+      ));
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setRowErrors((prev) => ({ ...prev, [userId]: d.error ?? 'Failed to update approval' }));
+    }
+    setApprovingId(null);
   }
 
   async function handleDelete(userId: string, email: string | undefined) {
@@ -265,11 +290,12 @@ export default function AdminUsersPage() {
         <div className="rounded-xl overflow-hidden" style={{ border: 'var(--border-default)' }}>
           {/* Table header */}
           <div
-            className="grid grid-cols-[1fr_1fr_120px_80px] px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+            className="grid grid-cols-[1fr_1fr_110px_110px_100px] px-4 py-3 text-xs font-semibold uppercase tracking-wider"
             style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderBottom: 'var(--border-default)' }}
           >
             <span>Name</span>
             <span>Email</span>
+            <span>Access</span>
             <span>Role</span>
             <span className="text-right">Actions</span>
           </div>
@@ -278,11 +304,13 @@ export default function AdminUsersPage() {
             const isEditingName = editingNameId === user.id;
             const isSavingName  = savingNameId  === user.id;
             const isToggling    = togglingId    === user.id;
+            const isApproving   = approvingId   === user.id;
             const rowError      = rowErrors[user.id];
+            const approved      = user.profile?.approved ?? false;
 
             return (
               <div key={user.id} style={{ background: 'var(--color-bg-elevated)', borderBottom: 'var(--border-default)' }}>
-                <div className="grid grid-cols-[1fr_1fr_120px_80px] items-center px-4 py-3 transition-colors hover:bg-white/[0.03] group">
+                <div className="grid grid-cols-[1fr_1fr_110px_110px_100px] items-center px-4 py-3 transition-colors hover:bg-white/[0.03] group">
                   {/* Editable name */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     {isEditingName ? (
@@ -348,6 +376,25 @@ export default function AdminUsersPage() {
                     {user.email ?? '—'}
                   </p>
 
+                  {/* Approval badge */}
+                  <div>
+                    {approved ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ background: 'rgba(74,222,128,0.1)', color: '#4ade80' }}
+                      >
+                        <UserCheck size={10} /> Approved
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}
+                      >
+                        <Clock size={10} /> Pending
+                      </span>
+                    )}
+                  </div>
+
                   {/* Role badge */}
                   <div>
                     {user.profile?.is_admin ? (
@@ -368,7 +415,22 @@ export default function AdminUsersPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-end gap-1">
+                    {/* Approve / Revoke */}
+                    <button
+                      onClick={() => handleToggleApproved(user.id, approved)}
+                      disabled={isApproving}
+                      title={approved ? 'Revoke access' : 'Approve access'}
+                      className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40"
+                    >
+                      {isApproving
+                        ? <RefreshCw size={14} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} />
+                        : approved
+                          ? <UserX size={14} style={{ color: '#fbbf24' }} />
+                          : <UserCheck size={14} style={{ color: '#4ade80' }} />
+                      }
+                    </button>
+                    {/* Toggle admin */}
                     <button
                       onClick={() => handleToggleAdmin(user.id, user.profile?.is_admin ?? false)}
                       disabled={isToggling}

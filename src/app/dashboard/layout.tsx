@@ -15,6 +15,16 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('approved')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile?.approved) {
+    redirect('/pending');
+  }
+
   return (
     <ThemeProvider>
       <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-bg-darkest)' }}>
