@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useChatStore } from '@/lib/stores/chatStore';
 import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
 import { SessionList } from '@/components/chat/SessionList';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { GenerationCard } from '@/components/chat/GenerationCard';
+import { GenerationModal } from '@/components/chat/GenerationModal';
 import { MODELS } from '@/lib/api/models';
 import type { ChatSession, ChatMessage, Generation } from '@/types';
 
@@ -22,6 +23,7 @@ export default function ImageVideoPage() {
     setPrompt, setReferenceImages,
     updateSession,
   } = useChatStore();
+  const [selectedGen, setSelectedGen] = useState<Generation | null>(null);
   const { addGeneration: addToGallery } = useGalleryStore();
 
   const supabase = createClient();
@@ -97,15 +99,20 @@ export default function ImageVideoPage() {
 
     setIsGenerating(true);
 
-    // Save user message
+    // Capture before any async saves so values are stable
+    const capturedPrompt = prompt;
+    const capturedRefImages = [...referenceImages];
+
+    // Save user message (include reference images for display in history)
     const { data: userMsg } = await supabase
       .from('chat_messages')
       .insert({
         session_id: sessionId,
         user_id: user.id,
         role: 'user',
-        content: prompt,
+        content: capturedPrompt,
         generation_ids: [],
+        reference_image_urls: capturedRefImages.length > 0 ? capturedRefImages : null,
       })
       .select()
       .single();
@@ -113,8 +120,6 @@ export default function ImageVideoPage() {
 
     // Fire-and-forget title generation on first message
     const sessionMessages = messages[sessionId] ?? [];
-    const capturedPrompt = prompt;
-    const capturedRefImages = [...referenceImages];
 
     if (sessionMessages.length === 0) {
       fetch('/api/google/generate-title', {
@@ -269,11 +274,28 @@ export default function ImageVideoPage() {
             activeMessages.map((msg) => (
               <div key={msg.id} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
                 {msg.role === 'user' ? (
-                  <div
-                    className="max-w-lg px-4 py-3 rounded-2xl rounded-tr-sm"
-                    style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
-                  >
-                    <p className="text-sm" style={{ color: 'var(--color-white)' }}>{msg.content}</p>
+                  <div className="flex items-end gap-2 max-w-lg">
+                    {/* Reference images to the left of the text bubble */}
+                    {(msg.reference_image_urls ?? []).length > 0 && (
+                      <div className="flex flex-wrap gap-1 justify-end" style={{ maxWidth: 120 }}>
+                        {(msg.reference_image_urls ?? []).map((url, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded-lg overflow-hidden shrink-0"
+                            style={{ width: 52, height: 52, border: 'var(--border-default)', background: 'var(--color-bg-surface)' }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div
+                      className="px-4 py-3 rounded-2xl rounded-tr-sm"
+                      style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
+                    >
+                      <p className="text-sm" style={{ color: 'var(--color-white)' }}>{msg.content}</p>
+                    </div>
                   </div>
                 ) : (
                   <div className="max-w-2xl w-full">
@@ -293,7 +315,11 @@ export default function ImageVideoPage() {
                           />
                         );
                         return (
-                          <GenerationCard key={genId} generation={gen} />
+                          <GenerationCard
+                            key={genId}
+                            generation={gen}
+                            onClick={() => setSelectedGen(gen)}
+                          />
                         );
                       })}
                     </div>
@@ -307,6 +333,11 @@ export default function ImageVideoPage() {
         {/* Input */}
         <ChatInput onSubmit={handleGenerate} />
       </div>
+
+      {/* Generation detail modal */}
+      {selectedGen && (
+        <GenerationModal generation={selectedGen} onClose={() => setSelectedGen(null)} />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Maximize2, Play } from 'lucide-react';
+import { Download, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Generation } from '@/types';
 import { resolveMediaUrl } from '@/lib/utils/mediaUtils';
@@ -10,20 +10,92 @@ interface GenerationCardProps {
   onClick?: () => void;
 }
 
+function getAspectRatio(gen: Generation): string {
+  if (gen.width && gen.height) return `${gen.width} / ${gen.height}`;
+  const ar = gen.parameters?.aspectRatio as string | undefined;
+  if (ar) {
+    const parts = ar.split(':');
+    if (parts.length === 2 && !isNaN(Number(parts[0])) && !isNaN(Number(parts[1]))) {
+      return `${parts[0]} / ${parts[1]}`;
+    }
+  }
+  return '1 / 1';
+}
+
 export function GenerationCard({ generation, onClick }: GenerationCardProps) {
   const [hover, setHover] = useState(false);
   const [resolvedUrl, setResolvedUrl] = useState(generation.media_url);
   const isVideo = generation.media_type === 'video';
+  const isGenerating = generation.status === 'pending' || generation.status === 'processing';
+  const aspectRatio = getAspectRatio(generation);
 
   useEffect(() => {
-    resolveMediaUrl(generation.media_url).then(setResolvedUrl);
-  }, [generation.media_url]);
+    if (!isGenerating) {
+      resolveMediaUrl(generation.media_url).then(setResolvedUrl);
+    }
+  }, [generation.media_url, isGenerating]);
+
+  async function handleDownload(e: React.MouseEvent) {
+    e.stopPropagation();
+    const ext = isVideo ? 'mp4' : 'png';
+    const filename = `canvasflow-${generation.id.slice(0, 8)}.${ext}`;
+    try {
+      const res = await fetch(resolvedUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(resolvedUrl, '_blank');
+    }
+  }
+
+  if (isGenerating) {
+    return (
+      <div
+        className="relative rounded-xl overflow-hidden animate-pulse"
+        style={{
+          aspectRatio,
+          background: 'var(--color-bg-surface)',
+          border: 'var(--border-default)',
+        }}
+      >
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <div
+            className="w-5 h-5 rounded-full border-2 animate-spin"
+            style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }}
+          />
+          <p className="text-xs font-medium" style={{ color: 'var(--color-white-muted)' }}>Generating</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (generation.status === 'failed') {
+    return (
+      <div
+        className="relative rounded-xl overflow-hidden flex items-center justify-center"
+        style={{
+          aspectRatio,
+          background: 'var(--color-bg-surface)',
+          border: '1px solid var(--color-error)',
+        }}
+      >
+        <p className="text-xs" style={{ color: 'var(--color-error)' }}>Failed</p>
+      </div>
+    );
+  }
 
   return (
     <div
       className="relative rounded-xl overflow-hidden cursor-pointer group"
       style={{
-        aspectRatio: '1',
+        aspectRatio,
         background: 'var(--color-bg-surface)',
         border: 'var(--border-default)',
       }}
@@ -58,35 +130,18 @@ export function GenerationCard({ generation, onClick }: GenerationCardProps) {
       )}
 
       {hover && (
-        <div className="absolute inset-0 flex items-end justify-end p-2 gap-1.5" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <a
-            href={resolvedUrl}
-            download
-            className="p-1.5 rounded-lg transition-colors hover:bg-white/20"
-            style={{ background: 'rgba(0,0,0,0.4)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Download size={12} style={{ color: '#fff' }} />
-          </a>
+        <div
+          className="absolute inset-0 flex items-end justify-end p-2"
+          style={{ background: 'rgba(0,0,0,0.35)' }}
+        >
           <button
             className="p-1.5 rounded-lg transition-colors hover:bg-white/20"
-            style={{ background: 'rgba(0,0,0,0.4)' }}
-            onClick={onClick}
+            style={{ background: 'rgba(0,0,0,0.45)' }}
+            onClick={handleDownload}
+            title="Download"
           >
-            <Maximize2 size={12} style={{ color: '#fff' }} />
+            <Download size={13} style={{ color: '#fff' }} />
           </button>
-        </div>
-      )}
-
-      {generation.status === 'processing' && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}>
-          <div className="text-center">
-            <div
-              className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-2"
-              style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }}
-            />
-            <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>Generating...</p>
-          </div>
         </div>
       )}
     </div>

@@ -64,6 +64,7 @@ export interface ChatMessage {
   role: 'user' | 'system';
   content: string | null;
   generation_ids: string[] | null;
+  reference_image_urls?: string[] | null;
   created_at: string;
 }
 
