@@ -123,10 +123,9 @@ export function Sidebar() {
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-hidden overflow-y-auto">
         {NAV_ITEMS.map(({ label, icon: Icon, href }) => renderNavItem(label, Icon, href))}
 
-        {/* JamBox (external link) */}
-        <button
-          onClick={handleJamBox}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 w-full hover:bg-white/5"
+        {/* JamBox (coming soon) */}
+        <div
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full cursor-not-allowed opacity-50"
         >
           <Music
             size={18}
@@ -134,14 +133,22 @@ export function Sidebar() {
             style={{ color: 'var(--color-white-muted)' }}
           />
           {!collapsed && (
-            <span
-              className="text-sm font-bold whitespace-nowrap"
-              style={{ color: 'var(--color-white-muted)' }}
-            >
-              JamBox
-            </span>
+            <>
+              <span
+                className="text-sm font-bold whitespace-nowrap"
+                style={{ color: 'var(--color-white-muted)' }}
+              >
+                JamBox
+              </span>
+              <span
+                className="ml-auto text-[9px] font-semibold tracking-wider px-1.5 py-0.5 rounded"
+                style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--color-white-muted)', letterSpacing: '0.08em' }}
+              >
+                COMING SOON
+              </span>
+            </>
           )}
-        </button>
+        </div>
 
         {/* Admin section */}
         {isAdmin && (
