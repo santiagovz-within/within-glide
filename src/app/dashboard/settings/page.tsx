@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useThemeStore } from '@/lib/stores/themeStore';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Sun, Moon, LogOut, Copy, Check, RefreshCw, Trash2 } from 'lucide-react';
+import { Sun, Moon, LogOut, Copy, Check, RefreshCw, Trash2, ImagePlus, X } from 'lucide-react';
 
 function FigmaIcon({ size = 16 }: { size?: number }) {
   return (
@@ -187,6 +187,175 @@ function FigmaTokenSection() {
   );
 }
 
+// ── Login Background section (admins only) ──────────────────────────────────
+
+function LoginBackgroundSection() {
+  const [isAdmin,    setIsAdmin]    = useState<boolean | null>(null);
+  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
+  const [uploading,  setUploading]  = useState(false);
+  const [status,     setStatus]     = useState<'idle' | 'success' | 'error'>('idle');
+  const [statusMsg,  setStatusMsg]  = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('profiles').select('is_admin').eq('id', user.id).single();
+      if (!profile?.is_admin) { setIsAdmin(false); return; }
+      setIsAdmin(true);
+      // Load current image preview
+      fetch('/api/settings/login-image')
+        .then(r => r.json())
+        .then(d => setCurrentUrl(d.url ?? null))
+        .catch(() => {});
+    });
+  }, []);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setStatus('idle');
+
+    try {
+      // 1. Get signed write URL from server
+      const stageRes = await fetch('/api/admin/settings/login-image', { method: 'POST' });
+      if (!stageRes.ok) throw new Error('Could not get upload URL');
+      const { uploadUrl, gcsRef } = await stageRes.json();
+
+      // 2. PUT file directly to GCS
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'image/*' },
+      });
+      if (!putRes.ok) throw new Error(`GCS upload failed (${putRes.status})`);
+
+      // 3. Confirm the gcsRef
+      const saveRes = await fetch('/api/admin/settings/login-image', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gcsRef }),
+      });
+      if (!saveRes.ok) throw new Error('Could not save image reference');
+
+      // 4. Refresh preview
+      const urlRes = await fetch('/api/settings/login-image');
+      const urlData = await urlRes.json();
+      setCurrentUrl(urlData.url ?? null);
+      setStatus('success');
+      setStatusMsg('Login background updated.');
+    } catch (err) {
+      setStatus('error');
+      setStatusMsg(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function handleRemove() {
+    if (!confirm('Remove the login background image?')) return;
+    setUploading(true);
+    try {
+      await fetch('/api/admin/settings/login-image', { method: 'DELETE' });
+      setCurrentUrl(null);
+      setStatus('success');
+      setStatusMsg('Login background removed.');
+    } catch {
+      setStatus('error');
+      setStatusMsg('Failed to remove image.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (isAdmin === null || isAdmin === false) return null;
+
+  const btnBase: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '7px 14px', borderRadius: 8, fontSize: 12,
+    fontWeight: 600, cursor: uploading ? 'wait' : 'pointer',
+    opacity: uploading ? 0.6 : 1, border: 'none',
+  };
+
+  return (
+    <section className="mb-8">
+      <h2
+        className="text-sm font-semibold uppercase tracking-wider mb-4"
+        style={{ color: 'var(--color-white-muted)' }}
+      >
+        Login Page
+      </h2>
+      <div
+        className="p-4 rounded-xl space-y-4"
+        style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
+      >
+        <div className="flex items-start gap-3">
+          <span style={{ color: 'var(--color-white-muted)', marginTop: 2, flexShrink: 0 }}>
+            <ImagePlus size={18} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium" style={{ color: 'var(--color-white)' }}>Background Image</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-white-muted)' }}>
+              Shown on the right side of the login page. Recommended: tall portrait image (e.g. 1080×1920).
+            </p>
+          </div>
+        </div>
+
+        {/* Current image preview */}
+        {currentUrl && (
+          <div className="relative rounded-xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={currentUrl} alt="Login background" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <button
+              onClick={handleRemove}
+              disabled={uploading}
+              className="absolute top-2 right-2 p-1 rounded-lg transition-opacity hover:opacity-80"
+              style={{ background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer' }}
+              title="Remove image"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        {status !== 'idle' && (
+          <p
+            className="text-xs"
+            style={{ color: status === 'success' ? 'var(--color-success)' : 'var(--color-error)' }}
+          >
+            {statusMsg}
+          </p>
+        )}
+
+        <div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileChange}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            style={{ ...btnBase, background: 'var(--color-accent)', color: '#fff' }}
+          >
+            {uploading
+              ? <RefreshCw size={13} className="animate-spin" />
+              : <ImagePlus size={13} />
+            }
+            {uploading ? 'Uploading…' : currentUrl ? 'Replace Image' : 'Upload Image'}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -267,6 +436,9 @@ export default function SettingsPage() {
 
         {/* Figma Integration */}
         <FigmaTokenSection />
+
+        {/* Login Background (admins only) */}
+        <LoginBackgroundSection />
 
         {/* Sign out */}
         <section>
