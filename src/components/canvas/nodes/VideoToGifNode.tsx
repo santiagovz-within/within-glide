@@ -2,6 +2,18 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Clapperboard, Play, Download, X } from 'lucide-react';
+
+function FigmaIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+      <path d="M19 28.5a9.5 9.5 0 1 1 19 0 9.5 9.5 0 0 1-19 0z" fill="currentColor" opacity="0.9"/>
+      <path d="M0 47.5A9.5 9.5 0 0 1 9.5 38H19v9.5a9.5 9.5 0 0 1-19 0z" fill="currentColor" opacity="0.6"/>
+      <path d="M19 0v19H9.5a9.5 9.5 0 0 1 0-19H19z" fill="currentColor" opacity="0.7"/>
+      <path d="M0 19a9.5 9.5 0 0 1 9.5-9.5H19V28.5H9.5A9.5 9.5 0 0 1 0 19z" fill="currentColor" opacity="0.8"/>
+      <path d="M19 0h9.5a9.5 9.5 0 0 1 0 19H19V0z" fill="currentColor"/>
+    </svg>
+  );
+}
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -116,6 +128,10 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
   const [gifUrl,  setGifUrl]  = useState<string | null>(data.gifUrl ?? null);
   const [gifSize, setGifSize] = useState<number | null>(null);
 
+  type FigmaStatus = 'idle' | 'sending' | 'sent' | 'no_token' | 'error';
+  const [figmaStatus,  setFigmaStatus]  = useState<FigmaStatus>('idle');
+  const [figmaError,   setFigmaError]   = useState<string | null>(null);
+
   function updateData(updates: Partial<VideoToGifNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {
       detail: { nodeId: id, data: updates },
@@ -152,6 +168,73 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Send to Figma ─────────────────────────────────────────────────────────
+
+  async function handleSendToFigma() {
+    if (!gifUrl || figmaStatus === 'sending') return;
+
+    setFigmaStatus('sending');
+    setFigmaError(null);
+
+    try {
+      // 1. Verify the user has generated their plugin link token.
+      const tokenRes = await fetch('/api/figma/token');
+      if (!tokenRes.ok) throw new Error('Could not check Figma token status');
+      const { configured } = await tokenRes.json();
+      if (!configured) {
+        setFigmaStatus('no_token');
+        return;
+      }
+
+      // 2. Read the actual GIF dimensions from the live blob URL.
+      const { width, height } = await new Promise<{ width: number; height: number }>(
+        (resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+          img.onerror = reject;
+          img.src = gifUrl!;
+        },
+      );
+
+      // 3. Fetch the blob (from in-memory object URL — no network trip).
+      const blob = await fetch(gifUrl).then(r => r.blob());
+
+      // 4. Ask the server to create a transfer record and return a signed GCS upload URL.
+      const stageRes = await fetch('/api/figma/stage', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ sizeBytes: blob.size, width, height }),
+      });
+      if (!stageRes.ok) {
+        const e = await stageRes.json().catch(() => ({}));
+        throw new Error(e.error ?? 'Stage request failed');
+      }
+      const { id: transferId, uploadUrl } = await stageRes.json();
+
+      // 5. PUT the GIF bytes directly to GCS (bypasses Vercel body-size limit).
+      const putRes = await fetch(uploadUrl, {
+        method:  'PUT',
+        body:    blob,
+        headers: { 'Content-Type': 'image/gif' },
+      });
+      if (!putRes.ok) throw new Error(`GCS upload failed (${putRes.status})`);
+
+      // 6. Confirm the upload so the transfer becomes visible to the plugin.
+      const confirmRes = await fetch(`/api/figma/stage/${transferId}/confirm`, {
+        method: 'POST',
+      });
+      if (!confirmRes.ok) {
+        const e = await confirmRes.json().catch(() => ({}));
+        throw new Error(e.error ?? 'Confirm failed');
+      }
+
+      setFigmaStatus('sent');
+    } catch (err) {
+      setFigmaError(err instanceof Error ? err.message : 'Unknown error');
+      setFigmaStatus('error');
+    }
+  }
 
   // ── Conversion ────────────────────────────────────────────────────────────
 
@@ -216,6 +299,9 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       setGifSize(blob.size);
       setProgress(100);
       setProgressLabel('Done');
+      // Reset Figma send status so the new GIF can be staged fresh.
+      setFigmaStatus('idle');
+      setFigmaError(null);
 
       // Persist URL in node data so downstream connections can pick it up
       updateData({ gifUrl: url });
@@ -372,6 +458,87 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
           <Download size={12} />
           Download GIF
         </button>
+      )}
+
+      {/* ── Send to Figma ───────────────────────────────────────────────── */}
+      {gifUrl && !isConverting && (
+        <>
+          <button
+            onClick={figmaStatus === 'sent' ? undefined : handleSendToFigma}
+            disabled={figmaStatus === 'sending'}
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity disabled:opacity-50"
+            style={{
+              borderRadius: 11,
+              background: figmaStatus === 'sent'
+                ? 'rgba(34,197,94,0.15)'
+                : 'rgba(255,255,255,0.06)',
+              color: figmaStatus === 'sent'
+                ? '#4ade80'
+                : figmaStatus === 'error' || figmaStatus === 'no_token'
+                ? '#f87171'
+                : 'var(--color-white-muted)',
+              border: figmaStatus === 'sent'
+                ? '1px solid rgba(34,197,94,0.3)'
+                : figmaStatus === 'error' || figmaStatus === 'no_token'
+                ? '1px solid rgba(239,68,68,0.3)'
+                : '1px solid transparent',
+              cursor: figmaStatus === 'sent' ? 'default' : 'pointer',
+            }}
+          >
+            {figmaStatus === 'sending' ? (
+              <>
+                <div
+                  className="animate-spin"
+                  style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--color-white-muted)', flexShrink: 0 }}
+                />
+                Sending…
+              </>
+            ) : figmaStatus === 'sent' ? (
+              <>
+                <FigmaIcon size={12} />
+                Sent to Figma ✓
+              </>
+            ) : (
+              <>
+                <FigmaIcon size={12} />
+                Send to Figma
+              </>
+            )}
+          </button>
+
+          {/* Inline contextual help / error text */}
+          {figmaStatus === 'no_token' && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: '#f87171' }}>
+              Go to{' '}
+              <button
+                className="underline"
+                style={{ color: '#f87171', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10 }}
+                onClick={() => window.open('/dashboard/settings', '_blank')}
+              >
+                Settings → Figma Integration
+              </button>{' '}
+              to generate your link token.
+            </p>
+          )}
+
+          {figmaStatus === 'error' && figmaError && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: '#f87171' }}>
+              {figmaError}
+            </p>
+          )}
+
+          {figmaStatus === 'sent' && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: 'var(--color-white-muted)' }}>
+              Make sure the Figma plugin is open in your target file — the GIF drops into whatever file is open.
+            </p>
+          )}
+
+          {figmaStatus === 'idle' && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: 'var(--color-white-muted)', opacity: 0.6 }}>
+              Make sure the Figma plugin is open in your target file.
+            </p>
+          )}
+        </>
       )}
     </NodeWrapper>
   );
