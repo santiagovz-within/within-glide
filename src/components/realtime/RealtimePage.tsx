@@ -111,15 +111,18 @@ export function RealtimePage() {
   const animFrameRef     = useRef<number>(0);
   const lastSendRef      = useRef<number>(0);
 
-  const canvasHandle      = useRef<DrawingCanvasHandle>(null);
-  const connectionRef     = useRef<ReturnType<typeof fal.realtime.connect<FluxInput, FluxResult>> | null>(null);
-  const debounceRef       = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const hoverTimeoutRef   = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const lastDataUriRef    = useRef<string>('');
-  const resultUrlRef      = useRef<string | null>(null);
-  const leftContainerRef  = useRef<HTMLDivElement>(null);
-  const qualityRef        = useRef<Quality>('standard');
-  const promptRef         = useRef('');
+  const canvasHandle          = useRef<DrawingCanvasHandle>(null);
+  const connectionRef         = useRef<ReturnType<typeof fal.realtime.connect<FluxInput, FluxResult>> | null>(null);
+  const debounceRef           = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoverTimeoutRef       = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const generatingTimeoutRef  = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lastDataUriRef        = useRef<string>('');
+  const resultUrlRef          = useRef<string | null>(null);
+  const leftContainerRef      = useRef<HTMLDivElement>(null);
+  const qualityRef            = useRef<Quality>('standard');
+  const promptRef             = useRef('');
+  // Prevents webcam from queuing multiple in-flight requests
+  const isPendingRef          = useRef(false);
 
   useEffect(() => { qualityRef.current = quality; }, [quality]);
   useEffect(() => { promptRef.current = prompt; }, [prompt]);
@@ -176,6 +179,8 @@ export function RealtimePage() {
         tokenProvider,
         tokenExpirationSeconds: 120,
         onResult(result) {
+          clearTimeout(generatingTimeoutRef.current);
+          isPendingRef.current = false;
           const img = result.images?.[0];
           if (img?.content) {
             const blob = new Blob([img.content], { type: img.content_type || 'image/jpeg' });
@@ -199,6 +204,8 @@ export function RealtimePage() {
           }
         },
         onError(error) {
+          clearTimeout(generatingTimeoutRef.current);
+          isPendingRef.current = false;
           console.error('[RealtimePage]', error);
           setConnError(error.message || 'Connection error');
           setIsGenerating(false);
@@ -220,6 +227,12 @@ export function RealtimePage() {
       const uri = lastDataUriRef.current;
       if (!uri || !connectionRef.current) return;
       setIsGenerating(true);
+      isPendingRef.current = true;
+      clearTimeout(generatingTimeoutRef.current);
+      generatingTimeoutRef.current = setTimeout(() => {
+        isPendingRef.current = false;
+        setIsGenerating(false);
+      }, 8000);
       connectionRef.current.send({
         prompt:              promptRef.current,
         image_url:           uri,
@@ -293,10 +306,11 @@ export function RealtimePage() {
   const webcamLoop = useCallback(() => {
     if (!webcamActiveRef.current) return;
     const now = Date.now();
-    if (now - lastSendRef.current >= 167) { // ~6 fps
+    if (!isPendingRef.current && now - lastSendRef.current >= 167) { // ~6 fps
       const frame = captureFrame();
       if (frame && connectionRef.current) {
         lastSendRef.current = now;
+        isPendingRef.current = true;
         connectionRef.current.send({
           prompt:              promptRef.current,
           image_url:           frame,
@@ -339,6 +353,7 @@ export function RealtimePage() {
       disableWebcam();
       clearTimeout(debounceRef.current);
       clearTimeout(hoverTimeoutRef.current);
+      clearTimeout(generatingTimeoutRef.current);
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
     };
   }, [disableWebcam]);
@@ -366,7 +381,7 @@ export function RealtimePage() {
           {isCapExceeded ? (
             <span className="text-xs font-medium" style={{ color: '#f87171' }}>Daily limit reached · resets at midnight UTC</span>
           ) : (
-            <span className="text-xs tabular-nums" style={{ color: 'var(--color-white-muted)' }}>${usage.costUsd.toFixed(4)} / $4.00</span>
+            <span className="text-xs" style={{ color: 'var(--color-white-muted)' }}>Usage</span>
           )}
           <div style={{ width: 120, height: 6, borderRadius: 3, background: 'var(--color-bg-surface)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ height: '100%', width: `${usagePct}%`, borderRadius: 3, background: isCapExceeded ? '#ef4444' : usagePct > 80 ? '#f59e0b' : 'var(--color-accent)', transition: 'width 0.4s ease-out' }} />

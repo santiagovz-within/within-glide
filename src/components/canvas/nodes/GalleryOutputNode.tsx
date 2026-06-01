@@ -6,6 +6,7 @@ import { Grid, Download, Film, Image } from 'lucide-react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { NodeWrapper } from './NodeWrapper';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 import type {
   GalleryOutputNodeData,
   ImageInputNodeData,
@@ -152,12 +153,12 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
                     </div>
                   </>
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <ProgressiveImage
                     src={item.url}
                     alt={`Gallery ${i + 1}`}
                     className="w-full h-full object-cover"
                     draggable={false}
+                    fill
                   />
                 )}
                 {/* Hover overlay */}

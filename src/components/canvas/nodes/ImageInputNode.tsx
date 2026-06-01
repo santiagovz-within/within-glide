@@ -13,6 +13,7 @@ import { processImageFile } from '@/lib/utils/imageProcessing';
 import type { ProcessStage } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
 import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
+import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 
 // ── Stage types ──────────────────────────────────────────────────────────────
 
@@ -334,8 +335,7 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
             backgroundSize: '14px 14px',
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <ProgressiveImage
             src={data.imageUrl}
             alt="Input"
             className="w-full block nodrag"

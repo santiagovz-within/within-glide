@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { Generation } from '@/types';
 import { formatDate } from '@/lib/utils/date';
 import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
+import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 
 export default function GalleryPage() {
   const { generations, setGenerations, removeGeneration, filter, setFilter, sort, setSort, filteredGenerations, isLoading, setIsLoading } = useGalleryStore();
@@ -143,8 +144,12 @@ function GalleryThumbnail({ generation, onClick }: { generation: Generation; onC
       {isVideo ? (
         <video src={generation.media_url} className="w-full h-full object-cover" preload="metadata" />
       ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={generation.media_url} alt={generation.prompt ?? ''} className="w-full h-full object-cover" />
+        <ProgressiveImage
+          src={generation.media_url}
+          alt={generation.prompt ?? ''}
+          className="w-full h-full object-cover"
+          fill
+        />
       )}
 
       {isVideo && (
@@ -197,8 +202,12 @@ function GenerationModal({
           {isVideo ? (
             <video src={generation.media_url} controls className="w-full h-full object-contain" style={{ maxHeight: '70vh' }} />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={generation.media_url} alt="" className="w-full h-full object-contain" style={{ maxHeight: '70vh' }} />
+            <ProgressiveImage
+              src={generation.media_url}
+              alt=""
+              className="w-full h-full object-contain"
+              style={{ maxHeight: '70vh' }}
+            />
           )}
         </div>
 

@@ -346,10 +346,10 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(
       ctx.globalCompositeOperation = 'source-over';
       ctx.drawImage(pendingImage, canvasX, canvasY, canvasW, canvasH);
 
-      setOverlay(null);
-      onImagePlaced();
+      // Keep the overlay so the image can be repositioned and stamped again.
+      // Dismiss (×) is the only way to remove it.
       emitStrokeEnd();
-    }, [pendingImage, overlay, emitStrokeEnd, onImagePlaced]);
+    }, [pendingImage, overlay, emitStrokeEnd]);
 
     const dismissImage = useCallback(() => {
       setOverlay(null);

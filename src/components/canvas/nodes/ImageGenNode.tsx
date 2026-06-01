@@ -4,6 +4,7 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { Aperture, Play, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
@@ -364,8 +365,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           }}
         >
           {displayImages.map((url, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ProgressiveImage
               key={i}
               src={url}
               alt={`Generated ${i + 1}`}
