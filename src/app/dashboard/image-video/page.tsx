@@ -21,9 +21,11 @@ export default function ImageVideoPage() {
     settings, mode,
     isGenerating, setIsGenerating,
     setPrompt, setReferenceImages,
-    updateSession,
+    updateSession, addReferenceImage,
   } = useChatStore();
   const [selectedGen, setSelectedGen] = useState<Generation | null>(null);
+  const [copiedToast, setCopiedToast] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { addGeneration: addToGallery } = useGalleryStore();
 
   const supabase = createClient();
@@ -87,6 +89,14 @@ export default function ImageVideoPage() {
       return data.id;
     }
     return null;
+  }
+
+  function handleCopyPrompt(text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      setCopiedToast(true);
+      copiedTimerRef.current = setTimeout(() => setCopiedToast(false), 1800);
+    }).catch(() => {});
   }
 
   async function handleGenerate() {
@@ -254,7 +264,23 @@ export default function ImageVideoPage() {
       <SessionList onNewSession={createNewSession} />
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        {/* Copied toast */}
+        <div
+          className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full text-xs font-medium pointer-events-none select-none"
+          style={{
+            background: 'var(--color-bg-elevated)',
+            border: 'var(--border-default)',
+            color: 'var(--color-white)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+            opacity: copiedToast ? 1 : 0,
+            transform: `translateX(-50%) translateY(${copiedToast ? 0 : -6}px)`,
+            transition: 'opacity 0.18s ease, transform 0.18s ease',
+          }}
+        >
+          Copied to clipboard
+        </div>
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
           {!activeSessionId ? (
@@ -280,11 +306,16 @@ export default function ImageVideoPage() {
                 {msg.role === 'user' ? (
                   <div className="flex items-end gap-2 max-w-lg">
                     {(msg.reference_image_urls ?? []).length > 0 && (
-                      <RefImageStack urls={msg.reference_image_urls!} />
+                      <RefImageStack
+                        urls={msg.reference_image_urls!}
+                        onImageClick={(url) => addReferenceImage(url)}
+                      />
                     )}
                     <div
-                      className="px-4 py-3 rounded-2xl rounded-tr-sm"
+                      className="px-4 py-3 rounded-2xl rounded-tr-sm cursor-pointer transition-opacity hover:opacity-75 select-none"
                       style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
+                      onClick={() => msg.content && handleCopyPrompt(msg.content)}
+                      title="Click to copy prompt"
                     >
                       <p className="text-sm" style={{ color: 'var(--color-white)' }}>{msg.content}</p>
                     </div>
@@ -336,7 +367,7 @@ export default function ImageVideoPage() {
 
 const REF_ROTATIONS = [-7, 5, -9, 6];
 
-function RefImageStack({ urls }: { urls: string[] }) {
+function RefImageStack({ urls, onImageClick }: { urls: string[]; onImageClick?: (url: string) => void }) {
   const visible = urls.slice(0, 3);
   const extra = urls.length > 3 ? urls.length - 3 : 0;
 
@@ -356,7 +387,11 @@ function RefImageStack({ urls }: { urls: string[] }) {
             border: '1.5px solid rgba(0,0,0,0.55)',
             boxShadow: '0 1px 4px rgba(0,0,0,0.45)',
             borderRadius: 5,
+            cursor: onImageClick ? 'pointer' : 'default',
+            transition: 'transform 0.12s ease, box-shadow 0.12s ease',
           }}
+          onClick={() => onImageClick?.(url)}
+          title={onImageClick ? 'Click to attach' : undefined}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
