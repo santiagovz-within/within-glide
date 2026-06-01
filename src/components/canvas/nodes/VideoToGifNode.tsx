@@ -124,9 +124,9 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
   const [progress,      setProgress]      = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
   const [error,         setError]         = useState<string | null>(null);
-  // Local GIF state — the blob URL is ephemeral and won't survive a page reload
-  const [gifUrl,  setGifUrl]  = useState<string | null>(data.gifUrl ?? null);
-  const [gifSize, setGifSize] = useState<number | null>(null);
+  const [gifUrl,     setGifUrl]     = useState<string | null>(null);
+  const [gifGcsRef,  setGifGcsRef]  = useState<string | null>(data.gifGcsRef ?? null);
+  const [gifSize,    setGifSize]    = useState<number | null>(null);
 
   type FigmaStatus = 'idle' | 'sending' | 'sent' | 'no_token' | 'error';
   const [figmaStatus,  setFigmaStatus]  = useState<FigmaStatus>('idle');
@@ -148,7 +148,6 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
     vid.onloadedmetadata = () => {
       const d = isFinite(vid.duration) ? vid.duration : null;
       setVideoDuration(d);
-      // Clamp duration to video length on first load
       if (d !== null && duration > d) updateData({ duration: Math.max(0.5, d) });
     };
     vid.onerror = () => setVideoDuration(null);
@@ -156,16 +155,15 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.videoUrl]);
 
-  // ── Clear stale GIF if stored blob URL has expired ────────────────────────
+  // ── On mount: restore GIF from GCS if available ───────────────────────────
 
   useEffect(() => {
-    if (!data.gifUrl) return;
-    const img = new Image();
-    img.src = data.gifUrl;
-    img.onerror = () => {
-      setGifUrl(null);
-      updateData({ gifUrl: undefined });
-    };
+    const ref = data.gifGcsRef;
+    if (!ref) return;
+    fetch(`/api/gif?ref=${encodeURIComponent(ref)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.url) setGifUrl(d.url); })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -187,7 +185,7 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
         return;
       }
 
-      // 2. Read the actual GIF dimensions from the live blob URL.
+      // 2. Read dimensions from the current gifUrl.
       const { width, height } = await new Promise<{ width: number; height: number }>(
         (resolve, reject) => {
           const img = new Image();
@@ -197,10 +195,23 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
         },
       );
 
-      // 3. Fetch the blob (from in-memory object URL — no network trip).
-      const blob = await fetch(gifUrl).then(r => r.blob());
+      // 3a. GIF already on GCS — create transfer pointing to existing object (no re-upload).
+      if (gifGcsRef) {
+        const stageRes = await fetch('/api/figma/stage', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ existingGcsRef: gifGcsRef, width, height }),
+        });
+        if (!stageRes.ok) {
+          const e = await stageRes.json().catch(() => ({}));
+          throw new Error(e.error ?? 'Stage request failed');
+        }
+        setFigmaStatus('sent');
+        return;
+      }
 
-      // 4. Ask the server to create a transfer record and return a signed GCS upload URL.
+      // 3b. GIF only in memory — upload blob to GCS.
+      const blob = await fetch(gifUrl).then(r => r.blob());
       const stageRes = await fetch('/api/figma/stage', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,7 +223,6 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       }
       const { id: transferId, uploadUrl } = await stageRes.json();
 
-      // 5. PUT the GIF bytes directly to GCS (bypasses Vercel body-size limit).
       const putRes = await fetch(uploadUrl, {
         method:  'PUT',
         body:    blob,
@@ -220,10 +230,7 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       });
       if (!putRes.ok) throw new Error(`GCS upload failed (${putRes.status})`);
 
-      // 6. Confirm the upload so the transfer becomes visible to the plugin.
-      const confirmRes = await fetch(`/api/figma/stage/${transferId}/confirm`, {
-        method: 'POST',
-      });
+      const confirmRes = await fetch(`/api/figma/stage/${transferId}/confirm`, { method: 'POST' });
       if (!confirmRes.ok) {
         const e = await confirmRes.json().catch(() => ({}));
         throw new Error(e.error ?? 'Confirm failed');
@@ -297,14 +304,28 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
 
       setGifUrl(url);
       setGifSize(blob.size);
+      setGifGcsRef(null);
       setProgress(100);
       setProgressLabel('Done');
-      // Reset Figma send status so the new GIF can be staged fresh.
       setFigmaStatus('idle');
       setFigmaError(null);
 
-      // Persist URL in node data so downstream connections can pick it up
-      updateData({ gifUrl: url });
+      updateData({ gifUrl: url, gifGcsRef: undefined });
+
+      // Upload to GCS in the background so the GIF persists across page reloads.
+      fetch('/api/gif', { method: 'POST' })
+        .then(r => r.ok ? r.json() : null)
+        .then(async d => {
+          if (!d?.uploadUrl) return;
+          const put = await fetch(d.uploadUrl, {
+            method: 'PUT', body: blob, headers: { 'Content-Type': 'image/gif' },
+          });
+          if (put.ok) {
+            setGifGcsRef(d.gcsRef);
+            updateData({ gifGcsRef: d.gcsRef });
+          }
+        })
+        .catch(() => {}); // best-effort — GIF still usable from blob URL this session
 
       // Propagate to any connected image-type nodes
       document.dispatchEvent(new CustomEvent('node:image-propagate', {

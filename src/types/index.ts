@@ -223,6 +223,7 @@ export interface VideoToGifNodeData extends Record<string, unknown> {
   duration?: number;
   ditherLevel?: number;
   gifUrl?: string;
+  gifGcsRef?: string;
   label?: string;
 }
 

@@ -25,10 +25,11 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
-    const { sizeBytes, width, height } = body as {
+    const { sizeBytes, width, height, existingGcsRef } = body as {
       sizeBytes?: number;
       width?: number;
       height?: number;
+      existingGcsRef?: string;
     };
 
     if (typeof sizeBytes === 'number' && sizeBytes > MAX_GIF_BYTES) {
@@ -38,19 +39,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate a stable UUID for both the DB row and the GCS object path.
+    const admin      = createAdminClient();
     const transferId = crypto.randomUUID();
-    const gcsPath    = `figma-transfers/${user.id}/${transferId}.gif`;
-    const gcsRef     = `gcs:${gcsPath}`;
     const expiresAt  = new Date(Date.now() + TRANSFER_TTL_MS).toISOString();
 
-    // Pre-sign the GCS upload URL (valid 15 min — sufficient for the immediate PUT).
+    // If the GIF is already on GCS (persisted from conversion), skip the upload
+    // entirely and create the transfer row as immediately 'pending'.
+    if (existingGcsRef) {
+      if (!existingGcsRef.startsWith(`gcs:user-gifs/${user.id}/`)) {
+        return NextResponse.json({ error: 'Invalid GCS ref' }, { status: 403 });
+      }
+      const { error: insertError } = await admin
+        .from('figma_transfers')
+        .insert({
+          id:         transferId,
+          user_id:    user.id,
+          gcs_ref:    existingGcsRef,
+          width:      width  ?? null,
+          height:     height ?? null,
+          size_bytes: sizeBytes ?? null,
+          status:     'pending',
+          expires_at: expiresAt,
+        });
+      if (insertError) {
+        console.error('[figma/stage POST] insert error:', insertError.message);
+        return NextResponse.json({ error: insertError.message }, { status: 500 });
+      }
+      return NextResponse.json({ id: transferId, expiresAt });
+    }
+
+    // New upload: generate a GCS path and a signed write URL.
+    const gcsPath   = `figma-transfers/${user.id}/${transferId}.gif`;
+    const gcsRef    = `gcs:${gcsPath}`;
     const uploadUrl = await getSignedUploadUrl(gcsPath, 'image/gif');
 
-    // Insert the transfer record before the client starts uploading.
-    // status='uploading' means the GCS object might not exist yet;
-    // the /confirm endpoint transitions it to 'pending'.
-    const admin = createAdminClient();
     const { error: insertError } = await admin
       .from('figma_transfers')
       .insert({
