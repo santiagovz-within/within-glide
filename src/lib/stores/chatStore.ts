@@ -97,6 +97,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     resolution: '1K',
     quality: 'medium',
     numGenerations: 1,
+    duration: 5,
   },
   updateSettings: (updates) =>
     set({ settings: { ...get().settings, ...updates } }),

@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { SessionList } from '@/components/chat/SessionList';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { GenerationCard } from '@/components/chat/GenerationCard';
+import { MODELS } from '@/lib/api/models';
 import type { ChatSession, ChatMessage, Generation } from '@/types';
 
 export default function ImageVideoPage() {
@@ -122,26 +123,39 @@ export default function ImageVideoPage() {
     setReferenceImages([]);
 
     try {
-      const endpoint = settings.model === 'veo-3.1' ? '/api/google/veo' : '/api/fal/generate';
+      const modelConfig = MODELS[settings.model];
+      const isGoogleImageModel = mode === 'image' && modelConfig?.provider === 'google';
+      const endpoint = isGoogleImageModel ? '/api/google/generate' : '/api/fal/generate';
       const count = mode === 'image' ? settings.numGenerations : 1;
 
       const generationIds: string[] = [];
 
       for (let i = 0; i < count; i++) {
+        const body = mode === 'image'
+          ? {
+              model: settings.model,
+              prompt: capturedPrompt,
+              aspectRatio: settings.aspectRatio,
+              resolution: settings.resolution,
+              numImages: 1,
+              referenceImageUrls: capturedRefImages,
+              sourceType: 'chat',
+              sourceId: sessionId,
+            }
+          : {
+              model: settings.model,
+              prompt: capturedPrompt,
+              aspectRatio: settings.aspectRatio,
+              duration: settings.duration ?? 5,
+              startFrameUrl: capturedRefImages[0] ?? undefined,
+              sourceType: 'chat',
+              sourceId: sessionId,
+            };
+
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: settings.model,
-            prompt: capturedPrompt,
-            aspectRatio: settings.aspectRatio,
-            resolution: settings.resolution,
-            numImages: 1,
-            referenceImageUrls: capturedRefImages,
-            quality: settings.quality,
-            sourceType: 'chat',
-            sourceId: sessionId,
-          }),
+          body: JSON.stringify(body),
         });
         const result = await res.json();
 

@@ -397,6 +397,7 @@ export interface ChatSettings {
   resolution: string;
   quality: string;
   numGenerations: number;
+  duration: number;
 }
 
 export interface ChatMessageWithGenerations extends ChatMessage {
