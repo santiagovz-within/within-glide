@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Clapperboard, Play, Download, X } from 'lucide-react';
+import { Clapperboard, Play, Download, X, Check } from 'lucide-react';
 
 function FigmaIcon({ size = 12 }: { size?: number }) {
   return (
@@ -464,16 +464,16 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       {gifUrl && !isConverting && (
         <>
           <button
-            onClick={figmaStatus === 'sent' ? undefined : handleSendToFigma}
+            onClick={handleSendToFigma}
             disabled={figmaStatus === 'sending'}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
             style={{
               borderRadius: 11,
               background: figmaStatus === 'sent'
                 ? 'rgba(34,197,94,0.15)'
                 : 'rgba(255,255,255,0.06)',
               color: figmaStatus === 'sent'
-                ? '#4ade80'
+                ? 'var(--color-success)'
                 : figmaStatus === 'error' || figmaStatus === 'no_token'
                 ? '#f87171'
                 : 'var(--color-white-muted)',
@@ -482,7 +482,7 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
                 : figmaStatus === 'error' || figmaStatus === 'no_token'
                 ? '1px solid rgba(239,68,68,0.3)'
                 : '1px solid transparent',
-              cursor: figmaStatus === 'sent' ? 'default' : 'pointer',
+              cursor: 'pointer',
             }}
           >
             {figmaStatus === 'sending' ? (
@@ -495,8 +495,8 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
               </>
             ) : figmaStatus === 'sent' ? (
               <>
-                <FigmaIcon size={12} />
-                Sent to Figma ✓
+                <Check size={12} style={{ color: 'var(--color-success)' }} />
+                Sent to Figma
               </>
             ) : (
               <>
