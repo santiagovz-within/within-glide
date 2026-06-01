@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 async function resolveUserFromToken(request: NextRequest): Promise<string | null> {
   const authHeader = request.headers.get('authorization') ?? '';
   const match = authHeader.match(/^Token\s+(.+)$/i);
@@ -21,36 +31,23 @@ async function resolveUserFromToken(request: NextRequest): Promise<string | null
   return data.id as string;
 }
 
-/**
- * POST /api/figma/consume
- *
- * Called by the Figma plugin after it has successfully placed the GIF into
- * the open Figma file via figma.createImage(bytes).
- *
- * Marks the transfer as 'consumed' so repeated plugin polls don't return it
- * again. Scoped to the token's user — a plugin cannot consume another user's
- * transfer even if the ID is known.
- *
- * Body: { id: string }
- */
 export async function POST(request: NextRequest) {
   try {
     const userId = await resolveUserFromToken(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Invalid or missing plugin token' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid or missing plugin token' }, { status: 401, headers: CORS_HEADERS });
     }
 
     const body = await request.json().catch(() => ({}));
     const { id } = body as { id?: string };
 
     if (!id) {
-      return NextResponse.json({ error: 'Missing transfer id' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing transfer id' }, { status: 400, headers: CORS_HEADERS });
     }
 
     const admin = createAdminClient();
     const now   = new Date().toISOString();
 
-    // Verify the transfer belongs to this user and is still pending.
     const { data: transfer, error: fetchError } = await admin
       .from('figma_transfers')
       .select('id, status')
@@ -59,12 +56,11 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (fetchError || !transfer) {
-      return NextResponse.json({ error: 'Transfer not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Transfer not found' }, { status: 404, headers: CORS_HEADERS });
     }
 
     if (transfer.status === 'consumed') {
-      // Idempotent: already consumed, acknowledge success.
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
     }
 
     const { error: updateError } = await admin
@@ -75,13 +71,13 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('[figma/consume POST] update error:', updateError.message);
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
+      return NextResponse.json({ error: updateError.message }, { status: 500, headers: CORS_HEADERS });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
   } catch (err) {
     const details = err instanceof Error ? err.message : String(err);
     console.error('[figma/consume POST] Unexpected error:', details);
-    return NextResponse.json({ error: 'Internal server error', details }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', details }, { status: 500, headers: CORS_HEADERS });
   }
 }

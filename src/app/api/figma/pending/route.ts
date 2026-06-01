@@ -3,13 +3,16 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { getSignedReadUrl, gcsPathFromRef } from '@/lib/gcs';
 import crypto from 'crypto';
 
-/**
- * Resolves the Supabase user ID from a raw plugin token sent as
- *   Authorization: Token <raw_token>
- *
- * Hashes the raw token with SHA-256 and looks it up in profiles.
- * Returns null if the header is missing, malformed, or the hash has no match.
- */
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 async function resolveUserFromToken(request: NextRequest): Promise<string | null> {
   const authHeader = request.headers.get('authorization') ?? '';
   const match = authHeader.match(/^Token\s+(.+)$/i);
@@ -29,24 +32,11 @@ async function resolveUserFromToken(request: NextRequest): Promise<string | null
   return data.id as string;
 }
 
-/**
- * GET /api/figma/pending
- *
- * Called by the Figma plugin on its polling interval.
- * Authenticates via the shared link token (Authorization: Token <raw>).
- *
- * Returns the most recent unconsumed, non-expired transfer for this user,
- * including a fresh 1-hour signed GCS read URL for the plugin to download
- * the GIF bytes. Returns { transfer: null } when the queue is empty.
- *
- * Per-user scoping is enforced by resolving the user from the token —
- * a token can only ever surface its own user's pending transfers.
- */
 export async function GET(request: NextRequest) {
   try {
     const userId = await resolveUserFromToken(request);
     if (!userId) {
-      return NextResponse.json({ error: 'Invalid or missing plugin token' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid or missing plugin token' }, { status: 401, headers: CORS_HEADERS });
     }
 
     const admin = createAdminClient();
@@ -57,21 +47,20 @@ export async function GET(request: NextRequest) {
       .select('id, gcs_ref, width, height, size_bytes, created_at')
       .eq('user_id', userId)
       .eq('status', 'pending')
-      .gt('expires_at', now)           // not expired
+      .gt('expires_at', now)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (error) {
       console.error('[figma/pending GET] query error:', error.message);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 500, headers: CORS_HEADERS });
     }
 
     if (!data) {
-      return NextResponse.json({ transfer: null });
+      return NextResponse.json({ transfer: null }, { headers: CORS_HEADERS });
     }
 
-    // Generate a fresh signed URL so the plugin can download the bytes.
     const downloadUrl = await getSignedReadUrl(gcsPathFromRef(data.gcs_ref));
 
     return NextResponse.json({
@@ -83,10 +72,10 @@ export async function GET(request: NextRequest) {
         sizeBytes:   data.size_bytes,
         createdAt:   data.created_at,
       },
-    });
+    }, { headers: CORS_HEADERS });
   } catch (err) {
     const details = err instanceof Error ? err.message : String(err);
     console.error('[figma/pending GET] Unexpected error:', details);
-    return NextResponse.json({ error: 'Internal server error', details }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', details }, { status: 500, headers: CORS_HEADERS });
   }
 }
