@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Grid, X, Download, Trash2, Play } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Grid, X, Download, Trash2, Play } from 'lucide-react';
 import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
 import type { Generation } from '@/types';
@@ -9,47 +9,86 @@ import { formatDate } from '@/lib/utils/date';
 import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 
+const PAGE_SIZE = 60;
+
 export default function GalleryPage() {
-  const { generations, setGenerations, removeGeneration, filter, setFilter, sort, setSort, filteredGenerations, isLoading, setIsLoading } = useGalleryStore();
+  const { generations, setGenerations, removeGeneration, filter, setFilter, sort, setSort, isLoading, setIsLoading } = useGalleryStore();
   const [selectedGen, setSelectedGen] = useState<Generation | null>(null);
-  const supabase = createClient();
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const supabase = useRef(createClient()).current;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    async function loadGenerations() {
+    let cancelled = false;
+
+    async function loadPage() {
       setIsLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
+      if (!user || cancelled) { setIsLoading(false); return; }
+
+      let query = supabase
         .from('generations')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('user_id', user.id)
         .eq('status', 'completed')
-        .neq('media_type', 'prompt')
-        .order('created_at', { ascending: false });
+        .neq('media_type', 'prompt');
+
+      if (filter !== 'all') query = query.eq('media_type', filter);
+
+      const { data, count } = await query
+        .order('created_at', { ascending: sort === 'oldest' })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      if (cancelled) return;
+
+      setTotalCount(count ?? 0);
 
       const rows = data ?? [];
-
-      // Batch-resolve any GCS refs to signed URLs
       const gcsMap = await resolveGcsRefs(rows.map((g) => g.media_url));
-      const resolved = rows.map((g) =>
-        gcsMap.has(g.media_url) ? { ...g, media_url: gcsMap.get(g.media_url)! } : g
-      );
+      if (cancelled) return;
 
-      setGenerations(resolved);
+      setGenerations(
+        rows.map((g) => gcsMap.has(g.media_url) ? { ...g, media_url: gcsMap.get(g.media_url)! } : g)
+      );
       setIsLoading(false);
     }
-    loadGenerations();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    loadPage();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, filter, sort, refreshKey]);
+
+  // Scroll grid to top when page changes
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [page]);
+
+  function handleFilterChange(f: typeof filter) {
+    setPage(0);
+    setFilter(f);
+  }
+
+  function handleSortChange(s: typeof sort) {
+    setPage(0);
+    setSort(s);
+  }
 
   async function handleDelete(gen: Generation) {
     if (!confirm('Delete this generation?')) return;
     await fetch(`/api/generations/${gen.id}`, { method: 'DELETE' });
     removeGeneration(gen.id);
     if (selectedGen?.id === gen.id) setSelectedGen(null);
+    // If we just removed the last item on a non-first page, go back one page
+    if (generations.length === 1 && page > 0) {
+      setPage(p => p - 1);
+    } else {
+      setRefreshKey(k => k + 1);
+    }
   }
 
-  const displayed = filteredGenerations();
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -65,7 +104,7 @@ export default function GalleryPage() {
             {(['all', 'image', 'video'] as const).map((f) => (
               <button
                 key={f}
-                onClick={() => setFilter(f)}
+                onClick={() => handleFilterChange(f)}
                 className="px-3 py-1 rounded-md text-xs font-medium transition-all capitalize"
                 style={{
                   background: filter === f ? 'var(--color-bg-hover)' : 'transparent',
@@ -81,7 +120,7 @@ export default function GalleryPage() {
           <select
             className="px-3 py-1.5 rounded-lg text-xs outline-none"
             value={sort}
-            onChange={(e) => setSort(e.target.value as 'newest' | 'oldest')}
+            onChange={(e) => handleSortChange(e.target.value as 'newest' | 'oldest')}
             style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)', color: 'var(--color-white)' }}
           >
             <option value="newest">Newest</option>
@@ -90,16 +129,16 @@ export default function GalleryPage() {
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      {/* Grid + pagination */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-8 py-6 flex flex-col">
         {isLoading ? (
           <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="rounded-xl animate-pulse" style={{ aspectRatio: '1', background: 'var(--color-bg-elevated)' }} />
             ))}
           </div>
-        ) : displayed.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full py-20">
+        ) : generations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center flex-1 py-20">
             <Grid size={48} className="mb-4 opacity-20" style={{ color: 'var(--color-white)' }} />
             <p className="text-sm font-medium mb-1" style={{ color: 'var(--color-white)' }}>
               {filter !== 'all' ? `No ${filter}s yet` : 'No generations yet'}
@@ -109,15 +148,50 @@ export default function GalleryPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {displayed.map((gen) => (
-              <GalleryThumbnail
-                key={gen.id}
-                generation={gen}
-                onClick={() => setSelectedGen(gen)}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {generations.map((gen) => (
+                <GalleryThumbnail
+                  key={gen.id}
+                  generation={gen}
+                  onClick={() => setSelectedGen(gen)}
+                />
+              ))}
+            </div>
+
+            {/* Pagination controls */}
+            {totalPages > 1 && (
+              <div
+                className="flex items-center justify-center gap-4 mt-6 pt-5 shrink-0"
+                style={{ borderTop: 'var(--border-default)' }}
+              >
+                <button
+                  onClick={() => setPage(p => p - 1)}
+                  disabled={page === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-30 hover:opacity-70"
+                  style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)', color: 'var(--color-white-muted)' }}
+                >
+                  <ChevronLeft size={13} />
+                  Prev
+                </button>
+
+                <span className="text-xs tabular-nums" style={{ color: 'var(--color-white-muted)' }}>
+                  Page {page + 1} of {totalPages}
+                  <span className="ml-2 opacity-50">({totalCount} total)</span>
+                </span>
+
+                <button
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={page >= totalPages - 1}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-30 hover:opacity-70"
+                  style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)', color: 'var(--color-white-muted)' }}
+                >
+                  Next
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
