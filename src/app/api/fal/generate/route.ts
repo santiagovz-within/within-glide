@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
           prompt,
           ...(!hasImage ? { aspect_ratio: aspectRatio } : {}),
           duration: String(body.duration ?? 5),
-          ...(startFrameUrl ? { start_image_url: startFrameUrl } : {}),
+          ...(startFrameUrl ? { image_url: startFrameUrl } : {}),
           ...(endFrameUrl   ? { end_image_url: endFrameUrl } : {}),
         },
       });

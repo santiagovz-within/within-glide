@@ -20,6 +20,7 @@ export default function ImageVideoPage() {
     settings, mode,
     isGenerating, setIsGenerating,
     setPrompt, setReferenceImages,
+    updateSession,
   } = useChatStore();
   const { addGeneration: addToGallery } = useGalleryStore();
 
@@ -110,17 +111,23 @@ export default function ImageVideoPage() {
       .single();
     if (userMsg) addMessage(sessionId, userMsg as ChatMessage);
 
-    // Update session title if it's the first message
+    // Fire-and-forget title generation on first message
     const sessionMessages = messages[sessionId] ?? [];
-    if (sessionMessages.length === 0) {
-      const title = prompt.slice(0, 50);
-      await supabase.from('chat_sessions').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId);
-    }
-
     const capturedPrompt = prompt;
     const capturedRefImages = [...referenceImages];
-    setPrompt('');
-    setReferenceImages([]);
+
+    if (sessionMessages.length === 0) {
+      fetch('/api/google/generate-title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: capturedPrompt }),
+      }).then(r => r.json()).then(({ title }) => {
+        if (title) {
+          supabase.from('chat_sessions').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId!);
+          updateSession(sessionId!, { title });
+        }
+      }).catch(() => {});
+    }
 
     try {
       const modelConfig = MODELS[settings.model];
@@ -148,6 +155,7 @@ export default function ImageVideoPage() {
               aspectRatio: settings.aspectRatio,
               duration: settings.duration ?? 5,
               startFrameUrl: capturedRefImages[0] ?? undefined,
+              endFrameUrl: capturedRefImages[1] ?? undefined,
               sourceType: 'chat',
               sourceId: sessionId,
             };
@@ -171,6 +179,13 @@ export default function ImageVideoPage() {
           if (gen) {
             addGeneration(gen as Generation);
             addToGallery(gen as Generation);
+
+            // Set session thumbnail from the first generated image
+            const currentSession = sessions.find(s => s.id === sessionId);
+            if (!currentSession?.thumbnail_url && gen.media_url) {
+              supabase.from('chat_sessions').update({ thumbnail_url: gen.media_url }).eq('id', sessionId!);
+              updateSession(sessionId!, { thumbnail_url: gen.media_url });
+            }
           }
         }
 

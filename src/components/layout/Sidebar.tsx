@@ -22,7 +22,6 @@ import { createClient } from '@/lib/supabase/client';
 const NAV_ITEMS = [
   { label: 'Canvas Flow',  icon: GitBranch, href: '/dashboard/canvas-flow'  },
   { label: 'Image & Video',icon: Image,     href: '/dashboard/image-video'  },
-  { label: 'Realtime',     icon: Zap,       href: '/dashboard/realtime'     },
   { label: 'Gallery',      icon: Grid,      href: '/dashboard/gallery'      },
 ];
 
@@ -122,6 +121,26 @@ export function Sidebar() {
       {/* Main nav items */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-hidden overflow-y-auto">
         {NAV_ITEMS.map(({ label, icon: Icon, href }) => renderNavItem(label, Icon, href))}
+
+        {/* Realtime — admin only, Coming Soon for everyone else */}
+        {isAdmin ? renderNavItem('Realtime', Zap, '/dashboard/realtime') : (
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full cursor-not-allowed opacity-50">
+            <Zap size={18} className="shrink-0" style={{ color: 'var(--color-white-muted)' }} />
+            {!collapsed && (
+              <>
+                <span className="text-sm font-bold whitespace-nowrap" style={{ color: 'var(--color-white-muted)' }}>
+                  Realtime
+                </span>
+                <span
+                  className="ml-auto text-[9px] font-semibold tracking-wider px-1.5 py-0.5 rounded"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--color-white-muted)', letterSpacing: '0.08em' }}
+                >
+                  COMING SOON
+                </span>
+              </>
+            )}
+          </div>
+        )}
 
         {/* JamBox (coming soon) */}
         <div
