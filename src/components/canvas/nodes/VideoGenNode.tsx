@@ -146,6 +146,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           duration: data.duration,
           startFrameUrl: data.startFrameUrl,
           endFrameUrl: data.endFrameUrl,
+          generateAudio: data.generateAudio ?? true,
           sourceType: 'canvas',
           nodeId: id,
         }),
@@ -270,13 +271,43 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       </div>
 
       {isSeedance && (
-        <div
-          className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg mb-2 text-xs nodrag"
-          style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#eab308' }}
-        >
-          <AlertTriangle size={11} className="shrink-0 mt-0.5" />
-          This is a very expensive model to use, please use wisely.
-        </div>
+        <>
+          <div
+            className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg mb-2 text-xs nodrag"
+            style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#eab308' }}
+          >
+            <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+            This is a very expensive model to use, please use wisely.
+          </div>
+
+          {/* Generate Audio toggle */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs" style={{ color: 'var(--color-white-muted)' }}>Generate Audio</span>
+            <button
+              className="nodrag relative inline-flex items-center rounded-full transition-colors"
+              style={{
+                width: 32,
+                height: 18,
+                background: (data.generateAudio ?? true) ? 'var(--color-accent)' : 'var(--color-bg-surface)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                flexShrink: 0,
+              }}
+              onClick={() => updateData({ generateAudio: !(data.generateAudio ?? true) })}
+            >
+              <span
+                className="absolute rounded-full transition-transform"
+                style={{
+                  width: 12,
+                  height: 12,
+                  background: '#fff',
+                  left: 2,
+                  transform: (data.generateAudio ?? true) ? 'translateX(14px)' : 'translateX(0)',
+                  transition: 'transform 0.15s ease',
+                }}
+              />
+            </button>
+          </div>
+        </>
       )}
 
       <div className="grid grid-cols-2 gap-2 mb-3">

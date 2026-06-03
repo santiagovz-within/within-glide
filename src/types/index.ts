@@ -162,6 +162,7 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   aspectRatio: string;
   imageAspectRatio?: string;
   duration?: number;
+  generateAudio?: boolean;
   prompt?: string;
   promptConnected?: boolean;
   startFrameUrl?: string;

@@ -41,9 +41,11 @@ export async function POST(request: NextRequest) {
 
     if (modelConfig.type === 'video') {
       // Video generation — submit async job
-      const startFrameUrl = (body as GenerateRequestBody & { startFrameUrl?: string }).startFrameUrl;
-      const endFrameUrl   = (body as GenerateRequestBody & { endFrameUrl?: string }).endFrameUrl;
+      const startFrameUrl  = (body as GenerateRequestBody & { startFrameUrl?: string }).startFrameUrl;
+      const endFrameUrl    = (body as GenerateRequestBody & { endFrameUrl?: string }).endFrameUrl;
+      const generateAudio  = (body as GenerateRequestBody & { generateAudio?: boolean }).generateAudio;
       const hasImage = !!startFrameUrl;
+      const isSeedance = model === 'seedance-2';
 
       const endpoint = hasImage && 'imageToVideoEndpoint' in modelConfig
         ? modelConfig.imageToVideoEndpoint
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
           duration: String(body.duration ?? 5),
           ...(startFrameUrl ? { image_url: startFrameUrl } : {}),
           ...(endFrameUrl   ? { end_image_url: endFrameUrl } : {}),
+          ...(isSeedance    ? { generate_audio: generateAudio !== false } : {}),
         },
       });
 
