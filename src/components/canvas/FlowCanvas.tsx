@@ -317,6 +317,7 @@ export function FlowCanvas() {
       if (targetNodeType === 'removeBgNode')      return 'image';
       if (targetNodeType === 'outputNode')        return 'image';
       if (targetNodeType === 'imageToPromptNode') return 'image';
+      if (targetNodeType === 'selectNode')        return 'input';
     }
     if (sourceHandleId === 'video') {
       if (targetNodeType === 'outputNode')      return 'video';
