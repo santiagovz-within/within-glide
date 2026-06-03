@@ -24,6 +24,14 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
   const [length, setLength] = useState('auto');
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isFocused = useRef(false);
+
+  const [localPrompt, setLocalPrompt] = useState(data.generatedPrompt ?? '');
+
+  // Sync from external data (history navigation, new generation) when not focused
+  useEffect(() => {
+    if (!isFocused.current) setLocalPrompt(data.generatedPrompt ?? '');
+  }, [data.generatedPrompt]);
 
   const promptHistory: string[] = data.promptHistory ?? [];
   const [historyIdx, setHistoryIdx] = useState(() => Math.max(0, promptHistory.length - 1));
@@ -38,7 +46,7 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
 
   useLayoutEffect(() => {
     if (textareaRef.current) autoResize(textareaRef.current);
-  }, [data.generatedPrompt, historyIdx]);
+  }, [localPrompt, historyIdx]);
 
   function updateData(updates: Partial<ImageToPromptNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
@@ -82,8 +90,8 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
   }
 
   function handleCopy() {
-    if (!data.generatedPrompt) return;
-    navigator.clipboard.writeText(data.generatedPrompt);
+    if (!localPrompt) return;
+    navigator.clipboard.writeText(localPrompt);
     setCopied(true);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
     copiedTimer.current = setTimeout(() => setCopied(false), 2000);
@@ -193,13 +201,12 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
         </div>
       )}
 
-      {/* Generated prompt */}
+      {/* Generated prompt — editable */}
       {hasPrompt && (
         <div className="relative">
           <textarea
             ref={textareaRef}
-            readOnly
-            value={data.generatedPrompt}
+            value={localPrompt}
             rows={1}
             className="w-full text-xs outline-none nodrag resize-none"
             style={{
@@ -210,6 +217,15 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
               padding: '8px 32px 8px 10px',
               lineHeight: 1.6,
               overflow: 'hidden',
+            }}
+            onFocus={() => { isFocused.current = true; }}
+            onBlur={() => { isFocused.current = false; }}
+            onChange={(e) => {
+              const v = e.target.value;
+              setLocalPrompt(v);
+              autoResize(e.target);
+              updateData({ generatedPrompt: v });
+              propagate(v);
             }}
           />
           <button
