@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Users, Plus, Trash2, Shield, ShieldOff, RefreshCw, Edit2, Check, X, AlertTriangle, UserCheck, UserX, Clock } from 'lucide-react';
+import { Users, Plus, Trash2, Shield, ShieldOff, RefreshCw, Edit2, Check, X, AlertTriangle, UserCheck, UserX, Clock, FlaskConical } from 'lucide-react';
 
 interface AdminUser {
   id: string;
@@ -13,6 +13,7 @@ interface AdminUser {
     username: string;
     display_name: string | null;
     is_admin: boolean;
+    is_test_user: boolean;
     approved: boolean;
     created_at: string;
   } | null;
@@ -31,8 +32,9 @@ export default function AdminUsersPage() {
   const [createWarning, setCreateWarning]   = useState('');
 
   // Per-row state
-  const [togglingId,  setTogglingId]  = useState<string | null>(null);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [togglingId,   setTogglingId]   = useState<string | null>(null);
+  const [approvingId,  setApprovingId]  = useState<string | null>(null);
+  const [testingId,    setTestingId]    = useState<string | null>(null);
   const [rowErrors, setRowErrors]           = useState<Record<string, string>>({});
   const [editingNameId, setEditingNameId]   = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState('');
@@ -166,6 +168,29 @@ export default function AdminUsersPage() {
     setApprovingId(null);
   }
 
+  async function handleToggleTestUser(userId: string, currentIsTestUser: boolean) {
+    setTestingId(userId);
+    setRowErrors((prev) => { const n = { ...prev }; delete n[userId]; return n; });
+
+    const res = await fetch(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_test_user: !currentIsTestUser }),
+    });
+
+    if (res.ok) {
+      setUsers(users.map((u) =>
+        u.id === userId && u.profile
+          ? { ...u, profile: { ...u.profile, is_test_user: !currentIsTestUser } }
+          : u
+      ));
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setRowErrors((prev) => ({ ...prev, [userId]: d.error ?? 'Failed to update test user status' }));
+    }
+    setTestingId(null);
+  }
+
   async function handleDelete(userId: string, email: string | undefined) {
     if (!confirm(`Delete user ${email ?? userId}? This cannot be undone.`)) return;
     const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
@@ -290,13 +315,14 @@ export default function AdminUsersPage() {
         <div className="rounded-xl overflow-hidden" style={{ border: 'var(--border-default)' }}>
           {/* Table header */}
           <div
-            className="grid grid-cols-[1fr_1fr_110px_110px_100px] px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+            className="grid grid-cols-[1fr_1fr_110px_90px_90px_120px] px-4 py-3 text-xs font-semibold uppercase tracking-wider"
             style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderBottom: 'var(--border-default)' }}
           >
             <span>Name</span>
             <span>Email</span>
             <span>Access</span>
             <span>Role</span>
+            <span>Mode</span>
             <span className="text-right">Actions</span>
           </div>
 
@@ -305,12 +331,14 @@ export default function AdminUsersPage() {
             const isSavingName  = savingNameId  === user.id;
             const isToggling    = togglingId    === user.id;
             const isApproving   = approvingId   === user.id;
+            const isTesting     = testingId     === user.id;
             const rowError      = rowErrors[user.id];
             const approved      = user.profile?.approved ?? false;
+            const isTestUser    = user.profile?.is_test_user ?? false;
 
             return (
               <div key={user.id} style={{ background: 'var(--color-bg-elevated)', borderBottom: 'var(--border-default)' }}>
-                <div className="grid grid-cols-[1fr_1fr_110px_110px_100px] items-center px-4 py-3 transition-colors hover:bg-white/[0.03] group">
+                <div className="grid grid-cols-[1fr_1fr_110px_90px_90px_120px] items-center px-4 py-3 transition-colors hover:bg-white/[0.03] group">
                   {/* Editable name */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     {isEditingName ? (
@@ -414,6 +442,25 @@ export default function AdminUsersPage() {
                     )}
                   </div>
 
+                  {/* Mode badge */}
+                  <div>
+                    {isTestUser ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ background: 'rgba(234,179,8,0.12)', color: '#eab308', border: '1px solid rgba(234,179,8,0.25)' }}
+                      >
+                        <FlaskConical size={10} /> Test
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)' }}
+                      >
+                        Standard
+                      </span>
+                    )}
+                  </div>
+
                   {/* Actions */}
                   <div className="flex items-center justify-end gap-1">
                     {/* Approve / Revoke */}
@@ -442,6 +489,18 @@ export default function AdminUsersPage() {
                         : user.profile?.is_admin
                           ? <ShieldOff size={14} style={{ color: 'var(--color-white-muted)' }} />
                           : <Shield size={14} style={{ color: 'var(--color-accent)' }} />
+                      }
+                    </button>
+                    {/* Toggle test user */}
+                    <button
+                      onClick={() => handleToggleTestUser(user.id, isTestUser)}
+                      disabled={isTesting}
+                      title={isTestUser ? 'Remove test mode' : 'Enable test mode'}
+                      className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40"
+                    >
+                      {isTesting
+                        ? <RefreshCw size={14} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} />
+                        : <FlaskConical size={14} style={{ color: isTestUser ? '#eab308' : 'var(--color-white-muted)' }} />
                       }
                     </button>
                     <button

@@ -96,8 +96,13 @@ function InvalidConnectionToast({ visible }: { visible: boolean }) {
   );
 }
 
-export function FlowCanvas() {
+interface FlowCanvasProps {
+  isTestUser?: boolean;
+}
+
+export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, setNodes, setEdges } = useFlowStore();
+  const allowedTypes = isTestUser ? (['videoInputNode', 'videoToGifNode'] as import('@/types').NodeType[]) : undefined;
   const { screenToFlowPosition } = useReactFlow();
   const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
   const [invalidToast, setInvalidToast] = useState(false);
@@ -677,6 +682,7 @@ export function FlowCanvas() {
           onClose={() => setContextMenu(null)}
           selectedCount={selectedCount}
           onGroup={groupSelectedNodes}
+          allowedTypes={allowedTypes}
         />
       )}
     </div>

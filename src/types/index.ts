@@ -8,6 +8,7 @@ export interface Profile {
   display_name: string | null;
   theme: 'dark' | 'light';
   is_admin: boolean;
+  is_test_user: boolean;
   created_at: string;
   updated_at: string;
 }

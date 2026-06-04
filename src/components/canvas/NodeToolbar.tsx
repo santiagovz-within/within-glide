@@ -36,14 +36,19 @@ interface NodeToolbarProps {
   onClose: () => void;
   selectedCount?: number;
   onGroup?: () => void;
+  allowedTypes?: NodeType[];
 }
 
 const MENU_WIDTH  = 200;
 const MENU_HEIGHT = 320;
 
-export function NodeToolbar({ x, y, onAdd, onClose, selectedCount = 0, onGroup }: NodeToolbarProps) {
+export function NodeToolbar({ x, y, onAdd, onClose, selectedCount = 0, onGroup, allowedTypes }: NodeToolbarProps) {
   const left = x + MENU_WIDTH  > window.innerWidth  ? x - MENU_WIDTH  : x;
   const top  = y + MENU_HEIGHT > window.innerHeight ? y - MENU_HEIGHT : y;
+
+  const visibleOptions = allowedTypes
+    ? NODE_OPTIONS.filter((o) => allowedTypes.includes(o.type))
+    : NODE_OPTIONS;
 
   return (
     <>
@@ -81,7 +86,8 @@ export function NodeToolbar({ x, y, onAdd, onClose, selectedCount = 0, onGroup }
         )}
 
         {CATEGORIES.map((category) => {
-          const options = NODE_OPTIONS.filter((o) => o.category === category);
+          const options = visibleOptions.filter((o) => o.category === category);
+          if (options.length === 0) return null;
           return (
             <div key={category}>
               <p className="px-3 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-white-muted)' }}>

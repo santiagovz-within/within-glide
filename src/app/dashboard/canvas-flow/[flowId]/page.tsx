@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ReactFlowProvider, type Node } from '@xyflow/react';
 import { FlowCanvas } from '@/components/canvas/FlowCanvas';
@@ -38,6 +38,7 @@ export default function FlowEditorPage() {
     isDirty, setDirty, setSaving, setLastSaved, currentFlow,
   } = useFlowStore();
   const supabase = createClient();
+  const [isTestUser, setIsTestUser] = useState(false);
 
   const loadFlow = useCallback(async () => {
     const { data } = await supabase
@@ -47,6 +48,20 @@ export default function FlowEditorPage() {
       .single();
     if (data) setCurrentFlow(data);
   }, [flowId, supabase, setCurrentFlow]);
+
+  useEffect(() => {
+    async function checkTestUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_test_user')
+        .eq('id', user.id)
+        .single();
+      if (profile?.is_test_user) setIsTestUser(true);
+    }
+    checkTestUser();
+  }, [supabase]);
 
   useEffect(() => {
     loadFlow();
@@ -105,7 +120,7 @@ export default function FlowEditorPage() {
     <ReactFlowProvider>
       <div className="relative w-full h-full">
         <TopBar flowId={flowId} />
-        <FlowCanvas />
+        <FlowCanvas isTestUser={isTestUser} />
       </div>
     </ReactFlowProvider>
   );

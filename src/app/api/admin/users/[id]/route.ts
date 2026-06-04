@@ -26,9 +26,10 @@ export async function PATCH(
   const supabase = createAdminClient();
 
   const updates: Record<string, unknown> = {};
-  if (typeof body.is_admin === 'boolean')    updates.is_admin     = body.is_admin;
-  if (typeof body.approved === 'boolean')    updates.approved     = body.approved;
-  if (typeof body.display_name === 'string') updates.display_name = body.display_name;
+  if (typeof body.is_admin     === 'boolean') updates.is_admin     = body.is_admin;
+  if (typeof body.is_test_user === 'boolean') updates.is_test_user = body.is_test_user;
+  if (typeof body.approved     === 'boolean') updates.approved     = body.approved;
+  if (typeof body.display_name === 'string')  updates.display_name = body.display_name;
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
