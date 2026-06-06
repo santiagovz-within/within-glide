@@ -88,7 +88,8 @@ export type NodeType =
   | 'galleryOutputNode'
   | 'videoToGifNode'
   | 'removeBgNode'
-  | 'groupNode';
+  | 'groupNode'
+  | 'mediaInputNode';
 
 export interface FlowViewport {
   x: number;
@@ -251,6 +252,18 @@ export interface VideoInputNodeData extends Record<string, unknown> {
   uploadError?: string;
 }
 
+export interface MediaInputNodeData extends Record<string, unknown> {
+  mediaType?: 'image' | 'video';
+  imageUrl?: string;
+  videoUrl?: string;
+  naturalWidth?: number;
+  naturalHeight?: number;
+  label?: string;
+  uploadStatus?: 'validating' | 'compressing' | 'uploading' | 'error';
+  uploadProgress?: number;
+  uploadError?: string;
+}
+
 export interface VideoUpscaleNodeData extends Record<string, unknown> {
   videoUrl?: string;
   upscaleFactor?: number;
@@ -273,7 +286,8 @@ export type NodeData =
   | GalleryOutputNodeData
   | VideoToGifNodeData
   | RemoveBgNodeData
-  | GroupNodeData;
+  | GroupNodeData
+  | MediaInputNodeData;
 
 export type NodeStatus = 'idle' | 'processing' | 'completed' | 'error';
 

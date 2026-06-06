@@ -50,6 +50,8 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
   'removeBgNode:image:target':             'image',
   'removeBgNode:image:source':             'image',
   'videoInputNode:video:source':           'video',
+  'mediaInputNode:image:source':           'image',
+  'mediaInputNode:video:source':           'video',
   'videoUpscaleNode:video_in:target':      'video',
   'videoUpscaleNode:video:source':         'video',
   'galleryOutputNode:video:target':        'video',

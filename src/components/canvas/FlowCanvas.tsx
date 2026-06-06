@@ -32,12 +32,13 @@ import { GalleryOutputNode } from './nodes/GalleryOutputNode';
 import { VideoToGifNode } from './nodes/VideoToGifNode';
 import { RemoveBgNode } from './nodes/RemoveBgNode';
 import { VideoInputNode } from './nodes/VideoInputNode';
+import { MediaInputNode } from './nodes/MediaInputNode';
 import { VideoUpscaleNode } from './nodes/VideoUpscaleNode';
 import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, RemoveBgNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, RemoveBgNodeData, MediaInputNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
@@ -56,6 +57,7 @@ const nodeTypes = {
   videoToGifNode: VideoToGifNode,
   removeBgNode: RemoveBgNode,
   videoInputNode: VideoInputNode,
+  mediaInputNode: MediaInputNode,
   videoUpscaleNode: VideoUpscaleNode,
   groupNode: GroupNode,
 };
@@ -78,6 +80,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   videoToGifNode:     { fps: 12, outputWidth: 480, startTime: 0, duration: 10, ditherLevel: 4 },
   removeBgNode:       { status: 'idle' },
   videoInputNode:     {},
+  mediaInputNode:     {},
   videoUpscaleNode:   { upscaleFactor: 2, status: 'idle' },
   groupNode:          { label: 'Group', color: 'Blue' },
 };
@@ -102,7 +105,7 @@ interface FlowCanvasProps {
 
 export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, setNodes, setEdges } = useFlowStore();
-  const allowedTypes = isTestUser ? (['videoInputNode', 'videoToGifNode'] as import('@/types').NodeType[]) : undefined;
+  const allowedTypes = isTestUser ? (['mediaInputNode', 'videoToGifNode'] as import('@/types').NodeType[]) : undefined;
   const { screenToFlowPosition } = useReactFlow();
   const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
   const [invalidToast, setInvalidToast] = useState(false);
@@ -418,6 +421,26 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
     return () => document.removeEventListener('node:video-propagate', handleVideoPropagate);
   }, [edges, updateNodeData]);
 
+  // Remove edges from a specific source handle (fired by MediaInputNode when switching media type).
+  useEffect(() => {
+    function handleRemoveSourceEdges(e: Event) {
+      const { nodeId, handleId } = (e as CustomEvent).detail as { nodeId: string; handleId: string };
+      const freshEdges = useFlowStore.getState().edges;
+      const toRemove = freshEdges.filter((edge) => edge.source === nodeId && edge.sourceHandle === handleId);
+      if (toRemove.length === 0) return;
+      for (const edge of toRemove) {
+        if (handleId === 'image') propagateImageToTarget(nodeId, edge, null);
+        if (handleId === 'video' && (edge.targetHandle === 'video' || edge.targetHandle === 'video_in')) {
+          updateNodeData(edge.target, { videoUrl: undefined });
+        }
+      }
+      const removeIds = new Set(toRemove.map((edge) => edge.id));
+      useFlowStore.getState().setEdges(freshEdges.filter((e) => !removeIds.has(e.id)));
+    }
+    document.addEventListener('node:remove-source-edges', handleRemoveSourceEdges);
+    return () => document.removeEventListener('node:remove-source-edges', handleRemoveSourceEdges);
+  }, [propagateImageToTarget, updateNodeData]);
+
   const onConnectHandler = useCallback(
     (connection: Connection) => {
       // ── Single-connection enforcement ────────────────────────────────
@@ -461,6 +484,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         const sourceNode = latestNodes.find((n) => n.id === connection.source);
         let imageUrl: string | undefined;
         if (sourceNode?.type === 'imageInputNode') imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
+        else if (sourceNode?.type === 'mediaInputNode') imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
         else if (sourceNode?.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
         else if (sourceNode?.type === 'upscaleNode')  imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
         else if (sourceNode?.type === 'modifyNode')   imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
@@ -480,6 +504,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         let videoUrl: string | undefined;
         if (sourceNode?.type === 'videoGenNode') videoUrl = (sourceNode.data as VideoGenNodeData).videoUrl;
         else if (sourceNode?.type === 'videoInputNode') videoUrl = (sourceNode.data as { videoUrl?: string }).videoUrl;
+        else if (sourceNode?.type === 'mediaInputNode') videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
         else if (sourceNode?.type === 'videoUpscaleNode') videoUrl = (sourceNode.data as { videoUrl?: string }).videoUrl;
         if (videoUrl) updateNodeData(connection.target, { videoUrl });
       }
@@ -554,63 +579,72 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
     e.preventDefault();
     setIsDragOver(false);
 
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    const files = Array.from(e.dataTransfer.files).filter(
+      (f) => f.type.startsWith('image/') || f.type.startsWith('video/')
+    );
     if (files.length === 0) return;
 
     const canvasPos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
 
     files.forEach((file, i) => {
       const position = { x: canvasPos.x + i * 280, y: canvasPos.y };
-      const nodeId = `imageInputNode-${Date.now()}-${i}`;
+      const nodeId = `mediaInputNode-${Date.now()}-${i}`;
 
-      // Create node immediately with validating status so it renders the processing UI
+      // Create the node immediately so the user sees the processing state right away.
       addNode({
         id: nodeId,
-        type: 'imageInputNode',
+        type: 'mediaInputNode',
         position,
-        data: { uploadStatus: 'validating' } as ImageInputNodeData,
+        data: { uploadStatus: 'validating' } as MediaInputNodeData,
       } as Node<NodeData>);
 
-      function setStatus(updates: Partial<ImageInputNodeData>) {
+      function setStatus(updates: Partial<MediaInputNodeData>) {
         document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId, data: updates } }));
       }
 
-      // Run validation + compression + upload in its own async context per file
-      (async () => {
-        let processed: File;
-        try {
-          processed = await processImageFile(file, (stage, percent) => {
-            if (stage === 'compressing') {
-              setStatus({ uploadStatus: 'compressing', uploadProgress: percent ?? 0 });
-            } else {
-              setStatus({ uploadStatus: stage });
-            }
-          });
-        } catch (err) {
-          setStatus({
-            uploadStatus: 'error',
-            uploadError: err instanceof Error ? err.message : 'Failed to process image.',
-            uploadProgress: undefined,
-          });
-          return;
-        }
-
-        setStatus({ uploadStatus: 'uploading', uploadProgress: undefined });
-
-        try {
-          const url = await uploadImageToStorage(processed);
-          setStatus({ imageUrl: url, uploadStatus: undefined, uploadProgress: undefined, uploadError: undefined });
-          document.dispatchEvent(new CustomEvent('node:image-propagate', {
-            detail: { sourceNodeId: nodeId, imageUrl: url },
-          }));
-        } catch (err) {
-          setStatus({
-            uploadStatus: 'error',
-            uploadError: err instanceof Error ? err.message : 'Upload failed.',
-            uploadProgress: undefined,
-          });
-        }
-      })();
+      if (file.type.startsWith('image/')) {
+        (async () => {
+          let processed: File;
+          try {
+            processed = await processImageFile(file, (stage, percent) => {
+              if (stage === 'compressing') {
+                setStatus({ uploadStatus: 'compressing', uploadProgress: percent ?? 0 });
+              } else {
+                setStatus({ uploadStatus: stage });
+              }
+            });
+          } catch (err) {
+            setStatus({
+              uploadStatus: 'error',
+              uploadError: err instanceof Error ? err.message : 'Failed to process image.',
+              uploadProgress: undefined,
+            });
+            return;
+          }
+          setStatus({ uploadStatus: 'uploading', uploadProgress: undefined });
+          try {
+            const url = await uploadImageToStorage(processed);
+            setStatus({ mediaType: 'image', imageUrl: url, uploadStatus: undefined, uploadProgress: undefined, uploadError: undefined });
+            document.dispatchEvent(new CustomEvent('node:image-propagate', {
+              detail: { sourceNodeId: nodeId, imageUrl: url },
+            }));
+          } catch (err) {
+            setStatus({
+              uploadStatus: 'error',
+              uploadError: err instanceof Error ? err.message : 'Upload failed.',
+              uploadProgress: undefined,
+            });
+          }
+        })();
+      } else {
+        // Video — pass the File to the node via a targeted event so it can run
+        // its own pipeline (which requires FFmpeg, an async singleton we keep
+        // inside the node to avoid duplicating it here).
+        setStatus({ uploadStatus: undefined });
+        document.dispatchEvent(new CustomEvent('node:pending-file', {
+          detail: { nodeId, file },
+        }));
+      }
     });
   }
 
