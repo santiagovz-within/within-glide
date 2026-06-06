@@ -284,10 +284,10 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
 
   // ── Derived display values ──────────────────────────────────────────────────
 
-  const inputPortType  = inputMediaType === 'video' ? 'video'  : 'image';
-  const outputPortType = inputMediaType === 'video' ? 'video'  : 'image';
-  const outputHandleId = inputMediaType === 'video' ? 'video'  : 'image';
-  const accentColor    = inputMediaType === 'video' ? PORT_COLORS.video : PORT_COLORS.image;
+  const inputPortType  = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' ? 'image' : 'neutral';
+  const outputPortType = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' ? 'image' : 'neutral';
+  const outputHandleId = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' ? 'image' : 'media';
+  const accentColor    = inputMediaType === 'video' ? PORT_COLORS.video : inputMediaType === 'image' ? PORT_COLORS.image : PORT_COLORS.neutral;
 
   const upscaleFactor = data.upscaleFactor ?? 2;
   const hasImageOutput = inputMediaType === 'image' && !!data.outputImageUrl;

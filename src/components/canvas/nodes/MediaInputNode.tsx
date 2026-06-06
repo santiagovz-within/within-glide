@@ -8,6 +8,7 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { MediaInputNodeData } from '@/types';
 import { ACCEPTED_IMAGE_TYPES } from '@/lib/utils/constants';
+import { consumePendingFile } from '@/lib/utils/pendingFiles';
 import { createClient } from '@/lib/supabase/client';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
@@ -321,17 +322,14 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
     }
   }, [processImage, processVideo]);
 
-  // Accept files forwarded by FlowCanvas when a file is dropped on the canvas
-  // (rather than directly on this node). This lets video files reach the node's
-  // own processing pipeline without duplicating the FFmpeg logic in FlowCanvas.
+  // Consume any file queued by FlowCanvas before this node mounted.
+  // The map write happens synchronously in onDrop; this effect runs after mount,
+  // so the file is guaranteed to be present by the time we read it.
   useEffect(() => {
-    function onPendingFile(e: Event) {
-      const { nodeId, file } = (e as CustomEvent).detail as { nodeId: string; file: File };
-      if (nodeId === id) handleFile(file);
-    }
-    document.addEventListener('node:pending-file', onPendingFile);
-    return () => document.removeEventListener('node:pending-file', onPendingFile);
-  }, [id, handleFile]);
+    const file = consumePendingFile(id);
+    if (file) handleFile(file);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally runs only on mount
 
   // ── Dropzone ────────────────────────────────────────────────────────────────
 

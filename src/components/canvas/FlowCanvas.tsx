@@ -43,6 +43,7 @@ import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeD
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
+import { setPendingFile } from '@/lib/utils/pendingFiles';
 
 const nodeTypes = {
   promptNode: PromptNode,
@@ -576,10 +577,10 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
   }, [screenToFlowPosition]);
 
   function onDragOver(e: React.DragEvent) {
-    const hasImageFile = Array.from(e.dataTransfer.items).some(
-      (item) => item.kind === 'file' && item.type.startsWith('image/')
+    const hasMediaFile = Array.from(e.dataTransfer.items).some(
+      (item) => item.kind === 'file' && (item.type.startsWith('image/') || item.type.startsWith('video/'))
     );
-    if (!hasImageFile) return;
+    if (!hasMediaFile) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     setIsDragOver(true);
@@ -653,13 +654,10 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
           }
         })();
       } else {
-        // Video — pass the File to the node via a targeted event so it can run
-        // its own pipeline (which requires FFmpeg, an async singleton we keep
-        // inside the node to avoid duplicating it here).
+        // Video — store in the module-level map so MediaInputNode can consume
+        // it on mount (dispatching an event here would race against mount).
         setStatus({ uploadStatus: undefined });
-        document.dispatchEvent(new CustomEvent('node:pending-file', {
-          detail: { nodeId, file },
-        }));
+        setPendingFile(nodeId, file);
       }
     });
   }

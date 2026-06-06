@@ -1,21 +1,23 @@
 'use client';
 
 import { Handle, Position, type HandleProps } from '@xyflow/react';
-import { Image, Film, Type } from 'lucide-react';
+import { Image, Film, Type, Minus } from 'lucide-react';
 import { useState } from 'react';
 
-export type PortType = 'text' | 'image' | 'video';
+export type PortType = 'text' | 'image' | 'video' | 'neutral';
 
 export const PORT_COLORS: Record<PortType, string> = {
-  text:  '#3b9eff',
-  image: '#a855f7',
-  video: '#34d399',
+  text:    '#3b9eff',
+  image:   '#a855f7',
+  video:   '#34d399',
+  neutral: '#6b7280',
 };
 
 export const PORT_TINTS: Record<PortType, string> = {
-  text:  '#1e3f6a',
-  image: '#3a1a6a',
-  video: '#114a32',
+  text:    '#1e3f6a',
+  image:   '#3a1a6a',
+  video:   '#114a32',
+  neutral: '#1f2024',
 };
 
 // Registry: `nodeType:handleId:source|target` → PortType
@@ -60,8 +62,9 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
 };
 
 function PortIcon({ type, size = 9 }: { type: PortType; size?: number }) {
-  if (type === 'image') return <Image size={size} />;
-  if (type === 'video') return <Film size={size} />;
+  if (type === 'image')   return <Image size={size} />;
+  if (type === 'video')   return <Film size={size} />;
+  if (type === 'neutral') return <Minus size={size} />;
   return <Type size={size} />;
 }
 
