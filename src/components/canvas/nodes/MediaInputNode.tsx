@@ -543,7 +543,7 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
             <p className="text-xs text-center" style={{ color: 'var(--color-white-muted)' }}>
               {isDragActive ? 'Drop file here' : 'Drop or click to upload'}
             </p>
-            <p style={{ color: 'var(--color-white-muted)', fontSize: 10, opacity: 0.6 }}>
+            <p className="text-center px-4" style={{ color: 'var(--color-white-muted)', fontSize: 10, opacity: 0.6 }}>
               Image (JPEG, PNG, WebP) · Video (MP4, WebM, MOV, max 150 MB)
             </p>
           </div>
