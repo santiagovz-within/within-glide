@@ -33,12 +33,13 @@ import { VideoToGifNode } from './nodes/VideoToGifNode';
 import { RemoveBgNode } from './nodes/RemoveBgNode';
 import { VideoInputNode } from './nodes/VideoInputNode';
 import { MediaInputNode } from './nodes/MediaInputNode';
+import { UpscaleMediaNode } from './nodes/UpscaleMediaNode';
 import { VideoUpscaleNode } from './nodes/VideoUpscaleNode';
 import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, RemoveBgNodeData, MediaInputNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, RemoveBgNodeData, MediaInputNodeData, UpscaleMediaNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
@@ -58,6 +59,7 @@ const nodeTypes = {
   removeBgNode: RemoveBgNode,
   videoInputNode: VideoInputNode,
   mediaInputNode: MediaInputNode,
+  upscaleMediaNode: UpscaleMediaNode,
   videoUpscaleNode: VideoUpscaleNode,
   groupNode: GroupNode,
 };
@@ -81,6 +83,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   removeBgNode:       { status: 'idle' },
   videoInputNode:     {},
   mediaInputNode:     {},
+  upscaleMediaNode:   { model: 'seedvr2', scaleFactor: 2, upscaleFactor: 2, status: 'idle' },
   videoUpscaleNode:   { upscaleFactor: 2, status: 'idle' },
   groupNode:          { label: 'Group', color: 'Blue' },
 };
@@ -291,6 +294,15 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
       const srcType = PORT_TYPE_MAP[srcKey];
       const tgtType = PORT_TYPE_MAP[tgtKey];
 
+      // upscaleMediaNode's single input accepts image or video
+      if (targetNode.type === 'upscaleMediaNode' && conn.targetHandle === 'media') {
+        if (srcType === 'image' || srcType === 'video') return true;
+        if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
+        setInvalidToast(true);
+        invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
+        return false;
+      }
+
       if (!srcType || !tgtType) return true;
 
       if (srcType !== tgtType) {
@@ -321,6 +333,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
       if (targetNodeType === 'videoGenNode')      return 'start_frame';
       if (targetNodeType === 'imageGenNode')      return 'ref_0';
       if (targetNodeType === 'upscaleNode')       return 'image';
+      if (targetNodeType === 'upscaleMediaNode')  return 'media';
       if (targetNodeType === 'modifyNode')        return 'image';
       if (targetNodeType === 'removeBgNode')      return 'image';
       if (targetNodeType === 'outputNode')        return 'image';
@@ -328,9 +341,10 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
       if (targetNodeType === 'selectNode')        return 'input';
     }
     if (sourceHandleId === 'video') {
-      if (targetNodeType === 'outputNode')      return 'video';
-      if (targetNodeType === 'videoToGifNode')  return 'video';
-      if (targetNodeType === 'videoUpscaleNode') return 'video_in';
+      if (targetNodeType === 'outputNode')        return 'video';
+      if (targetNodeType === 'videoToGifNode')    return 'video';
+      if (targetNodeType === 'videoUpscaleNode')  return 'video_in';
+      if (targetNodeType === 'upscaleMediaNode')  return 'media';
     }
     return null;
   }
@@ -484,7 +498,8 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         const sourceNode = latestNodes.find((n) => n.id === connection.source);
         let imageUrl: string | undefined;
         if (sourceNode?.type === 'imageInputNode') imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
-        else if (sourceNode?.type === 'mediaInputNode') imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
+        else if (sourceNode?.type === 'mediaInputNode')   imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
+        else if (sourceNode?.type === 'upscaleMediaNode') imageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl;
         else if (sourceNode?.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
         else if (sourceNode?.type === 'upscaleNode')  imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
         else if (sourceNode?.type === 'modifyNode')   imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
@@ -504,7 +519,8 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         let videoUrl: string | undefined;
         if (sourceNode?.type === 'videoGenNode') videoUrl = (sourceNode.data as VideoGenNodeData).videoUrl;
         else if (sourceNode?.type === 'videoInputNode') videoUrl = (sourceNode.data as { videoUrl?: string }).videoUrl;
-        else if (sourceNode?.type === 'mediaInputNode') videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
+        else if (sourceNode?.type === 'mediaInputNode')   videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
+        else if (sourceNode?.type === 'upscaleMediaNode') videoUrl = (sourceNode.data as UpscaleMediaNodeData).outputVideoUrl;
         else if (sourceNode?.type === 'videoUpscaleNode') videoUrl = (sourceNode.data as { videoUrl?: string }).videoUrl;
         if (videoUrl) updateNodeData(connection.target, { videoUrl });
       }
