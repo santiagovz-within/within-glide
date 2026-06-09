@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Grid, X, Download, Trash2, Play } from 'lucide-react';
+import { downloadFromUrl } from '@/lib/utils/download';
 import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
 import type { Generation } from '@/types';
@@ -9,7 +10,7 @@ import { formatDate } from '@/lib/utils/date';
 import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 
-const PAGE_SIZE = 60;
+const PAGE_SIZE = 42; // 7 rows × 6 columns (xl breakpoint)
 
 export default function GalleryPage() {
   const { generations, setGenerations, removeGeneration, filter, setFilter, sort, setSort, isLoading, setIsLoading } = useGalleryStore();
@@ -255,89 +256,153 @@ function GenerationModal({
   onDelete: (g: Generation) => void;
 }) {
   const isVideo = generation.media_type === 'video';
+  const [expanded, setExpanded] = useState(false);
+
+  const PROMPT_LIMIT = 140;
+  const fullPrompt = generation.prompt ?? '';
+  const isLong = fullPrompt.length > PROMPT_LIMIT;
+  const shownPrompt = isLong && !expanded ? fullPrompt.slice(0, PROMPT_LIMIT) + '…' : fullPrompt;
+
+  const details = [
+    { label: 'Model',  value: generation.model },
+    { label: 'Type',   value: generation.media_type },
+    { label: 'Date',   value: formatDate(generation.created_at) },
+    ...(generation.width && generation.height
+      ? [{ label: 'Size', value: `${generation.width} × ${generation.height}` }]
+      : []),
+  ];
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-8"
-      style={{ background: 'rgba(0,0,0,0.8)' }}
+      className="fixed inset-0 z-50 flex"
+      style={{ background: '#000' }}
       onClick={onClose}
     >
+      {/* Close — top-left overlay */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        className="absolute top-4 left-4 z-10 p-1.5 rounded-lg transition-opacity hover:opacity-70"
+        style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: 'none', cursor: 'pointer' }}
+      >
+        <X size={15} />
+      </button>
+
+      {/* Left: media */}
       <div
-        className="relative flex gap-6 max-w-4xl w-full rounded-2xl overflow-hidden"
-        style={{
-          background: 'var(--color-bg-elevated)',
-          border: 'var(--border-default)',
-          boxShadow: 'var(--shadow-modal)',
-        }}
+        className="flex-1 flex items-center justify-center min-w-0 p-10"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Media */}
-        <div className="flex-1 min-w-0" style={{ maxWidth: '60%' }}>
-          {isVideo ? (
-            <video src={generation.media_url} controls className="w-full h-full object-contain" style={{ maxHeight: '70vh' }} />
-          ) : (
-            <ProgressiveImage
-              src={generation.media_url}
-              alt=""
-              className="w-full h-full object-contain"
-              style={{ maxHeight: '70vh' }}
-            />
-          )}
+        {isVideo ? (
+          <video
+            src={generation.media_url}
+            controls
+            className="max-w-full rounded-xl object-contain"
+            style={{ maxHeight: 'calc(100vh - 80px)' }}
+          />
+        ) : (
+          <ProgressiveImage
+            src={generation.media_url}
+            alt=""
+            className="max-w-full rounded-xl object-contain"
+            style={{ maxHeight: 'calc(100vh - 80px)' }}
+          />
+        )}
+      </div>
+
+      {/* Right: info panel */}
+      <div
+        className="w-80 flex-shrink-0 flex flex-col overflow-y-auto"
+        style={{ background: 'var(--color-bg-elevated)', borderLeft: '1px solid rgba(255,255,255,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Panel top bar */}
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <span
+            className="text-xs px-2.5 py-1 rounded-full capitalize font-medium"
+            style={{ background: 'rgba(255,255,255,0.07)', color: 'var(--color-white-muted)' }}
+          >
+            {generation.media_type}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(generation); }}
+            className="p-1.5 rounded-lg transition-opacity hover:opacity-70"
+            style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', cursor: 'pointer' }}
+            title="Delete"
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
 
-        {/* Metadata */}
-        <div className="w-72 flex-shrink-0 p-6 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-white)' }}>Details</h2>
-            <button onClick={onClose} className="p-1 rounded transition-opacity hover:opacity-60">
-              <X size={16} style={{ color: 'var(--color-white-muted)' }} />
-            </button>
+        {/* Scrollable content */}
+        <div className="p-5 flex flex-col gap-5 flex-1">
+          {/* Model + date */}
+          <div>
+            <h2 className="text-lg font-semibold leading-tight" style={{ color: 'var(--color-white)' }}>
+              {generation.model}
+            </h2>
+            <p className="text-sm mt-1" style={{ color: 'var(--color-white-muted)' }}>
+              {formatDate(generation.created_at)}
+            </p>
           </div>
 
-          <div className="space-y-4 flex-1">
-            <MetaRow label="Model" value={generation.model} />
-            <MetaRow label="Type" value={generation.media_type} />
-            <MetaRow label="Date" value={formatDate(generation.created_at)} />
-            {generation.prompt && (
-              <div>
-                <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-white-muted)' }}>Prompt</p>
-                <p className="text-xs leading-relaxed" style={{ color: 'var(--color-white)' }}>{generation.prompt}</p>
-              </div>
-            )}
-            {(generation.width && generation.height) && (
-              <MetaRow label="Size" value={`${generation.width} × ${generation.height}`} />
-            )}
-          </div>
+          {/* Prompt */}
+          {fullPrompt && (
+            <div>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                {shownPrompt}
+              </p>
+              {isLong && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+                  className="text-xs mt-1.5 transition-opacity hover:opacity-60"
+                  style={{ color: 'var(--color-white-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  {expanded ? 'less' : 'more'}
+                </button>
+              )}
+            </div>
+          )}
 
-          <div className="flex gap-2 mt-6">
-            <a
-              href={generation.media_url}
-              download
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
-              style={{ background: 'var(--color-accent)', color: '#fff' }}
+          {/* Download — white pill */}
+          <button
+            onClick={(e) => { e.stopPropagation(); downloadFromUrl(generation.media_url); }}
+            className="flex items-center justify-center gap-2 py-2.5 rounded-full text-sm font-semibold transition-opacity hover:opacity-85"
+            style={{ background: '#fff', color: '#000', border: 'none', cursor: 'pointer' }}
+          >
+            <Download size={14} />
+            Download
+          </button>
+
+          {/* Details list */}
+          <div>
+            <p
+              className="text-xs font-semibold uppercase tracking-wider mb-3"
+              style={{ color: 'var(--color-white-muted)' }}
             >
-              <Download size={12} />
-              Download
-            </a>
-            <button
-              onClick={() => onDelete(generation)}
-              className="p-2 rounded-lg transition-opacity hover:opacity-80"
-              style={{ border: '1px solid var(--color-error)', color: 'var(--color-error)' }}
-            >
-              <Trash2 size={14} />
-            </button>
+              {String(details.length).padStart(2, '0')} Details
+            </p>
+            <div className="space-y-3">
+              {details.map(({ label, value }) => (
+                <div key={label} className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold"
+                    style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--color-white-muted)' }}
+                  >
+                    {label[0]}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate" style={{ color: 'var(--color-white)' }}>{value}</p>
+                    <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>{label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function MetaRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--color-white-muted)' }}>{label}</p>
-      <p className="text-xs capitalize" style={{ color: 'var(--color-white)' }}>{value}</p>
     </div>
   );
 }
