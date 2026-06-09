@@ -128,9 +128,17 @@ function ExpandCanvas({ imageUrl, expandTop, expandRight, expandBottom, expandLe
   const zoneR = dispW - imgX - imgW;
 
   function startDrag(side: 'top' | 'right' | 'bottom' | 'left', e: React.MouseEvent) {
+    const MAX_DIM = 2560;
+    const natW = naturalSize?.w ?? 0;
+    const natH = naturalSize?.h ?? 0;
     const startExpand = side === 'top' ? expandTop : side === 'right' ? expandRight : side === 'bottom' ? expandBottom : expandLeft;
     const startMouse  = (side === 'left' || side === 'right') ? e.clientX : e.clientY;
     const frozenScale = scale;
+    const maxExpand =
+      side === 'right'  ? Math.max(0, MAX_DIM - natW - expandLeft) :
+      side === 'left'   ? Math.max(0, MAX_DIM - natW - expandRight) :
+      side === 'bottom' ? Math.max(0, MAX_DIM - natH - expandTop) :
+                          Math.max(0, MAX_DIM - natH - expandBottom);
 
     function onMove(me: MouseEvent) {
       let newVal: number;
@@ -138,7 +146,7 @@ function ExpandCanvas({ imageUrl, expandTop, expandRight, expandBottom, expandLe
       else if (side === 'left')   newVal = Math.max(0, Math.round(startExpand - (me.clientX - startMouse) / frozenScale));
       else if (side === 'bottom') newVal = Math.max(0, Math.round(startExpand + (me.clientY - startMouse) / frozenScale));
       else                        newVal = Math.max(0, Math.round(startExpand - (me.clientY - startMouse) / frozenScale));
-      onChange({ [side]: newVal });
+      onChange({ [side]: Math.min(newVal, maxExpand) });
     }
     function onUp() {
       window.removeEventListener('mousemove', onMove);
@@ -412,6 +420,21 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   function handleAspectPreset(ratio: number) {
     if (!naturalSize) return;
     const exp = computeExpansionForAspect(naturalSize.w, naturalSize.h, ratio, expandAnchor);
+    const MAX_DIM = 2560;
+    const maxW = Math.max(0, MAX_DIM - naturalSize.w);
+    const maxH = Math.max(0, MAX_DIM - naturalSize.h);
+    const totalW = exp.left + exp.right;
+    const totalH = exp.top  + exp.bottom;
+    if (totalW > maxW) {
+      const s = maxW / totalW;
+      exp.left  = Math.floor(exp.left  * s);
+      exp.right = maxW - exp.left;
+    }
+    if (totalH > maxH) {
+      const s = maxH / totalH;
+      exp.top    = Math.floor(exp.top    * s);
+      exp.bottom = maxH - exp.top;
+    }
     updateData({ expandTop: exp.top, expandRight: exp.right, expandBottom: exp.bottom, expandLeft: exp.left });
   }
 
