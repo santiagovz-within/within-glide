@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import type { RemoveBgNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, SelectNodeData, ModifyNodeData } from '@/types';
+import type { RemoveBgNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, SelectNodeData, ModifyNodeData, MediaInputNodeData } from '@/types';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
 const CHECKERBOARD: React.CSSProperties = {
@@ -31,6 +31,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
   else if (sourceNode?.type === 'modifyNode')    inputImageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
   else if (sourceNode?.type === 'selectNode')    inputImageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
   else if (sourceNode?.type === 'removeBgNode')  inputImageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
+  else if (sourceNode?.type === 'mediaInputNode') inputImageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
 
   function updateData(updates: Partial<RemoveBgNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {

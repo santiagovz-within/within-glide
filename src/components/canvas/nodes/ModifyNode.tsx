@@ -9,7 +9,7 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { ModelSelect } from './ModelSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { ASPECT_RATIOS, RESOLUTIONS } from '@/lib/utils/constants';
-import type { ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData } from '@/types';
+import type { ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData, MediaInputNodeData } from '@/types';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -409,6 +409,10 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   } else if (sourceNode?.type === 'selectNode') {
     const url = (sourceNode.data as { selectedImageUrl?: string }).selectedImageUrl;
     if (url) availableImages = [url];
+  } else if (sourceNode?.type === 'mediaInputNode') {
+    const nd = sourceNode.data as MediaInputNodeData;
+    if (nd.imageUrl) availableImages = [nd.imageUrl];
+    if (nd.naturalWidth && nd.naturalHeight) sourceAspectRatio = nearestAspectRatio(nd.naturalWidth, nd.naturalHeight);
   }
 
   const safeIndex    = Math.min(selectedIndex, Math.max(availableImages.length - 1, 0));
@@ -421,6 +425,10 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       const nd = sourceNode.data as ImageInputNodeData;
       if (nd.naturalWidth && nd.naturalHeight) return nearestAspectRatio(nd.naturalWidth, nd.naturalHeight);
     }
+    if (sourceNode?.type === 'mediaInputNode') {
+      const nd = sourceNode.data as MediaInputNodeData;
+      if (nd.naturalWidth && nd.naturalHeight) return nearestAspectRatio(nd.naturalWidth, nd.naturalHeight);
+    }
     return undefined;
   })();
 
@@ -428,6 +436,10 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     if (sourceNode?.type === 'imageGenNode') return (sourceNode.data as ImageGenNodeData).resolution ?? undefined;
     if (sourceNode?.type === 'imageInputNode') {
       const nd = sourceNode.data as ImageInputNodeData;
+      if (nd.naturalWidth) return nd.naturalWidth >= 3000 ? '4K' : nd.naturalWidth >= 1800 ? '2K' : '1K';
+    }
+    if (sourceNode?.type === 'mediaInputNode') {
+      const nd = sourceNode.data as MediaInputNodeData;
       if (nd.naturalWidth) return nd.naturalWidth >= 3000 ? '4K' : nd.naturalWidth >= 1800 ? '2K' : '1K';
     }
     return undefined;
