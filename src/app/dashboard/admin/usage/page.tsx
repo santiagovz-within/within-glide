@@ -106,30 +106,28 @@ function BarRow({ label, value, max, gradient, color }: { label: string; value: 
 }
 
 function HourChart({ traffic }: { traffic: number[] }) {
-  const max = Math.max(...traffic, 1);
-  const HOURS = Array.from({ length: 24 }, (_, i) => {
+  const max    = Math.max(...traffic, 1);
+  const HEIGHT = 80; // px — matches h-20
+  const HOURS  = Array.from({ length: 24 }, (_, i) => {
     const ampm = i < 12 ? 'am' : 'pm';
-    const h = i === 0 ? 12 : i > 12 ? i - 12 : i;
+    const h    = i === 0 ? 12 : i > 12 ? i - 12 : i;
     return `${h}${ampm}`;
   });
 
   return (
-    <div className="flex items-end gap-0.5 h-20">
-      {traffic.map((count, i) => {
-        const pct = Math.round((count / max) * 100);
-        return (
-          <div key={i} className="flex-1 flex flex-col items-center gap-1" title={`${HOURS[i]}: ${count}`}>
-            <div
-              className="w-full rounded-sm"
-              style={{
-                height: `${Math.max(pct, 2)}%`,
-                background: count > 0 ? 'var(--color-accent)' : 'var(--color-bg-surface)',
-                opacity: count > 0 ? 0.7 + (pct / 100) * 0.3 : 1,
-              }}
-            />
-          </div>
-        );
-      })}
+    <div className="flex items-end gap-0.5" style={{ height: HEIGHT }}>
+      {traffic.map((count, i) => (
+        <div
+          key={i}
+          className="flex-1 rounded-sm"
+          title={`${HOURS[i]}: ${count}`}
+          style={{
+            height: Math.max(Math.round((count / max) * HEIGHT), 2),
+            background: count > 0 ? 'var(--color-accent)' : 'var(--color-bg-surface)',
+            opacity:    count > 0 ? 0.7 + (count / max) * 0.3 : 1,
+          }}
+        />
+      ))}
     </div>
   );
 }
