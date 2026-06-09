@@ -8,7 +8,7 @@ interface UsageData {
   modelUsage: { model: string; count: number }[];
   userUsage: { userId: string; username: string; count: number }[];
   nodeUsage: { nodeType: string; count: number }[];
-  hourlyTraffic: number[];
+  hourlyTraffic: { nyc: number[]; mexico: number[]; bogota: number[] };
   mediaTypeSplit: { image: number; video: number };
 }
 
@@ -132,10 +132,19 @@ function HourChart({ traffic }: { traffic: number[] }) {
   );
 }
 
+const TZ_TABS = [
+  { key: 'nyc',    label: 'New York' },
+  { key: 'mexico', label: 'Mexico City' },
+  { key: 'bogota', label: 'Bogotá' },
+] as const;
+
+type TzKey = typeof TZ_TABS[number]['key'];
+
 export default function AdminUsagePage() {
-  const [data, setData] = useState<UsageData | null>(null);
+  const [data, setData]       = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError]     = useState('');
+  const [tzTab, setTzTab]     = useState<TzKey>('nyc');
 
   useEffect(() => {
     async function load() {
@@ -291,8 +300,27 @@ export default function AdminUsagePage() {
 
       {/* Hourly traffic */}
       <div style={cardStyle}>
-        <p className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white)' }}>API Traffic by Hour of Day</p>
-        <HourChart traffic={data.hourlyTraffic} />
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold" style={{ color: 'var(--color-white)' }}>API Traffic by Hour of Day</p>
+          <div className="flex gap-1 p-0.5 rounded-lg" style={{ background: 'var(--color-bg-surface)' }}>
+            {TZ_TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setTzTab(key)}
+                className="px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+                style={{
+                  background: tzTab === key ? 'var(--color-bg-elevated)' : 'transparent',
+                  color:      tzTab === key ? 'var(--color-white)' : 'var(--color-white-muted)',
+                  border:     'none',
+                  cursor:     'pointer',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <HourChart traffic={data.hourlyTraffic[tzTab]} />
         <div className="flex justify-between mt-2" style={{ color: 'var(--color-white-muted)', fontSize: 10 }}>
           <span>12am</span>
           <span>6am</span>

@@ -67,11 +67,28 @@ export async function GET() {
     username: profileMap.get(uid)?.display_name ?? profileMap.get(uid)?.username ?? uid.slice(0, 8),
   })).sort((a, b) => b.count - a.count);
 
-  // Traffic by hour of day (0-23)
-  const hourCounts: number[] = Array(24).fill(0);
+  // Traffic by hour of day (0-23) — bucketed in three relevant timezones
+  const TZ = {
+    nyc:    'America/New_York',
+    mexico: 'America/Mexico_City',
+    bogota: 'America/Bogota',
+  } as const;
+
+  const hourlyTraffic: Record<string, number[]> = {
+    nyc:    Array(24).fill(0),
+    mexico: Array(24).fill(0),
+    bogota: Array(24).fill(0),
+  };
+
   for (const g of rows) {
-    const hour = new Date(g.created_at).getHours();
-    hourCounts[hour]++;
+    const date = new Date(g.created_at);
+    for (const [key, tz] of Object.entries(TZ)) {
+      const hour = parseInt(
+        new Intl.DateTimeFormat('en-US', { hour: '2-digit', hourCycle: 'h23', timeZone: tz }).format(date),
+        10,
+      );
+      hourlyTraffic[key][hour]++;
+    }
   }
 
   // Media type split
@@ -84,7 +101,7 @@ export async function GET() {
       .map(([model, count]) => ({ model, count }))
       .sort((a, b) => b.count - a.count),
     userUsage,
-    hourlyTraffic: hourCounts,
+    hourlyTraffic,
     mediaTypeSplit: { image: imageCnt, video: videoCnt },
     nodeUsage: Object.entries(nodeCounts)
       .map(([nodeType, count]) => ({ nodeType, count }))
