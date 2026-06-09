@@ -235,6 +235,7 @@ export interface VideoToGifNodeData extends Record<string, unknown> {
 
 export interface ModifyNodeData extends Record<string, unknown> {
   model: string;
+  mode?: 'prompt' | 'expand';
   prompt?: string;
   promptConnected?: boolean;
   inputImageUrl?: string;
@@ -243,6 +244,11 @@ export interface ModifyNodeData extends Record<string, unknown> {
   resolution?: string;
   status: NodeStatus;
   label?: string;
+  expandTop?: number;
+  expandRight?: number;
+  expandBottom?: number;
+  expandLeft?: number;
+  expandAnchor?: string;
 }
 
 export interface VideoInputNodeData extends Record<string, unknown> {
