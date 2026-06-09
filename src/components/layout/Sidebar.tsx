@@ -1,12 +1,12 @@
 'use client';
 
-import Image from 'next/image';
+import NextImage from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   GitBranch,
-  Image,
+  Image as ImageIcon,
   Zap,
   Music,
   Grid,
@@ -21,7 +21,7 @@ import { createClient } from '@/lib/supabase/client';
 
 const NAV_ITEMS = [
   { label: 'Canvas Flow',  icon: GitBranch, href: '/dashboard/canvas-flow'  },
-  { label: 'Image & Video',icon: Image,     href: '/dashboard/image-video'  },
+  { label: 'Image & Video',icon: ImageIcon, href: '/dashboard/image-video'  },
   { label: 'Gallery',      icon: Grid,      href: '/dashboard/gallery'      },
 ];
 
@@ -103,7 +103,7 @@ export function Sidebar() {
         style={{ borderBottom: 'var(--border-default)' }}
       >
         <div className="w-8 h-8 rounded-lg shrink-0 overflow-hidden">
-          <Image src="/logo.png" alt="WITHIN Glide" width={32} height={32} className="w-8 h-8 object-cover" priority />
+          <NextImage src="/logo.png" alt="WITHIN Glide" width={32} height={32} className="w-8 h-8 object-cover" priority />
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--color-white)' }}>
