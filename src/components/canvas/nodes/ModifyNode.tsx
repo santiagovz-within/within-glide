@@ -96,6 +96,65 @@ function computeExpansionForAspect(
   return { top, right, bottom, left };
 }
 
+// ── Resize plan ───────────────────────────────────────────────────────────────
+
+const MAX_FAL_DIM = 2560;
+
+interface OutpaintResizePlan {
+  needsResize: boolean;
+  sourceW: number;
+  sourceH: number;
+  outpaintTop: number;
+  outpaintRight: number;
+  outpaintBottom: number;
+  outpaintLeft: number;
+  outputW: number;
+  outputH: number;
+}
+
+function computeOutpaintResizePlan(
+  natW: number, natH: number,
+  expTop: number, expRight: number, expBottom: number, expLeft: number,
+): OutpaintResizePlan {
+  const outputW = natW + expLeft + expRight;
+  const outputH = natH + expTop  + expBottom;
+
+  if (outputW <= MAX_FAL_DIM && outputH <= MAX_FAL_DIM) {
+    return {
+      needsResize: false,
+      sourceW: natW, sourceH: natH,
+      outpaintTop: expTop, outpaintRight: expRight, outpaintBottom: expBottom, outpaintLeft: expLeft,
+      outputW, outputH,
+    };
+  }
+
+  // Scale the entire output down so both dimensions fit in MAX_FAL_DIM
+  const s          = Math.min(MAX_FAL_DIM / outputW, MAX_FAL_DIM / outputH);
+  const newOutputW = Math.floor(outputW * s);
+  const newOutputH = Math.floor(outputH * s);
+  const newSrcW    = Math.round(natW * s);
+  const newSrcH    = Math.round(natH * s);
+
+  const newTotalW = newOutputW - newSrcW;
+  const newTotalH = newOutputH - newSrcH;
+
+  const fracLeft = (expLeft + expRight) > 0 ? expLeft / (expLeft + expRight) : 0.5;
+  const fracTop  = (expTop  + expBottom) > 0 ? expTop  / (expTop  + expBottom) : 0.5;
+
+  const newLeft   = Math.round(newTotalW * fracLeft);
+  const newRight  = Math.max(0, newTotalW - newLeft);
+  const newTop    = Math.round(newTotalH * fracTop);
+  const newBottom = Math.max(0, newTotalH - newTop);
+
+  return {
+    needsResize: true,
+    sourceW: newSrcW, sourceH: newSrcH,
+    outpaintTop: Math.max(0, newTop), outpaintRight: Math.max(0, newRight),
+    outpaintBottom: Math.max(0, newBottom), outpaintLeft: Math.max(0, newLeft),
+    outputW: newOutputW, outputH: newOutputH,
+  };
+}
+
 // ── ExpandCanvas ───────────────────────────────────────────────────────────────
 
 interface ExpandCanvasProps {
@@ -420,21 +479,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   function handleAspectPreset(ratio: number) {
     if (!naturalSize) return;
     const exp = computeExpansionForAspect(naturalSize.w, naturalSize.h, ratio, expandAnchor);
-    const MAX_DIM = 2560;
-    const maxW = Math.max(0, MAX_DIM - naturalSize.w);
-    const maxH = Math.max(0, MAX_DIM - naturalSize.h);
-    const totalW = exp.left + exp.right;
-    const totalH = exp.top  + exp.bottom;
-    if (totalW > maxW) {
-      const s = maxW / totalW;
-      exp.left  = Math.floor(exp.left  * s);
-      exp.right = maxW - exp.left;
-    }
-    if (totalH > maxH) {
-      const s = maxH / totalH;
-      exp.top    = Math.floor(exp.top    * s);
-      exp.bottom = maxH - exp.top;
-    }
     updateData({ expandTop: exp.top, expandRight: exp.right, expandBottom: exp.bottom, expandLeft: exp.left });
   }
 
@@ -476,8 +520,11 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   async function handleExpandGenerate() {
     if (isGenerating || !selectedImage) return;
     if (!expandTop && !expandRight && !expandBottom && !expandLeft) return;
+    if (!naturalSize) return;
     setIsGenerating(true);
     updateData({ status: 'processing' });
+
+    const plan = computeOutpaintResizePlan(naturalSize.w, naturalSize.h, expandTop, expandRight, expandBottom, expandLeft);
 
     try {
       const res    = await fetch('/api/fal/outpaint', {
@@ -485,7 +532,11 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageUrl: selectedImage,
-          expandTop, expandRight, expandBottom, expandLeft,
+          expandTop:    plan.outpaintTop,
+          expandRight:  plan.outpaintRight,
+          expandBottom: plan.outpaintBottom,
+          expandLeft:   plan.outpaintLeft,
+          ...(plan.needsResize ? { resizeSourceTo: { width: plan.sourceW, height: plan.sourceH } } : {}),
           sourceType: 'canvas', nodeId: id,
         }),
       });
@@ -506,8 +557,11 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   }
 
   const hasExpansion = expandTop > 0 || expandRight > 0 || expandBottom > 0 || expandLeft > 0;
-  const outputDimsLabel = naturalSize && hasExpansion
-    ? `${naturalSize.w + expandLeft + expandRight} × ${naturalSize.h + expandTop + expandBottom}px`
+  const resizePlan = naturalSize && hasExpansion
+    ? computeOutpaintResizePlan(naturalSize.w, naturalSize.h, expandTop, expandRight, expandBottom, expandLeft)
+    : null;
+  const outputDimsLabel = resizePlan
+    ? `${resizePlan.outputW} × ${resizePlan.outputH}px${resizePlan.needsResize ? ' (scaled to fit)' : ''}`
     : null;
 
   return (

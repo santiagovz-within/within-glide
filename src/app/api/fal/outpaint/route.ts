@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
       expandRight  = 0,
       expandBottom = 0,
       expandLeft   = 0,
+      resizeSourceTo,
       sourceType   = 'canvas',
       nodeId,
     } = await request.json();
@@ -26,11 +27,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No expansion specified' }, { status: 400 });
     }
 
-    console.log('[fal/outpaint] input:', { imageUrl, expandTop, expandRight, expandBottom, expandLeft });
+    console.log('[fal/outpaint] input:', { imageUrl, expandTop, expandRight, expandBottom, expandLeft, resizeSourceTo });
+
+    // Optionally resize the source image before outpainting (needed when target ratio exceeds 2560px)
+    let falImageUrl = imageUrl;
+    if (resizeSourceTo) {
+      const { width: targetW, height: targetH } = resizeSourceTo as { width: number; height: number };
+      const imgRes   = await fetch(imageUrl);
+      const imgBuf   = Buffer.from(await imgRes.arrayBuffer());
+      const sharp    = (await import('sharp')).default;
+      const resized  = await sharp(imgBuf).resize(targetW, targetH, { fit: 'fill' }).toFormat('webp').toBuffer();
+      const resPath  = `${user.id}/outpaint-src-${crypto.randomUUID()}.webp`;
+      await uploadToGCS(resized, resPath, 'image/webp');
+      falImageUrl = await getSignedReadUrl(resPath);
+      console.log('[fal/outpaint] resized source:', targetW, 'x', targetH);
+    }
 
     const result = await fal.subscribe('fal-ai/flux-2-pro/outpaint', {
       input: {
-        image_url:        imageUrl,
+        image_url:        falImageUrl,
         ...(expandTop    > 0 ? { expand_top:    expandTop    } : {}),
         ...(expandRight  > 0 ? { expand_right:  expandRight  } : {}),
         ...(expandBottom > 0 ? { expand_bottom: expandBottom } : {}),
