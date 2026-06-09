@@ -31,10 +31,10 @@ export async function POST(request: NextRequest) {
     const result = await fal.subscribe('fal-ai/flux-2-pro/outpaint', {
       input: {
         image_url:        imageUrl,
-        ...(expandTop    > 0 ? { outpaint_top:    expandTop    } : {}),
-        ...(expandRight  > 0 ? { outpaint_right:  expandRight  } : {}),
-        ...(expandBottom > 0 ? { outpaint_bottom: expandBottom } : {}),
-        ...(expandLeft   > 0 ? { outpaint_left:   expandLeft   } : {}),
+        ...(expandTop    > 0 ? { expand_top:    expandTop    } : {}),
+        ...(expandRight  > 0 ? { expand_right:  expandRight  } : {}),
+        ...(expandBottom > 0 ? { expand_bottom: expandBottom } : {}),
+        ...(expandLeft   > 0 ? { expand_left:   expandLeft   } : {}),
       },
     });
 
