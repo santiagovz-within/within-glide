@@ -69,9 +69,16 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
 
   async function handleUpload(file: File) {
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
     try {
+      const { default: imageCompression } = await import('browser-image-compression');
+      const compressed = await imageCompression(file, {
+        maxSizeMB:        0.15,
+        maxWidthOrHeight: 640,
+        useWebWorker:     true,
+        fileType:         'image/jpeg',
+      });
+      const formData = new FormData();
+      formData.append('file', compressed, 'thumbnail.jpg');
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const { url } = await res.json();
       if (url) setThumbnailUrl(url);

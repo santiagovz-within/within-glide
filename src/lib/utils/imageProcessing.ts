@@ -119,21 +119,51 @@ export async function processImageFile(
  * a compressed JPEG data URL suitable for storing as a flow thumbnail.
  * Returns null silently on any failure (CORS not set up, network error, etc.).
  */
+const THUMBNAIL_TARGET_BYTES = 150 * 1024;
+const THUMBNAIL_MAX_PX       = 480;
+const DATA_URL_HEADER        = 'data:image/jpeg;base64,'.length;
+
+/** Returns approximate binary byte size of a JPEG data URL. */
+function dataUrlBytes(dataUrl: string): number {
+  return Math.round((dataUrl.length - DATA_URL_HEADER) * 0.75);
+}
+
 export async function compressToThumbnailDataUrl(imageUrl: string): Promise<string | null> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const MAX = 640;
-        const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
-        const w = Math.round(img.naturalWidth * scale);
-        const h = Math.round(img.naturalHeight * scale);
+        const scale = Math.min(1, THUMBNAIL_MAX_PX / Math.max(img.naturalWidth, img.naturalHeight));
+        let w = Math.round(img.naturalWidth  * scale);
+        let h = Math.round(img.naturalHeight * scale);
+
         const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.72));
+        const draw = (tw: number, th: number) => {
+          canvas.width  = tw;
+          canvas.height = th;
+          canvas.getContext('2d')!.drawImage(img, 0, 0, tw, th);
+        };
+        draw(w, h);
+
+        // Reduce quality until ≤ 150 KB
+        let quality  = 0.78;
+        let dataUrl  = canvas.toDataURL('image/jpeg', quality);
+        while (dataUrlBytes(dataUrl) > THUMBNAIL_TARGET_BYTES && quality > 0.25) {
+          quality  -= 0.08;
+          dataUrl   = canvas.toDataURL('image/jpeg', quality);
+        }
+
+        // If quality reduction wasn't enough, also shrink dimensions
+        if (dataUrlBytes(dataUrl) > THUMBNAIL_TARGET_BYTES) {
+          const shrink = Math.sqrt(THUMBNAIL_TARGET_BYTES / dataUrlBytes(dataUrl));
+          w = Math.max(1, Math.round(w * shrink));
+          h = Math.max(1, Math.round(h * shrink));
+          draw(w, h);
+          dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+        }
+
+        resolve(dataUrl);
       } catch {
         resolve(null);
       }
