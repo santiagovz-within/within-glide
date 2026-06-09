@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import NextImage from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { AlertTriangle } from 'lucide-react';
@@ -70,14 +71,8 @@ function LoginFormInner() {
     <div className="w-full max-w-sm space-y-6">
       {/* Logo + heading */}
       <div>
-        <div
-          className="inline-flex items-center justify-center w-11 h-11 rounded-xl mb-5"
-          style={{ background: 'var(--color-accent)' }}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{ color: '#fff' }}>
-            <path d="M3 6l6-3 6 3 6-3v12l-6 3-6-3-6 3V6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            <path d="M9 3v12M15 6v12" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
+        <div className="inline-flex w-11 h-11 rounded-xl mb-5 overflow-hidden">
+          <NextImage src="/logo.png" alt="WITHIN Glide" width={44} height={44} className="w-11 h-11 object-cover" priority />
         </div>
         <h1 className="text-2xl font-semibold mb-1" style={{ color: 'var(--color-white)' }}>
           Login to your account

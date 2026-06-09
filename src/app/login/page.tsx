@@ -1,4 +1,5 @@
 import { LoginForm } from '@/components/auth/LoginForm';
+import { LoginCoverImage } from '@/components/auth/LoginCoverImage';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getSignedReadUrl, gcsPathFromRef } from '@/lib/gcs';
 
@@ -33,26 +34,7 @@ export default async function LoginPage() {
       </div>
 
       {/* ── Right: background image ─────────────────────────────────────────── */}
-      {bgUrl && (
-        <div className="hidden lg:flex flex-1 p-3 min-h-screen">
-          <div
-            className="w-full h-full rounded-2xl overflow-hidden"
-            style={{ position: 'relative' }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={bgUrl}
-              alt=""
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-              }}
-            />
-          </div>
-        </div>
-      )}
+      {bgUrl && <LoginCoverImage src={bgUrl} />}
     </div>
   );
 }
