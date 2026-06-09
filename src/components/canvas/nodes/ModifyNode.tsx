@@ -8,6 +8,7 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { ASPECT_RATIOS, RESOLUTIONS } from '@/lib/utils/constants';
+import { ModelSelect } from './ModelSelect';
 import type { ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData, SelectNodeData } from '@/types';
 
 const MODIFY_MODELS = [
@@ -266,16 +267,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       {/* Model selector */}
       <div className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
-        <select
-          className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
-          value={data.model}
-          onChange={(e) => updateData({ model: e.target.value })}
-          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-        >
-          {MODIFY_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
+        <ModelSelect options={MODIFY_MODELS} value={data.model} onChange={(v) => updateData({ model: v })} />
       </div>
 
       {/* Aspect ratio + resolution row */}

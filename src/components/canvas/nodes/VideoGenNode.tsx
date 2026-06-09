@@ -8,6 +8,7 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoGenNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
 import { VIDEO_MODELS } from '@/lib/api/models';
+import { ModelSelect } from './ModelSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
 const FRAME_ROW_HEIGHT = 36;
@@ -258,16 +259,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       {/* Model selector */}
       <div className="mb-2">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
-        <select
-          className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
-          value={data.model}
-          onChange={(e) => updateData({ model: e.target.value })}
-          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-        >
-          {VIDEO_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
+        <ModelSelect options={VIDEO_MODELS} value={data.model} onChange={(v) => updateData({ model: v })} />
       </div>
 
       {isSeedance && (

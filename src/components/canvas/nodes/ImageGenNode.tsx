@@ -9,6 +9,7 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
 import { IMAGE_MODELS, FAL_MODELS } from '@/lib/api/models';
+import { ModelSelect } from './ModelSelect';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
@@ -226,16 +227,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {/* ── Model selector ───────────────────────────────────── */}
       <div className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
-        <select
-          className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
-          value={data.model}
-          onChange={(e) => handleModelChange(e.target.value)}
-          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-        >
-          {IMAGE_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
+        <ModelSelect options={IMAGE_MODELS} value={data.model} onChange={handleModelChange} />
       </div>
 
       {/* ── Variant indicator (Fal models with edit endpoint) ─── */}

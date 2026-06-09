@@ -13,6 +13,7 @@ import type {
   VideoGenNodeData, VideoInputNodeData, VideoUpscaleNodeData,
 } from '@/types';
 import { UPSCALE_MODELS, FAL_MODELS } from '@/lib/api/models';
+import { ModelSelect } from './ModelSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
 type Dims = { w: number; h: number };
@@ -321,16 +322,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         <>
           <div className="mb-2">
             <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
-            <select
-              className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
-              value={data.model}
-              onChange={(e) => handleModelChange(e.target.value)}
-              style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-            >
-              {UPSCALE_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+            <ModelSelect options={UPSCALE_MODELS} value={data.model} onChange={handleModelChange} />
           </div>
 
           <div className="mb-3">
