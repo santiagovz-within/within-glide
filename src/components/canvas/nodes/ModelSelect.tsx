@@ -21,16 +21,16 @@ function ModelIcon({ modelId, size = 13 }: { modelId: string; size?: number }) {
     case 'nano-banana-pro':
       return <Fal.Color size={size} />;
     case 'gpt-image-2':
-      return <OpenAI.Color size={size} />;
+      return <OpenAI size={size} />;
     case 'flux-2-pro':
-      return <Flux.Color size={size} />;
+      return <Flux size={size} />;
     case 'kling-3-pro':
       return <Kling.Color size={size} />;
     case 'seedance-2':
     case 'seedvr2':
-      return <ByteDance.BrandColor size={size} />;
+      return <ByteDance.Color size={size} />;
     case 'topaz':
-      return <TopazLabs.Color size={size} />;
+      return <TopazLabs size={size} />;
     default:
       return null;
   }
