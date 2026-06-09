@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -101,14 +102,8 @@ export function Sidebar() {
         className="flex items-center gap-3 px-4 py-5 overflow-hidden"
         style={{ borderBottom: 'var(--border-default)' }}
       >
-        <div
-          className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0"
-          style={{ background: 'var(--color-accent)' }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-white">
-            <path d="M3 6l6-3 6 3 6-3v12l-6 3-6-3-6 3V6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            <path d="M9 3v12M15 6v12" stroke="currentColor" strokeWidth="1.5" />
-          </svg>
+        <div className="w-8 h-8 rounded-lg shrink-0 overflow-hidden">
+          <Image src="/logo.png" alt="WITHIN Glide" width={32} height={32} className="w-8 h-8 object-cover" priority />
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold whitespace-nowrap" style={{ color: 'var(--color-white)' }}>
