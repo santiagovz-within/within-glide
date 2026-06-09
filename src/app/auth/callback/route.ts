@@ -36,21 +36,29 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from('profiles')
-    .select('id, approved')
+    .select('id, approved, display_name')
     .eq('id', user.id)
     .maybeSingle();
 
+  const googleDisplayName: string | null =
+    user.user_metadata?.full_name ?? user.user_metadata?.name ?? null;
+
   if (!existing) {
     const username = user.email.split('@')[0].replace(/[^a-z0-9_]/gi, '_').toLowerCase();
-    const displayName = user.user_metadata?.full_name ?? user.user_metadata?.name ?? null;
     await admin.from('profiles').insert({
       id:           user.id,
       username,
-      display_name: displayName,
+      display_name: googleDisplayName,
       theme:        'dark',
       is_admin:     false,
       approved:     false,
     });
+  } else if (!existing.display_name && googleDisplayName) {
+    // Backfill display_name for existing users who don't have one yet
+    await admin
+      .from('profiles')
+      .update({ display_name: googleDisplayName })
+      .eq('id', user.id);
   }
 
   // ── Route based on approval ────────────────────────────────────────────────
