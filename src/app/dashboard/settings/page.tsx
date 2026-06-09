@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useThemeStore } from '@/lib/stores/themeStore';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Sun, Moon, LogOut, Copy, Check, RefreshCw, Trash2, ImagePlus, X } from 'lucide-react';
+import { Sun, Moon, LogOut, Copy, Check, RefreshCw, Trash2, ImagePlus, X, Save } from 'lucide-react';
 
 function FigmaIcon({ size = 16 }: { size?: number }) {
   return (
@@ -366,6 +366,57 @@ export default function SettingsPage() {
   const { theme, toggleTheme } = useThemeStore();
   const router = useRouter();
 
+  const [email,         setEmail]         = useState('');
+  const [username,      setUsername]      = useState('');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [saving,        setSaving]        = useState(false);
+  const [saveStatus,    setSaveStatus]    = useState<'idle' | 'success' | 'error'>('idle');
+  const [saveMsg,       setSaveMsg]       = useState('');
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      setEmail(user.email ?? '');
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, display_name')
+        .eq('id', user.id)
+        .single();
+      const name = profile?.display_name ?? profile?.username ?? '';
+      setUsername(name);
+      setUsernameInput(name);
+      setProfileLoaded(true);
+    });
+  }, []);
+
+  async function handleSaveUsername() {
+    const trimmed = usernameInput.trim();
+    if (!trimmed || trimmed === username) return;
+    setSaving(true);
+    setSaveStatus('idle');
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase
+        .from('profiles')
+        .update({ username: trimmed, display_name: trimmed })
+        .eq('id', user.id);
+      if (error) throw error;
+      setUsername(trimmed);
+      setSaveStatus('success');
+      setSaveMsg('Username updated.');
+    } catch (err) {
+      setSaveStatus('error');
+      setSaveMsg(err instanceof Error ? err.message : 'Failed to save.');
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    }
+  }
+
   async function handleSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -424,16 +475,58 @@ export default function SettingsPage() {
             Account
           </h2>
           <div
-            className="p-4 rounded-xl space-y-3"
+            className="p-4 rounded-xl space-y-4"
             style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
           >
+            {/* Email — read-only */}
             <div>
               <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-white-muted)' }}>Email</p>
-              <p className="text-sm" style={{ color: 'var(--color-white)' }}>creative@flowcanvas.app</p>
+              {profileLoaded ? (
+                <p className="text-sm" style={{ color: 'var(--color-white)' }}>{email}</p>
+              ) : (
+                <div className="h-5 w-48 rounded animate-pulse" style={{ background: 'var(--color-bg-surface)' }} />
+              )}
             </div>
+
+            {/* Username — editable */}
             <div>
-              <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-white-muted)' }}>Username</p>
-              <p className="text-sm" style={{ color: 'var(--color-white)' }}>creative</p>
+              <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-white-muted)' }}>Username</p>
+              {profileLoaded ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={usernameInput}
+                    onChange={e => { setUsernameInput(e.target.value); setSaveStatus('idle'); }}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveUsername()}
+                    className="flex-1 text-sm px-3 py-1.5 rounded-lg outline-none"
+                    style={{
+                      background: 'var(--color-bg-surface)',
+                      border: 'var(--border-default)',
+                      color: 'var(--color-white)',
+                    }}
+                    placeholder="Your username"
+                  />
+                  <button
+                    onClick={handleSaveUsername}
+                    disabled={saving || !usernameInput.trim() || usernameInput.trim() === username}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity disabled:opacity-40"
+                    style={{ background: 'var(--color-accent)', color: '#fff', border: 'none', cursor: 'pointer' }}
+                  >
+                    {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                    Save
+                  </button>
+                </div>
+              ) : (
+                <div className="h-8 w-full rounded-lg animate-pulse" style={{ background: 'var(--color-bg-surface)' }} />
+              )}
+              {saveStatus !== 'idle' && (
+                <p
+                  className="text-xs mt-1.5"
+                  style={{ color: saveStatus === 'success' ? 'var(--color-success)' : 'var(--color-error)' }}
+                >
+                  {saveMsg}
+                </p>
+              )}
             </div>
           </div>
         </section>
