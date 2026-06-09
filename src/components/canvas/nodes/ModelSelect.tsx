@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ByteDance, Flux, Kling, NanoBanana, OpenAI, TopazLabs } from '@lobehub/icons';
+import { ByteDance, Fal, Flux, Kling, NanoBanana, OpenAI, TopazLabs } from '@lobehub/icons';
 import { ChevronDown } from 'lucide-react';
 
 interface Option {
@@ -27,8 +27,9 @@ function ModelIcon({ modelId, size = 13 }: { modelId: string; size?: number }) {
     case 'kling-3-pro':
       return <Kling.Color size={size} />;
     case 'seedance-2':
-    case 'seedvr2':
       return <ByteDance.Color size={size} />;
+    case 'seedvr2':
+      return <Fal.Color size={size} />;
     case 'topaz':
       return <TopazLabs size={size} />;
     default:
