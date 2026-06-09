@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ByteDance, Fal, Flux, Kling, OpenAI, TopazLabs } from '@lobehub/icons';
+import { ByteDance, Flux, Kling, NanoBanana, OpenAI, TopazLabs } from '@lobehub/icons';
 import { ChevronDown } from 'lucide-react';
 
 interface Option {
@@ -19,7 +19,7 @@ function ModelIcon({ modelId, size = 13 }: { modelId: string; size?: number }) {
   switch (modelId) {
     case 'nano-banana-2':
     case 'nano-banana-pro':
-      return <Fal.Color size={size} />;
+      return <NanoBanana.Color size={size} />;
     case 'gpt-image-2':
       return <OpenAI size={size} />;
     case 'flux-2-pro':
@@ -47,8 +47,8 @@ export function ModelSelect({ options, value, onChange }: ModelSelectProps) {
     function onOutsideDown(e: MouseEvent) {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener('mousedown', onOutsideDown);
-    return () => document.removeEventListener('mousedown', onOutsideDown);
+    document.addEventListener('mousedown', onOutsideDown, true);
+    return () => document.removeEventListener('mousedown', onOutsideDown, true);
   }, [open]);
 
   return (
