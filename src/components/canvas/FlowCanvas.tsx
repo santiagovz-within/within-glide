@@ -91,6 +91,35 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
 
 interface ContextMenu { x: number; y: number; canvasX: number; canvasY: number; }
 
+// Fields that are derived from edges or represent generation output — must be
+// stripped when pasting so a duplicated node starts in a blank state.
+const PASTE_CLEAR_FIELDS = new Set([
+  'outputImageUrl', 'outputVideoUrl',
+  'inputImageUrl',
+  'generatedImages',
+  'startFrameUrl', 'endFrameUrl',
+  'generatedPrompt',
+  'selectedImageUrl',
+  'gifUrl',
+  'promptConnected',
+]);
+// Input nodes own their media directly (user-uploaded) — keep it on paste.
+const INPUT_NODE_TYPES = new Set(['imageInputNode', 'videoInputNode', 'mediaInputNode', 'promptNode']);
+
+function pasteCleanData(nodeType: string | undefined, data: NodeData): NodeData {
+  if (nodeType && INPUT_NODE_TYPES.has(nodeType)) return { ...data };
+  const d = { ...data } as Record<string, unknown>;
+  for (const f of PASTE_CLEAR_FIELDS) delete d[f];
+  // Clear video that arrives via connection (not user-uploaded)
+  if (nodeType !== 'videoInputNode' && nodeType !== 'mediaInputNode') delete d.videoUrl;
+  // Reset array input ports
+  if ('inputImageUrls' in d) d.inputImageUrls = [];
+  if ('imagePortCount' in d) d.imagePortCount = 0;
+  // Reset processing status
+  if ('status' in d) d.status = 'idle';
+  return d as NodeData;
+}
+
 function InvalidConnectionToast({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
@@ -216,7 +245,61 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
           for (const n of nodesRef.current) {
             if (n.parentId && selectedNodeIds.has(n.parentId)) allToRemove.add(n.id);
           }
-          setNodes(nodesRef.current.filter((n) => !allToRemove.has(n.id)));
+
+          // Compute per-edge downstream state clears for surviving target nodes.
+          // We cannot call propagateImageToTarget here (stale closure / nodesRef race),
+          // so we compute updates inline from fresh store state and merge into setNodes.
+          const freshNodes = useFlowStore.getState().nodes;
+          const freshNodeMap = new Map(freshNodes.map((n) => [n.id, n]));
+          const edgesToRemove = edgesRef.current.filter(
+            (edge) => edge.selected || allToRemove.has(edge.source) || allToRemove.has(edge.target)
+          );
+          const removedEdgeIds = new Set(edgesToRemove.map((ed) => ed.id));
+          const nodeUpdates = new Map<string, Record<string, unknown>>();
+
+          for (const edge of edgesToRemove) {
+            if (allToRemove.has(edge.target)) continue; // target being deleted too
+            const targetNode = freshNodeMap.get(edge.target);
+            if (!targetNode) continue;
+            const acc = nodeUpdates.get(edge.target) ?? {};
+            const handle = edge.targetHandle ?? '';
+
+            if (edge.sourceHandle === 'image') {
+              const t = targetNode.type ?? '';
+              if (t === 'upscaleNode' || t === 'modifyNode' || t === 'removeBgNode' || t === 'imageToPromptNode') {
+                nodeUpdates.set(edge.target, { ...acc, inputImageUrl: undefined });
+              } else if (t === 'videoGenNode') {
+                if (handle === 'start_frame') nodeUpdates.set(edge.target, { ...acc, startFrameUrl: undefined });
+                else if (handle === 'end_frame') nodeUpdates.set(edge.target, { ...acc, endFrameUrl: undefined });
+              } else if (t === 'imageGenNode') {
+                const currentData = targetNode.data as ImageGenNodeData;
+                const urls = [...(currentData.inputImageUrls ?? [])];
+                const idx = handle.startsWith('ref_') ? parseInt(handle.split('_')[1]) : 0;
+                urls[idx] = '';
+                const filled = urls.filter(Boolean).length;
+                const maxRefs = MODELS[currentData.model as keyof typeof MODELS]?.maxReferenceImages ?? 14;
+                nodeUpdates.set(edge.target, { ...acc, inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) });
+              }
+            }
+            if (edge.sourceHandle === 'video' && (handle === 'video' || handle === 'video_in')) {
+              nodeUpdates.set(edge.target, { ...acc, videoUrl: undefined });
+            }
+            if (edge.sourceHandle === 'prompt') {
+              const stillHasPrompt = edgesRef.current.some(
+                (e) => !removedEdgeIds.has(e.id) && e.target === edge.target && e.sourceHandle === 'prompt'
+              );
+              if (!stillHasPrompt) nodeUpdates.set(edge.target, { ...acc, promptConnected: false });
+            }
+          }
+
+          setNodes(
+            freshNodes
+              .filter((n) => !allToRemove.has(n.id))
+              .map((n) => {
+                const upd = nodeUpdates.get(n.id);
+                return upd ? { ...n, data: { ...n.data, ...upd } } : n;
+              })
+          );
           setEdges(edgesRef.current.filter(
             (edge) => !edge.selected && !allToRemove.has(edge.source) && !allToRemove.has(edge.target)
           ));
@@ -257,7 +340,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         const newNodes: Node<NodeData>[] = cb.nodes.map((n, i) => {
           const newId = `${n.type}-${ts}-${i}`;
           idMap.set(n.id, newId);
-          return { ...n, id: newId, position: { x: n.position.x + 50, y: n.position.y + 50 }, data: { ...n.data }, selected: true } as Node<NodeData>;
+          return { ...n, id: newId, position: { x: n.position.x + 50, y: n.position.y + 50 }, data: pasteCleanData(n.type, n.data), selected: true } as Node<NodeData>;
         });
 
         const newEdges: Edge[] = cb.edges.map((edge, i) => ({
