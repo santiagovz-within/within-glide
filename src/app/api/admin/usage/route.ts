@@ -20,16 +20,37 @@ export async function GET() {
 
   const supabase = createAdminClient();
 
-  // Fetch all generations (limit to last 10k for perf)
-  const { data: generations, error } = await supabase
-    .from('generations')
-    .select('id, user_id, model, created_at, status, media_type')
-    .order('created_at', { ascending: false })
-    .limit(10000);
+  // ── Accurate headline counts via COUNT(*) — not affected by max_rows ───────
+  // Supabase's PostgREST caps .limit() at max_rows (default 1000), so we must
+  // use head:true COUNT queries for accurate totals, then paginate for row data.
+  const [totalRes, imageRes, videoRes] = await Promise.all([
+    supabase.from('generations').select('*', { count: 'exact', head: true }),
+    supabase.from('generations').select('*', { count: 'exact', head: true }).eq('media_type', 'image'),
+    supabase.from('generations').select('*', { count: 'exact', head: true }).eq('media_type', 'video'),
+  ]);
+  const totalGenerations = totalRes.count ?? 0;
+  const imageCnt         = imageRes.count ?? 0;
+  const videoCnt         = videoRes.count ?? 0;
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // ── Paginated row fetch for breakdown charts ───────────────────────────────
+  // Fetch in 1000-row batches (the max PostgREST will return per request) until
+  // all rows are retrieved or we hit the 50k safety cap.
+  const BATCH   = 1000;
+  const MAX_CAP = 50000;
+  type GenRow = { id: string; user_id: string; model: string; created_at: string; media_type: string };
+  const rows: GenRow[] = [];
 
-  const rows = generations ?? [];
+  for (let from = 0; from < Math.min(totalGenerations, MAX_CAP); from += BATCH) {
+    const { data, error } = await supabase
+      .from('generations')
+      .select('id, user_id, model, created_at, media_type')
+      .order('created_at', { ascending: false })
+      .range(from, from + BATCH - 1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data?.length) break;
+    rows.push(...data);
+    if (data.length < BATCH) break; // last partial page — done
+  }
 
   // Node usage — count how many times each node type appears across all saved flows
   const { data: flows } = await supabase.from('flows').select('flow_data');
@@ -91,12 +112,8 @@ export async function GET() {
     }
   }
 
-  // Media type split
-  const imageCnt = rows.filter((g) => g.media_type === 'image').length;
-  const videoCnt = rows.filter((g) => g.media_type === 'video').length;
-
   return NextResponse.json({
-    totalGenerations: rows.length,
+    totalGenerations,
     modelUsage: Object.entries(modelCounts)
       .map(([model, count]) => ({ model, count }))
       .sort((a, b) => b.count - a.count),
