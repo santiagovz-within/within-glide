@@ -114,7 +114,7 @@ Create a `.env.local` file at the root:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-GCS_BUCKET_NAME=within-glide
+GCS_BUCKET_NAME=
 GCS_CREDENTIALS_JSON=      # full service account JSON, paste as a single line
 FAL_KEY=
 ```
