@@ -61,7 +61,7 @@ All generation runs through the [FAL AI](https://fal.ai) platform.
 
 ### Storage
 
-All generated media is stored in **Google Cloud Storage** (`within-glide` bucket). The app stores canonical `gcs:<path>` references in Supabase and resolves them to short-lived signed read URLs on demand — files are never served directly through the Next.js server.
+All generated media is stored in **Google Cloud Storage**. Files are never served directly through the Next.js server.
 
 ### Figma Integration
 
