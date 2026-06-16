@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useState, useLayoutEffect } from 'react';
 import { Type, Aperture, Film, Zap, Monitor, Grid, Layers, Sliders, Pointer, Wand2, Clapperboard, Scissors, FileImage } from 'lucide-react';
 import type { NodeType } from '@/types';
 
@@ -37,12 +38,25 @@ interface NodeToolbarProps {
   allowedTypes?: NodeType[];
 }
 
-const MENU_WIDTH  = 200;
-const MENU_HEIGHT = 320;
+const MENU_WIDTH = 200;
 
 export function NodeToolbar({ x, y, onAdd, onClose, selectedCount = 0, onGroup, allowedTypes }: NodeToolbarProps) {
-  const left = x + MENU_WIDTH  > window.innerWidth  ? x - MENU_WIDTH  : x;
-  const top  = y + MENU_HEIGHT > window.innerHeight ? y - MENU_HEIGHT : y;
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  // Measure the actual rendered height before the first paint so the flip
+  // logic uses a real value instead of a hardcoded constant.
+  useLayoutEffect(() => {
+    if (!menuRef.current) return;
+    const { offsetWidth: w, offsetHeight: h } = menuRef.current;
+    setPos({
+      left: x + w > window.innerWidth  ? x - w : x,
+      top:  y + h > window.innerHeight ? y - h : y,
+    });
+  }, [x, y]);
+
+  const left = pos?.left ?? x;
+  const top  = pos?.top  ?? y;
 
   const visibleOptions = allowedTypes
     ? NODE_OPTIONS.filter((o) => allowedTypes.includes(o.type))
@@ -53,11 +67,14 @@ export function NodeToolbar({ x, y, onAdd, onClose, selectedCount = 0, onGroup, 
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
       <div
+        ref={menuRef}
         className="fixed z-50 rounded-xl overflow-hidden shadow-xl"
         style={{
           left,
           top,
           width: MENU_WIDTH,
+          // Hide until positioned so there's no flash at the wrong location
+          visibility: pos ? 'visible' : 'hidden',
           background: 'var(--color-bg-surface)',
           border: 'var(--border-default)',
           boxShadow: 'var(--shadow-modal)',

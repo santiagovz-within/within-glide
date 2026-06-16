@@ -145,7 +145,9 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
   const [isDragOver, setIsDragOver]     = useState(false);
   const reactFlowWrapper                = useRef<HTMLDivElement>(null);
   const invalidToastTimer               = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clipboardRef                    = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] } | null>(null);
+  const clipboardRef                    = useRef<{ nodes: Node<NodeData>[]; edges: Edge[]; incomingEdges: Edge[] } | null>(null);
+  const undoStack                       = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] }[]>([]);
+  const MAX_UNDO                        = 30;
   const nodesRef                        = useRef(nodes);
   const edgesRef                        = useRef(edges);
   const pendingConnectionRef            = useRef<{ nodeId: string; handleId: string | null; handleType: string | null } | null>(null);
@@ -240,6 +242,10 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         const selectedNodeIds = new Set(nodesRef.current.filter((n) => n.selected).map((n) => n.id));
         const hasSelectedEdges = edgesRef.current.some((e) => e.selected);
         if (selectedNodeIds.size > 0 || hasSelectedEdges) {
+          // Snapshot before destructive action so Ctrl+Z can restore it
+          undoStack.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
+          if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+
           // Also remove children of deleted group nodes
           const allToRemove = new Set(selectedNodeIds);
           for (const n of nodesRef.current) {
@@ -313,6 +319,17 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
       if (!ctrlOrCmd) return;
       if (inInput) return;
 
+      // Ctrl/Cmd + Z → undo last delete
+      if (e.key === 'z' && !e.shiftKey) {
+        const prev = undoStack.current.pop();
+        if (prev) {
+          setNodes(prev.nodes);
+          setEdges(prev.edges);
+        }
+        e.preventDefault();
+        return;
+      }
+
       // Ctrl/Cmd + G → group
       if (e.key === 'g') {
         groupSelectedNodes();
@@ -324,10 +341,16 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         const selected = nodesRef.current.filter((n) => n.selected);
         if (selected.length === 0) return;
         const selectedIds = new Set(selected.map((n) => n.id));
+        // Edges whose both ends are in the selection (copied as-is)
         const copiedEdges = edgesRef.current.filter(
           (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)
         );
-        clipboardRef.current = { nodes: selected, edges: copiedEdges };
+        // Edges coming INTO selected nodes from non-selected sources — these
+        // represent upstream connections that should re-attach on paste.
+        const incomingEdges = edgesRef.current.filter(
+          (edge) => !selectedIds.has(edge.source) && selectedIds.has(edge.target)
+        );
+        clipboardRef.current = { nodes: selected, edges: copiedEdges, incomingEdges };
         e.preventDefault();
       }
 
@@ -343,7 +366,8 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
           return { ...n, id: newId, position: { x: n.position.x + 50, y: n.position.y + 50 }, data: pasteCleanData(n.type, n.data), selected: true } as Node<NodeData>;
         });
 
-        const newEdges: Edge[] = cb.edges.map((edge, i) => ({
+        // Internal edges — both ends remapped to new IDs
+        const internalEdges: Edge[] = cb.edges.map((edge, i) => ({
           ...edge,
           id: `edge-${ts}-${i}`,
           source: idMap.get(edge.source) ?? edge.source,
@@ -351,8 +375,17 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
           animated: false,
         }));
 
+        // Incoming edges from non-copied nodes — only the target is remapped so
+        // the pasted node stays connected to the same upstream source.
+        const externalEdges: Edge[] = (cb.incomingEdges ?? []).map((edge, i) => ({
+          ...edge,
+          id: `edge-ext-${ts}-${i}`,
+          target: idMap.get(edge.target) ?? edge.target,
+          animated: false,
+        }));
+
         setNodes([...nodesRef.current.map((n) => ({ ...n, selected: false })), ...newNodes]);
-        setEdges([...edgesRef.current, ...newEdges]);
+        setEdges([...edgesRef.current, ...internalEdges, ...externalEdges]);
         e.preventDefault();
       }
     }
