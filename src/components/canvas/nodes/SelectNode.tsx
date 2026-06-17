@@ -45,14 +45,12 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
   const currentUrl = availableImages[selectedIndex] ?? videoUrl;
   const mediaType: 'image' | 'video' = videoUrl ? 'video' : 'image';
 
-  // Keep selectedImageUrl in store in sync and propagate to downstream nodes
   useEffect(() => {
     if (currentUrl !== data.selectedImageUrl) {
       document.dispatchEvent(new CustomEvent('node:update', {
         detail: { nodeId: id, data: { selectedImageUrl: currentUrl } },
       }));
     }
-    // Notify downstream nodes (e.g. imageGenNode reference inputs)
     document.dispatchEvent(new CustomEvent('node:image-propagate', {
       detail: { sourceNodeId: id, imageUrl: currentUrl ?? null },
     }));
@@ -101,35 +99,43 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
 
       {currentUrl ? (
         <>
-          {/* Thumbnail strip — only shown when source has multiple images */}
+          {/* Block 1: Thumbnail picker — only when source has multiple images */}
           {availableImages.length > 1 && (
-            <div className="flex gap-1.5 mb-2 nodrag" style={{ padding: '3px', overflowX: 'auto' }}>
-              {availableImages.map((url, i) => (
-                <button
-                  key={i}
-                  onClick={() => selectImage(i)}
-                  className="shrink-0 nodrag"
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 6,
-                    padding: 0,
-                    overflow: 'hidden',
-                    outline: selectedIndex === i ? '2px solid #a855f7' : '2px solid transparent',
-                    outlineOffset: 1,
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                </button>
-              ))}
+            <div
+              className="nodrag mb-2"
+              style={{ overflowX: 'auto', padding: '3px' }}
+            >
+              <div className="flex gap-1.5">
+                {availableImages.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => selectImage(i)}
+                    className="shrink-0 nodrag"
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 8,
+                      padding: 0,
+                      overflow: 'hidden',
+                      outline: selectedIndex === i ? '2px solid #a855f7' : '2px solid transparent',
+                      outlineOffset: 1,
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Selected media preview */}
+          {/* Block 2: Selected media — fills all 4 sides of its rounded container */}
           <div
-            className="overflow-hidden"
-            style={{ margin: '0 -18px -18px -18px', overflow: 'hidden' }}
+            style={{
+              borderRadius: 17,
+              overflow: 'hidden',
+              margin: '0 -18px -18px -18px',
+            }}
           >
             {mediaType === 'video' ? (
               <video src={currentUrl} controls className="w-full block" style={{ height: 'auto' }} />

@@ -417,11 +417,11 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           </div>
 
           {inputImageUrl && data.outputImageUrl ? (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
               <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
             </div>
           ) : inputImageUrl ? (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
             </div>
@@ -452,19 +452,20 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
             </div>
           </div>
 
-          {inputVideoUrl && (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
-              <video src={inputVideoUrl} controls className="w-full block nodrag" style={{ height: 'auto' }} />
-              <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Input</p>
-            </div>
-          )}
-
-          {hasVideoOutput && (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
-              <video src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
-              <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Output ({upscaleFactor}x)</p>
-            </div>
-          )}
+          <div className="flex flex-col gap-3">
+            {inputVideoUrl && (
+              <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <video src={inputVideoUrl} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+                <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Input</p>
+              </div>
+            )}
+            {hasVideoOutput && (
+              <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <video src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+                <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Output ({upscaleFactor}x)</p>
+              </div>
+            )}
+          </div>
         </>
       )}
 

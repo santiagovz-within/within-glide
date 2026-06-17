@@ -135,7 +135,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
           </p>
 
           {/* Grid */}
-          <div className="grid gap-1.5 nodrag" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))' }}>
+          <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))' }}>
             {mediaItems.map((item, i) => (
               <div
                 key={`${item.sourceNodeId}-${i}`}
