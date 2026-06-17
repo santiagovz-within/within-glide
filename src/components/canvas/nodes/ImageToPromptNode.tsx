@@ -117,7 +117,7 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       accentColor={PORT_COLORS.text}
       titlePosition="outside"
       footer={
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 items-stretch">
           <NodeSelect
             options={LENGTH_OPTIONS.map(o => o.label)}
             value={LENGTH_OPTIONS.find(o => o.id === length)?.label ?? 'Auto'}
@@ -182,7 +182,7 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       {hasImage ? (
         <div
           style={{
-            margin: '0 -18px 12px -18px',
+            margin: promptHistory.length <= 1 ? '-18px -18px 12px -18px' : '0 -18px 12px -18px',
             overflow: 'hidden',
             height: 90,
             position: 'relative',

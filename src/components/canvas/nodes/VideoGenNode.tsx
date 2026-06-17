@@ -287,7 +287,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       <div ref={promptSectionRef} className="mb-3">
         {data.promptConnected ? (
           <div
-            style={{ height: 36, background: '#3999F8', color: '#fff', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 12 }}
+            className="flex items-center gap-2 px-3 rounded-lg text-xs font-medium"
+            style={{ height: 36, background: '#3999F8', color: '#fff' }}
           >
             <span style={{ fontSize: 10 }}>T</span>
             Prompt connected
@@ -387,9 +388,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           className="flex items-center text-xs"
           style={{
             height: FRAME_ROW_HEIGHT,
-            marginLeft: -18,
-            paddingLeft: 20,
-            paddingRight: 8,
+            paddingLeft: 12,
+            paddingRight: 12,
             borderRadius: '4px 16px 16px 4px',
             background: data.startFrameUrl ? '#a855f7' : 'var(--color-bg-surface)',
             color: data.startFrameUrl ? '#fff' : 'var(--color-white-muted)',
@@ -404,9 +404,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           className="flex items-center text-xs"
           style={{
             height: FRAME_ROW_HEIGHT,
-            marginLeft: -18,
-            paddingLeft: 20,
-            paddingRight: 8,
+            paddingLeft: 12,
+            paddingRight: 12,
             borderRadius: '4px 16px 16px 4px',
             background: data.endFrameUrl ? '#a855f7' : 'var(--color-bg-surface)',
             color: data.endFrameUrl ? '#fff' : 'var(--color-white-muted)',

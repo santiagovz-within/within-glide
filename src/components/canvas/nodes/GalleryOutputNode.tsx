@@ -81,6 +81,16 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
       minWidth={320}
       accentColor="#f59e0b"
       titlePosition="outside"
+      footer={mediaItems.length > 0 ? (
+        <button
+          onClick={() => downloadAll(mediaItems)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity hover:opacity-80 nodrag"
+          style={{ background: '#f59e0b', color: '#000', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download All
+        </button>
+      ) : undefined}
     >
       {/* Wide hit-area target handle — accepts any connection type */}
       <Handle
@@ -120,21 +130,9 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
         </div>
       ) : (
         <>
-          {/* Download all button */}
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
-              {mediaItems.length} asset{mediaItems.length !== 1 ? 's' : ''}
-            </p>
-            <button
-              onClick={() => downloadAll(mediaItems)}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-opacity hover:opacity-80 nodrag"
-              style={{ background: '#f59e0b', color: '#000' }}
-              title="Download all"
-            >
-              <Download size={11} />
-              Download All
-            </button>
-          </div>
+          <p className="text-xs mb-2" style={{ color: 'var(--color-white-muted)' }}>
+            {mediaItems.length} asset{mediaItems.length !== 1 ? 's' : ''}
+          </p>
 
           {/* Grid */}
           <div className="grid gap-1.5 nodrag" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))' }}>

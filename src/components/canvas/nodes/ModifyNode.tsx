@@ -695,7 +695,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             className="flex items-center text-xs"
             style={{
               height: IMAGE_ROW_HEIGHT,
-              marginLeft: -18, paddingLeft: 20, paddingRight: 8,
+              paddingLeft: 12, paddingRight: 12,
               borderRadius: '4px 16px 16px 4px',
               background: hasImage ? '#a855f7' : 'var(--color-bg-surface)',
               color: hasImage ? '#fff' : 'var(--color-white-muted)',
@@ -769,7 +769,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             className="flex items-center text-xs mb-3"
             style={{
               height: IMAGE_ROW_HEIGHT,
-              marginLeft: -18, paddingLeft: 20, paddingRight: 8,
+              paddingLeft: 12, paddingRight: 12,
               borderRadius: '4px 16px 16px 4px',
               background: hasImage ? '#a855f7' : 'var(--color-bg-surface)',
               color: hasImage ? '#fff' : 'var(--color-white-muted)',

@@ -119,7 +119,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
       {/* ── Preview ─────────────────────────────────────────────────────── */}
       {data.outputImageUrl ? (
         // Output on checkerboard so transparency is visible
-        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden', ...CHECKERBOARD }}>
+        <div style={{ margin: '-18px', overflow: 'hidden', ...CHECKERBOARD }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={data.outputImageUrl}
@@ -129,7 +129,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
           />
         </div>
       ) : inputImageUrl ? (
-        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
+        <div style={{ margin: '-18px', overflow: 'hidden' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={inputImageUrl}

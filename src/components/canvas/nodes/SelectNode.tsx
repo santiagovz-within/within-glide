@@ -105,7 +105,7 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
         <>
           {/* Thumbnail strip — only shown when source has multiple images */}
           {availableImages.length > 1 && (
-            <div className="flex gap-1.5 mb-2 overflow-x-auto nodrag">
+            <div className="flex gap-1.5 mb-2 nodrag" style={{ padding: '3px 0', overflowX: 'auto' }}>
               {availableImages.map((url, i) => (
                 <button
                   key={i}
@@ -117,7 +117,7 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
                     borderRadius: 6,
                     padding: 0,
                     overflow: 'hidden',
-                    outline: selectedIndex === i ? '2px solid var(--color-accent)' : '2px solid transparent',
+                    outline: selectedIndex === i ? '2px solid #a855f7' : '2px solid transparent',
                     outlineOffset: 1,
                   }}
                 >
@@ -131,7 +131,7 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
           {/* Selected media preview */}
           <div
             className="overflow-hidden cursor-pointer nodrag"
-            style={{ margin: '0 -18px', overflow: 'hidden' }}
+            style={{ margin: '0 -18px -18px -18px', overflow: 'hidden' }}
             onClick={() => setPreviewOpen(true)}
           >
             {mediaType === 'video' ? (

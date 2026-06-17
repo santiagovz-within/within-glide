@@ -365,7 +365,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       icon={<Zap size={14} />}
       status={data.status}
       selected={selected}
-      minWidth={280}
+      minWidth={560}
       accentColor={accentColor}
       titlePosition="outside"
       footer={footer}
@@ -417,11 +417,11 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           </div>
 
           {inputImageUrl && data.outputImageUrl ? (
-            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
               <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
             </div>
           ) : inputImageUrl ? (
-            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
             </div>
@@ -453,14 +453,14 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           </div>
 
           {inputVideoUrl && (
-            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
               <video src={inputVideoUrl} controls className="w-full block nodrag" style={{ height: 'auto' }} />
               <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Input</p>
             </div>
           )}
 
           {hasVideoOutput && (
-            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
               <video src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
               <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Output ({upscaleFactor}x)</p>
             </div>

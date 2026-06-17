@@ -505,11 +505,11 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
             onLoad={handleImageLoad}
           />
           <button
-            className="absolute top-1 right-1 p-0.5 rounded-full nodrag"
-            style={{ background: 'rgba(0,0,0,0.6)' }}
+            className="absolute top-1.5 right-1.5 p-0.5 rounded-full nodrag"
+            style={{ background: '#fff' }}
             onClick={clearMedia}
           >
-            <X size={12} style={{ color: 'var(--color-white)' }} />
+            <X size={12} style={{ color: '#000' }} />
           </button>
         </div>
       )}
@@ -524,11 +524,11 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
             style={{ height: 'auto' }}
           />
           <button
-            className="absolute top-1 right-1 p-0.5 rounded-full nodrag"
-            style={{ background: 'rgba(0,0,0,0.6)' }}
+            className="absolute top-1.5 right-1.5 p-0.5 rounded-full nodrag"
+            style={{ background: '#fff' }}
             onClick={clearMedia}
           >
-            <X size={12} style={{ color: 'var(--color-white)' }} />
+            <X size={12} style={{ color: '#000' }} />
           </button>
         </div>
       )}
