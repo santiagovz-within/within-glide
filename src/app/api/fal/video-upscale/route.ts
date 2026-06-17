@@ -22,14 +22,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'upscaleFactor must be 2, 3, or 4' }, { status: 400 });
     }
 
-    const falInput: Record<string, unknown> = {
-      video_url: videoUrl,
-      upscale_factor: upscaleFactor,
-    };
-    if (targetFps != null) falInput.target_fps = targetFps;
-    if (h264Output === true) falInput.H264_output = true;
-
-    const { request_id } = await fal.queue.submit(FAL_ENDPOINT, { input: falInput });
+    const { request_id } = await fal.queue.submit(FAL_ENDPOINT, {
+      input: {
+        video_url: videoUrl,
+        upscale_factor: upscaleFactor,
+        ...(targetFps != null ? { target_fps: targetFps } : {}),
+        ...(h264Output === true ? { H264_output: true } : {}),
+      },
+    });
 
     await supabase.from('generations').insert({
       user_id: user.id,
