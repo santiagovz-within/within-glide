@@ -498,6 +498,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
                 border: 'var(--border-default)',
                 position: 'relative',
                 flexShrink: 0,
+                padding: 0,
               }}
             >
               <span
