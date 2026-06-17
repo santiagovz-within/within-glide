@@ -24,8 +24,6 @@ const VIDEO_FPS_OPTIONS: Array<{ label: string; value: number | null }> = [
   { label: '24', value: 24 },
   { label: '30', value: 30 },
   { label: '60', value: 60 },
-  { label: '90', value: 90 },
-  { label: '120', value: 120 },
 ];
 
 // ── Comparison slider (image before/after) ────────────────────────────────────
