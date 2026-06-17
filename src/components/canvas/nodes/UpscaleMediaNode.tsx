@@ -19,6 +19,12 @@ import { useFlowStore } from '@/lib/stores/flowStore';
 type Dims = { w: number; h: number };
 
 const VIDEO_SCALE_OPTIONS = [2, 3, 4];
+const VIDEO_FPS_OPTIONS: Array<{ label: string; value: number | null }> = [
+  { label: 'Off', value: null },
+  { label: '24', value: 24 },
+  { label: '30', value: 30 },
+  { label: '60', value: 60 },
+];
 
 // ── Comparison slider (image before/after) ────────────────────────────────────
 
@@ -232,6 +238,8 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         body: JSON.stringify({
           videoUrl: inputVideoUrl,
           upscaleFactor: data.upscaleFactor ?? 2,
+          targetFps: data.targetFps ?? null,
+          h264Output: data.h264Output ?? false,
           nodeId: id,
         }),
       });
@@ -450,6 +458,59 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="mb-3">
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Target FPS</label>
+            <div className="flex gap-1.5">
+              {VIDEO_FPS_OPTIONS.map(({ label, value }) => {
+                const isSelected = (data.targetFps ?? null) === value;
+                return (
+                  <button
+                    key={label}
+                    onClick={() => dispatchUpdate({ targetFps: value ?? undefined })}
+                    className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors nodrag"
+                    style={{
+                      background: isSelected ? '#fff' : 'var(--color-bg-surface)',
+                      color:      isSelected ? '#000' : 'var(--color-white-muted)',
+                      border: 'var(--border-default)',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mb-3 nodrag">
+            <label className="text-xs font-medium" style={{ color: 'var(--color-white-muted)' }}>H264 Output</label>
+            <button
+              onClick={() => dispatchUpdate({ h264Output: !(data.h264Output ?? false) })}
+              className="nodrag transition-colors"
+              style={{
+                width: 36,
+                height: 20,
+                borderRadius: 10,
+                background: data.h264Output ? '#fff' : 'var(--color-bg-surface)',
+                border: 'var(--border-default)',
+                position: 'relative',
+                flexShrink: 0,
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: data.h264Output ? 18 : 2,
+                  width: 16,
+                  height: 16,
+                  borderRadius: '50%',
+                  background: data.h264Output ? '#000' : 'var(--color-white-muted)',
+                  transition: 'left 0.15s',
+                }}
+              />
+            </button>
           </div>
 
           <div className="flex flex-col gap-3">

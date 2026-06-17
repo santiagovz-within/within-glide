@@ -263,6 +263,8 @@ export interface UpscaleMediaNodeData extends Record<string, unknown> {
   model: string;
   scaleFactor: number;
   upscaleFactor: number;
+  targetFps?: number;
+  h264Output?: boolean;
   outputImageUrl?: string;
   outputVideoUrl?: string;
   status: NodeStatus;

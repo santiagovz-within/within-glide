@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { videoUrl, upscaleFactor = 2, nodeId } = await request.json();
+    const { videoUrl, upscaleFactor = 2, targetFps, h264Output, nodeId } = await request.json();
 
     if (!videoUrl) {
       return NextResponse.json({ error: 'videoUrl is required' }, { status: 400 });
@@ -22,19 +22,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'upscaleFactor must be 2, 3, or 4' }, { status: 400 });
     }
 
-    const { request_id } = await fal.queue.submit(FAL_ENDPOINT, {
-      input: {
-        video_url: videoUrl,
-        upscale_factor: upscaleFactor,
-      },
-    });
+    const falInput: Record<string, unknown> = {
+      video_url: videoUrl,
+      upscale_factor: upscaleFactor,
+    };
+    if (targetFps != null) falInput.target_fps = targetFps;
+    if (h264Output === true) falInput.H264_output = true;
+
+    const { request_id } = await fal.queue.submit(FAL_ENDPOINT, { input: falInput });
 
     await supabase.from('generations').insert({
       user_id: user.id,
       source_type: 'canvas',
       node_id: nodeId,
       model: FAL_ENDPOINT,
-      parameters: { upscaleFactor },
+      parameters: { upscaleFactor, targetFps, h264Output },
       media_type: 'video',
       media_url: '',
       status: 'processing',
