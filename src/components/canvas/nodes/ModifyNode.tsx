@@ -752,7 +752,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
           {/* Output preview */}
           {data.outputImageUrl && (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={data.outputImageUrl} alt="Modified" className="w-full block nodrag" style={{ height: 'auto' }} />
             </div>
@@ -855,7 +855,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
           {/* Output preview */}
           {data.outputImageUrl && (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={data.outputImageUrl} alt="Expanded" className="w-full block nodrag" style={{ height: 'auto' }} />
             </div>
