@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
 interface NodeSelectProps {
@@ -12,20 +13,34 @@ interface NodeSelectProps {
 export function NodeSelect({ options, value, onChange }: NodeSelectProps) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  function openDropdown(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 3, left: rect.left, width: rect.width });
+    setOpen((o) => !o);
+  }
 
   useEffect(() => {
     if (!open) return;
     function onOutsideDown(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener('mousedown', onOutsideDown, true);
     return () => document.removeEventListener('mousedown', onOutsideDown, true);
   }, [open]);
 
   return (
-    <div ref={ref} className="nodrag" style={{ position: 'relative' }}>
+    <div className="nodrag" style={{ position: 'relative' }}>
       <button
+        ref={triggerRef}
         className="nodrag w-full h-full flex items-center gap-1.5 px-2 py-1.5 text-xs"
         style={{
           background: 'var(--color-bg-surface)',
@@ -37,7 +52,7 @@ export function NodeSelect({ options, value, onChange }: NodeSelectProps) {
           outline: 'none',
           lineHeight: 1.4,
         }}
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={openDropdown}
       >
         <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
         <ChevronDown
@@ -51,20 +66,20 @@ export function NodeSelect({ options, value, onChange }: NodeSelectProps) {
         />
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
+          ref={dropdownRef}
           className="nodrag"
           style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: 3,
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
             background: 'var(--color-bg-surface)',
             borderRadius: 11,
             border: '1px solid rgba(255,255,255,0.1)',
             overflow: 'hidden',
-            zIndex: 9999,
+            zIndex: 99999,
           }}
         >
           {options.map((opt) => (
@@ -93,7 +108,8 @@ export function NodeSelect({ options, value, onChange }: NodeSelectProps) {
               {opt}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
