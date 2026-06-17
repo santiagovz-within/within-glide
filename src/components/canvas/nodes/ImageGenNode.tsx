@@ -420,7 +420,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* ── Generation history navigation ─────────────────────── */}
       {genHistory.length > 1 && (
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between my-1.5">
           <button
             onClick={() => navigateHistory(Math.max(0, histIdx - 1))}
             disabled={histIdx === 0}
@@ -445,22 +445,23 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* ── Generated previews ───────────────────────────────── */}
       {displayImages.length > 0 && (
-        <div
-          className="-mx-[18px]"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(displayImages.length, 2)}, 1fr)`,
-            gap: '1px',
-          }}
-        >
+        <div className="flex flex-col gap-2">
           {displayImages.map((url, i) => (
-            <ProgressiveImage
+            <div
               key={i}
-              src={url}
-              alt={`Generated ${i + 1}`}
-              className="w-full block nodrag"
-              style={{ height: 'auto' }}
-            />
+              style={{
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.08)',
+                overflow: 'hidden',
+              }}
+            >
+              <ProgressiveImage
+                src={url}
+                alt={`Generated ${i + 1}`}
+                className="w-full block nodrag"
+                style={{ height: 'auto' }}
+              />
+            </div>
           ))}
         </div>
       )}
