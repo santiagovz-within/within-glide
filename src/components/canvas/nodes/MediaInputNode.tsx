@@ -500,8 +500,9 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
           <ProgressiveImage
             src={data.imageUrl!}
             alt="Input"
-            className="w-full block nodrag"
+            className="w-full block"
             style={{ height: 'auto' }}
+            draggable={false}
             onLoad={handleImageLoad}
           />
           <button

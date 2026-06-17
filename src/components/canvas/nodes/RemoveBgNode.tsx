@@ -124,8 +124,9 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
           <img
             src={data.outputImageUrl}
             alt="Background removed"
-            className="w-full block nodrag"
+            className="w-full block"
             style={{ height: 'auto' }}
+            draggable={false}
           />
         </div>
       ) : inputImageUrl ? (
@@ -134,8 +135,9 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
           <img
             src={inputImageUrl}
             alt="Input"
-            className="w-full block nodrag"
+            className="w-full block"
             style={{ height: 'auto' }}
+            draggable={false}
           />
         </div>
       ) : (

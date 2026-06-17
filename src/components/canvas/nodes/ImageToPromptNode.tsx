@@ -182,19 +182,16 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       {hasImage ? (
         <div
           style={{
-            margin: promptHistory.length <= 1 ? '-18px -18px 12px -18px' : '0 -18px 12px -18px',
+            margin: !hasPrompt ? '-18px' : promptHistory.length > 1 ? '0 -18px 12px -18px' : '-18px -18px 12px -18px',
             overflow: 'hidden',
-            height: 90,
-            position: 'relative',
-            backgroundImage: 'conic-gradient(#3a3a3a 90deg, #2a2a2a 90deg 180deg, #3a3a3a 180deg 270deg, #2a2a2a 270deg)',
-            backgroundSize: '14px 14px',
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={data.inputImageUrl}
             alt="Input"
-            className="w-full h-full object-contain block nodrag"
+            className="w-full block"
+            draggable={false}
           />
         </div>
       ) : (

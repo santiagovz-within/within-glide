@@ -2,10 +2,9 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Pointer, Download } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import { MediaPreviewModal } from './MediaPreviewModal';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { downloadFromUrl } from '@/lib/utils/download';
 import type {
@@ -18,7 +17,6 @@ import type {
 } from '@/types';
 
 export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNodeData }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
   const storeEdges = useFlowStore(state => state.edges);
   const storeNodes = useFlowStore(state => state.nodes);
 
@@ -105,7 +103,7 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
         <>
           {/* Thumbnail strip — only shown when source has multiple images */}
           {availableImages.length > 1 && (
-            <div className="flex gap-1.5 mb-2 nodrag" style={{ padding: '3px 0', overflowX: 'auto' }}>
+            <div className="flex gap-1.5 mb-2 nodrag" style={{ padding: '3px', overflowX: 'auto' }}>
               {availableImages.map((url, i) => (
                 <button
                   key={i}
@@ -122,7 +120,7 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
                   }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  <img src={url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </button>
               ))}
             </div>
@@ -130,21 +128,16 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
 
           {/* Selected media preview */}
           <div
-            className="overflow-hidden cursor-pointer nodrag"
+            className="overflow-hidden"
             style={{ margin: '0 -18px -18px -18px', overflow: 'hidden' }}
-            onClick={() => setPreviewOpen(true)}
           >
             {mediaType === 'video' ? (
               <video src={currentUrl} controls className="w-full block" style={{ height: 'auto' }} />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={currentUrl} alt="Selected" className="w-full block" style={{ height: 'auto' }} />
+              <img src={currentUrl} alt="Selected" className="w-full block" draggable={false} style={{ height: 'auto' }} />
             )}
           </div>
-
-          {previewOpen && (
-            <MediaPreviewModal url={currentUrl} type={mediaType} onClose={() => setPreviewOpen(false)} />
-          )}
         </>
       ) : (
         <div

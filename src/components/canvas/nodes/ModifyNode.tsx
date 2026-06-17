@@ -708,14 +708,14 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
           {/* Multi-image selector */}
           {availableImages.length > 1 && (
-            <div className="flex gap-1.5 mb-3 overflow-x-auto nodrag">
+            <div className="flex gap-1.5 mb-3 nodrag" style={{ padding: '3px', overflowX: 'auto' }}>
               {availableImages.map((url, i) => (
                 <button
                   key={i}
                   onClick={() => setSelectedIndex(i)}
                   className="shrink-0 nodrag"
                   style={{ width: 40, height: 40, borderRadius: 6, padding: 0, overflow: 'hidden',
-                    outline: safeIndex === i ? '2px solid var(--color-accent)' : '2px solid transparent', outlineOffset: 1 }}
+                    outline: safeIndex === i ? '2px solid #a855f7' : '2px solid transparent', outlineOffset: 1 }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -781,14 +781,14 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
           {/* Multi-image selector */}
           {availableImages.length > 1 && (
-            <div className="flex gap-1.5 mb-3 overflow-x-auto nodrag">
+            <div className="flex gap-1.5 mb-3 nodrag" style={{ padding: '3px', overflowX: 'auto' }}>
               {availableImages.map((url, i) => (
                 <button
                   key={i}
                   onClick={() => setSelectedIndex(i)}
                   className="shrink-0 nodrag"
                   style={{ width: 40, height: 40, borderRadius: 6, padding: 0, overflow: 'hidden',
-                    outline: safeIndex === i ? '2px solid var(--color-accent)' : '2px solid transparent', outlineOffset: 1 }}
+                    outline: safeIndex === i ? '2px solid #a855f7' : '2px solid transparent', outlineOffset: 1 }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />

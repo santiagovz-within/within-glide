@@ -26,7 +26,7 @@ export function NodeSelect({ options, value, onChange }: NodeSelectProps) {
   return (
     <div ref={ref} className="nodrag" style={{ position: 'relative' }}>
       <button
-        className="nodrag w-full flex items-center gap-1.5 px-2 py-1.5 text-xs"
+        className="nodrag w-full h-full flex items-center gap-1.5 px-2 py-1.5 text-xs"
         style={{
           background: 'var(--color-bg-surface)',
           color: 'var(--color-white)',
