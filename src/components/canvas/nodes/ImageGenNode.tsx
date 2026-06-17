@@ -230,7 +230,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         {data.promptConnected ? (
           <div
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
-            style={{ background: 'rgba(59,158,255,0.1)', border: '1px solid rgba(59,158,255,0.25)', color: 'var(--color-accent)' }}
+            style={{ background: '#1e3f6a', color: '#fff' }}
           >
             <span style={{ fontSize: 10 }}>T</span>
             Prompt connected
@@ -265,15 +265,14 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* ── Image-to-image / Text-to-image badge ─────────────── */}
       {hasEditVariant && (
-        <div className="mb-3">
+        <div className="mb-3" style={{ marginTop: -6 }}>
           <div
             className="inline-flex items-center gap-1.5"
             style={{
-              padding: '3px 10px',
-              borderRadius: 999,
-              background: isEditMode ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${isEditMode ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.1)'}`,
-              transition: 'background 0.15s, border-color 0.15s',
+              padding: '3px 10px 5px 10px',
+              borderRadius: 8,
+              background: isEditMode ? '#3A196A' : 'rgba(255,255,255,0.05)',
+              transition: 'background 0.15s',
             }}
           >
             <div
@@ -281,7 +280,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                background: isEditMode ? '#a855f7' : 'rgba(255,255,255,0.25)',
+                background: isEditMode ? '#B36AF7' : 'rgba(255,255,255,0.25)',
                 transition: 'background 0.15s',
                 flexShrink: 0,
               }}
@@ -290,7 +289,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
               style={{
                 fontSize: 10,
                 fontWeight: 500,
-                color: isEditMode ? '#a855f7' : 'var(--color-white-muted)',
+                color: isEditMode ? '#B36AF7' : 'var(--color-white-muted)',
                 transition: 'color 0.15s',
               }}
             >
@@ -332,17 +331,68 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* ── Images to generate slider ─────────────────────────── */}
       <div className="mb-3">
-        <label className="text-xs font-medium block mb-2" style={{ color: 'var(--color-white-muted)' }}>
+        <label className="text-xs font-medium block mb-3" style={{ color: 'var(--color-white-muted)' }}>
           Images to generate: {data.numImages}
         </label>
-        <input
-          type="range" min={1} max={4} value={data.numImages}
-          onChange={(e) => updateData({ numImages: Number(e.target.value) })}
-          className="w-full nodrag node-slider"
-          style={{
-            background: `linear-gradient(to right, #a855f7 ${sliderPct}%, rgba(255,255,255,0.12) ${sliderPct}%)`,
-          }}
-        />
+        {/* Custom slider: track + ticks + thumb, native input on top for interaction */}
+        <div className="relative nodrag" style={{ height: 24 }}>
+          {/* Track */}
+          <div
+            style={{
+              position: 'absolute',
+              left: 0, right: 0,
+              top: '50%',
+              height: 4,
+              transform: 'translateY(-50%)',
+              borderRadius: 2,
+              background: `linear-gradient(to right, #a855f7 ${sliderPct}%, rgba(255,255,255,0.12) ${sliderPct}%)`,
+            }}
+          >
+            {/* Tick marks at each step value */}
+            {[0, 1, 2, 3].map((i) => {
+              const tickPct = (i / 3) * 100;
+              const isThumb = i === data.numImages - 1;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: i < data.numImages ? '#a855f7' : 'rgba(255,255,255,0.18)',
+                    top: '50%',
+                    left: `${tickPct}%`,
+                    transform: 'translate(-50%, -50%)',
+                    opacity: isThumb ? 0 : 1,
+                  }}
+                />
+              );
+            })}
+          </div>
+          {/* Thumb */}
+          <div
+            style={{
+              position: 'absolute',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              background: '#a855f7',
+              top: '50%',
+              left: `${sliderPct}%`,
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+              boxShadow: '0 0 0 4px rgba(168,85,247,0.2)',
+            }}
+          />
+          {/* Invisible native input for interaction */}
+          <input
+            type="range" min={1} max={4} step={1} value={data.numImages}
+            onChange={(e) => updateData({ numImages: Number(e.target.value) })}
+            className="absolute inset-0 w-full opacity-0 cursor-pointer nodrag"
+            style={{ height: '100%', margin: 0 }}
+          />
+        </div>
       </div>
 
       {/* ── Reference image rows (multi-image models) ──────────── */}
@@ -362,11 +412,10 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
                     height: REF_ROW_HEIGHT,
                     paddingLeft: 12,
                     paddingRight: 12,
-                    borderRadius: 8,
+                    borderRadius: '4px 16px 16px 4px',
                     background: hasImage ? '#a855f7' : 'var(--color-bg-surface)',
-                    border: hasImage ? 'none' : '1px solid rgba(255,255,255,0.08)',
                     color: hasImage ? '#fff' : 'var(--color-white-muted)',
-                    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                    transition: 'background 0.15s, color 0.15s',
                   }}
                 >
                   <ImageIcon size={12} style={{ flexShrink: 0 }} />
