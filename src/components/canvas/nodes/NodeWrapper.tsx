@@ -48,7 +48,7 @@ export function NodeWrapper({
 
         {/* Card (no inner title bar) */}
         <div className={cn('overflow-hidden transition-all duration-150')} style={cardStyle}>
-          <div className="p-3">{children}</div>
+          <div style={{ padding: 18 }}>{children}</div>
         </div>
 
         {/* Footer sits below the card */}
@@ -80,7 +80,7 @@ export function NodeWrapper({
       </div>
 
       {/* Content */}
-      <div className="p-3">{children}</div>
+      <div style={{ padding: 18 }}>{children}</div>
     </div>
   );
 }

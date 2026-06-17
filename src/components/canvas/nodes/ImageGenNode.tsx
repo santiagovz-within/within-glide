@@ -455,7 +455,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {/* ── Generated previews ───────────────────────────────── */}
       {displayImages.length > 0 && (
         <div
-          className="-mx-3"
+          className="-mx-[18px]"
           style={{
             display: 'grid',
             gridTemplateColumns: `repeat(${Math.min(displayImages.length, 2)}, 1fr)`,

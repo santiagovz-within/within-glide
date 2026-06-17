@@ -78,9 +78,9 @@ export function ModelSelect({ options, value, onChange }: ModelSelectProps) {
           {selected?.name ?? ''}
         </span>
         <ChevronDown
-          size={10}
+          size={20}
           style={{
-            opacity: 0.4,
+            opacity: 0.6,
             flexShrink: 0,
             transform: open ? 'rotate(180deg)' : 'none',
             transition: 'transform 0.15s',
