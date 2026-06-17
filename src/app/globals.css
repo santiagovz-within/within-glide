@@ -111,6 +111,46 @@ body {
 }
 
 /* ============================================================
+   NODE SLIDER
+   ============================================================ */
+.node-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.node-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #a855f7;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.22);
+  margin-top: -5px;
+}
+.node-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #a855f7;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.22);
+}
+.node-slider::-moz-range-progress {
+  background: #a855f7;
+  height: 3px;
+  border-radius: 2px;
+}
+.node-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+}
+
+/* ============================================================
    REACT FLOW OVERRIDES
    ============================================================ */
 .react-flow__background {

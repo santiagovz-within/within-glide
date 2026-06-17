@@ -1,7 +1,7 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Aperture, Play, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Aperture, Play, Download, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
@@ -39,8 +39,6 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [rowsStartTop, setRowsStartTop] = useState(220);
 
-  // Local prompt state prevents cursor-jump caused by Zustand→React re-renders
-  // resetting a controlled textarea's cursor position.
   const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
   const isFocused = useRef(false);
   useEffect(() => {
@@ -54,7 +52,6 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
   const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
 
-  // Multi-image: Google models OR fal models whose edit endpoint accepts image_urls[]
   const isMultiImageModel =
     modelConfig?.provider === 'google' ||
     (!!falConfig && 'editImageParam' in falConfig &&
@@ -67,14 +64,12 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const hasImageInput = (data.inputImageUrls ?? []).some(Boolean);
   const isEditMode = hasEditVariant && hasImageInput;
 
-  // Measure the prompt section center for the text handle
   useLayoutEffect(() => {
     if (!promptSectionRef.current) return;
     const el = promptSectionRef.current;
     setPromptHandleTop(el.offsetTop + el.offsetHeight / 2);
   });
 
-  // Measure the rows list (not the label) top for reference-image handle positions
   useLayoutEffect(() => {
     if (!isMultiImageModel || !rowsListRef.current) return;
     setRowsStartTop(rowsListRef.current.offsetTop);
@@ -89,8 +84,6 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   function navigateHistory(idx: number) {
     setHistIdx(idx);
     const images = genHistory[idx] ?? [];
-    // Update store directly so downstream nodes that read from Zustand (OutputNode, SelectNode,
-    // GalleryOutputNode) re-render before the propagation event fires.
     useFlowStore.getState().updateNodeData(id, { generatedImages: images });
     if (images[0]) {
       document.dispatchEvent(new CustomEvent('node:image-propagate', {
@@ -159,8 +152,33 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     }
   }
 
-  // What we display depends on which history entry is viewed
   const displayImages = genHistory.length > 0 ? (genHistory[histIdx] ?? []) : (data.generatedImages ?? []);
+
+  const sliderPct = ((data.numImages - 1) / 3) * 100;
+
+  const footer = (
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={handleGenerate}
+        disabled={isGenerating}
+        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+      >
+        <Play size={12} />
+        {isGenerating ? 'Generating…' : 'Generate'}
+      </button>
+      {displayImages.length > 0 && (
+        <button
+          onClick={() => downloadFromUrl(displayImages[0])}
+          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <NodeWrapper
@@ -170,16 +188,30 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       selected={selected}
       minWidth={300}
       accentColor={PORT_COLORS.image}
+      titlePosition="outside"
+      footer={footer}
     >
-      {/* ── Prompt handle aligned to center of prompt section ── */}
-      <TypedHandle type="target" position={Position.Left} id="prompt" portType="text" offset={`${promptHandleTop}px`} />
+      {/* ── Handles ─────────────────────────────────────────── */}
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="prompt"
+        portType="text"
+        offset={`${promptHandleTop}px`}
+        connected={!!data.promptConnected}
+      />
 
-      {/* ── Single reference-image handle (single-image models) ── */}
       {!isMultiImageModel && (
-        <TypedHandle type="target" position={Position.Left} id="reference_image" portType="image" offset="55%" />
+        <TypedHandle
+          type="target"
+          position={Position.Left}
+          id="reference_image"
+          portType="image"
+          offset="55%"
+          connected={!!(data.inputImageUrls?.[0])}
+        />
       )}
 
-      {/* ── Dynamic multi-image handles aligned to row centers ─── */}
       {isMultiImageModel && Array.from({ length: portCount }, (_, i) => (
         <TypedHandle
           key={`ref_${i}`}
@@ -189,6 +221,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           portType="image"
           offset={`${rowsStartTop + REF_ROW_HEIGHT / 2 + i * (REF_ROW_HEIGHT + ROW_GAP)}px`}
           badge={i + 1}
+          connected={!!(data.inputImageUrls?.[i])}
         />
       ))}
 
@@ -230,16 +263,40 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         <ModelSelect options={IMAGE_MODELS} value={data.model} onChange={handleModelChange} />
       </div>
 
-      {/* ── Variant indicator (Fal models with edit endpoint) ─── */}
+      {/* ── Image-to-image / Text-to-image badge ─────────────── */}
       {hasEditVariant && (
-        <div className="flex items-center gap-1.5 mb-3 -mt-2">
+        <div className="mb-3">
           <div
-            className="w-1.5 h-1.5 rounded-full transition-colors"
-            style={{ background: isEditMode ? 'var(--color-accent)' : 'rgba(255,255,255,0.2)' }}
-          />
-          <span className="text-xs transition-colors" style={{ color: isEditMode ? 'var(--color-accent)' : 'var(--color-white-muted)' }}>
-            {isEditMode ? 'Image-to-Image' : 'Text-to-Image'}
-          </span>
+            className="inline-flex items-center gap-1.5"
+            style={{
+              padding: '3px 10px',
+              borderRadius: 999,
+              background: isEditMode ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${isEditMode ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.1)'}`,
+              transition: 'background 0.15s, border-color 0.15s',
+            }}
+          >
+            <div
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: isEditMode ? '#a855f7' : 'rgba(255,255,255,0.25)',
+                transition: 'background 0.15s',
+                flexShrink: 0,
+              }}
+            />
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 500,
+                color: isEditMode ? '#a855f7' : 'var(--color-white-muted)',
+                transition: 'color 0.15s',
+              }}
+            >
+              {isEditMode ? 'Image-to-image' : 'Text-to-image'}
+            </span>
+          </div>
         </div>
       )}
 
@@ -273,50 +330,50 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </div>
       </div>
 
-      {/* ── Num images ───────────────────────────────────────── */}
+      {/* ── Images to generate slider ─────────────────────────── */}
       <div className="mb-3">
-        <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
-          Images: {data.numImages}
+        <label className="text-xs font-medium block mb-2" style={{ color: 'var(--color-white-muted)' }}>
+          Images to generate: {data.numImages}
         </label>
         <input
           type="range" min={1} max={4} value={data.numImages}
           onChange={(e) => updateData({ numImages: Number(e.target.value) })}
-          className="w-full nodrag"
-          style={{ accentColor: 'var(--color-accent)' }}
+          className="w-full nodrag node-slider"
+          style={{
+            background: `linear-gradient(to right, #a855f7 ${sliderPct}%, rgba(255,255,255,0.12) ${sliderPct}%)`,
+          }}
         />
       </div>
 
-      {/* ── Reference image rows (multi-image models) ──── */}
+      {/* ── Reference image rows (multi-image models) ──────────── */}
       {isMultiImageModel && (
         <div className="mb-3">
-          <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>
-            Reference Images{connectedCount > 0 ? ` (${connectedCount}/${modelConfig?.maxReferenceImages ?? DEFAULT_MAX_REF_IMAGES})` : ''}
+          <label className="text-xs font-medium block mb-2" style={{ color: 'var(--color-white-muted)' }}>
+            Reference Images{connectedCount > 0 ? ` (${connectedCount} / ${modelConfig?.maxReferenceImages ?? DEFAULT_MAX_REF_IMAGES})` : ''}
           </label>
-          <div ref={rowsListRef}>
-          {Array.from({ length: portCount }, (_, i) => {
-            const hasImage = !!(data.inputImageUrls?.[i]);
-            return (
-              <div
-                key={i}
-                className="flex items-center text-xs"
-                style={{
-                  height: REF_ROW_HEIGHT,
-                  marginLeft: -12,
-                  paddingLeft: 14,
-                  paddingRight: 8,
-                  borderRadius: '0 6px 6px 0',
-                  background: hasImage ? '#3a1a6a' : 'var(--color-bg-surface)',
-                  border: hasImage ? 'none' : '1px solid rgba(255,255,255,0.08)',
-                  borderLeft: 'none',
-                  color: hasImage ? '#a855f7' : 'var(--color-white-muted)',
-                  marginBottom: i < portCount - 1 ? ROW_GAP : 0,
-                  transition: 'background 0.15s, color 0.15s',
-                }}
-              >
-                Image {i + 1}
-              </div>
-            );
-          })}
+          <div ref={rowsListRef} className="flex flex-col" style={{ gap: ROW_GAP }}>
+            {Array.from({ length: portCount }, (_, i) => {
+              const hasImage = !!(data.inputImageUrls?.[i]);
+              return (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 text-xs font-medium"
+                  style={{
+                    height: REF_ROW_HEIGHT,
+                    paddingLeft: 12,
+                    paddingRight: 12,
+                    borderRadius: 8,
+                    background: hasImage ? '#a855f7' : 'var(--color-bg-surface)',
+                    border: hasImage ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                    color: hasImage ? '#fff' : 'var(--color-white-muted)',
+                    transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+                  }}
+                >
+                  <ImageIcon size={12} style={{ flexShrink: 0 }} />
+                  Image {i + 1}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -349,7 +406,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {/* ── Generated previews ───────────────────────────────── */}
       {displayImages.length > 0 && (
         <div
-          className="-mx-3 mb-3"
+          className="-mx-3"
           style={{
             display: 'grid',
             gridTemplateColumns: `repeat(${Math.min(displayImages.length, 2)}, 1fr)`,
@@ -366,28 +423,6 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             />
           ))}
         </div>
-      )}
-
-      {/* ── Generate button ───────────────────────────────────── */}
-      <button
-        onClick={handleGenerate}
-        disabled={isGenerating}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-      >
-        <Play size={12} />
-        {isGenerating ? 'Generating…' : 'Generate'}
-      </button>
-
-      {displayImages.length > 0 && (
-        <button
-          onClick={() => downloadFromUrl(displayImages[0])}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download
-        </button>
       )}
 
       <TypedHandle type="source" position={Position.Right} id="image" portType="image" />

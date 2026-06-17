@@ -74,14 +74,17 @@ interface TypedHandleProps extends Omit<HandleProps, 'style'> {
   offset?: string;
   // small numeric badge shown above the handle circle (for numbered multi-image slots)
   badge?: number;
+  // when true the handle renders in its "lit" state (full colour + white icon) even without hover
+  connected?: boolean;
 }
 
-export function TypedHandle({ portType, offset, position, badge, ...rest }: TypedHandleProps) {
+export function TypedHandle({ portType, offset, position, badge, connected, ...rest }: TypedHandleProps) {
   const [hovered, setHovered] = useState(false);
   const color = PORT_COLORS[portType];
   const tint  = PORT_TINTS[portType];
   const isLeft = position === Position.Left;
   const isRight = position === Position.Right;
+  const isActive = hovered || connected;
 
   const offsetStyle: React.CSSProperties = {
     ...(offset ? (isLeft || isRight ? { top: offset } : { left: offset }) : {}),
@@ -100,12 +103,12 @@ export function TypedHandle({ portType, offset, position, badge, ...rest }: Type
         width: 36,
         height: 36,
         borderRadius: '50%',
-        background: hovered ? color : tint,
+        background: isActive ? color : tint,
         border: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: hovered ? '#fff' : color,
+        color: isActive ? '#fff' : color,
         pointerEvents: 'all',
         transition: 'background 0.15s, color 0.15s',
         ...offsetStyle,
