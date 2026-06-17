@@ -101,6 +101,31 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
     }, 5000);
   }
 
+  const footer = (
+    <>
+      <button
+        onClick={handleUpscale}
+        disabled={isProcessing || !inputVideoUrl}
+        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+      >
+        <Play size={12} />
+        {isProcessing ? 'Upscaling…' : 'Upscale Video'}
+      </button>
+
+      {data.videoUrl && data.status === 'completed' && (
+        <button
+          onClick={() => downloadFromUrl(data.videoUrl!)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      )}
+    </>
+  );
+
   return (
     <NodeWrapper
       title="Video Upscale"
@@ -109,8 +134,16 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.video}
+      titlePosition="outside"
+      footer={footer}
     >
-      <TypedHandle type="target" position={Position.Left} id="video_in" portType="video" />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="video_in"
+        portType="video"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'video_in')}
+      />
 
       <div className="mb-3">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Scale Factor</label>
@@ -133,7 +166,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
       </div>
 
       {inputVideoUrl && (
-        <div className="-mx-3 mb-3 overflow-hidden">
+        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
           <video
             src={inputVideoUrl}
             controls
@@ -145,7 +178,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
       )}
 
       {data.videoUrl && data.status === 'completed' && (
-        <div className="-mx-3 mb-3 overflow-hidden">
+        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
           <video
             src={data.videoUrl}
             controls
@@ -156,28 +189,13 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
         </div>
       )}
 
-      <button
-        onClick={handleUpscale}
-        disabled={isProcessing || !inputVideoUrl}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-      >
-        <Play size={12} />
-        {isProcessing ? 'Upscaling…' : 'Upscale Video'}
-      </button>
-
-      {data.videoUrl && data.status === 'completed' && (
-        <button
-          onClick={() => downloadFromUrl(data.videoUrl!)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download
-        </button>
-      )}
-
-      <TypedHandle type="source" position={Position.Right} id="video" portType="video" />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="video"
+        portType="video"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'video')}
+      />
     </NodeWrapper>
   );
 }

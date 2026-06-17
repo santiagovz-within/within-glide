@@ -9,6 +9,7 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoGenNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
 import { VIDEO_MODELS } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
+import { NodeSelect } from './NodeSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
 const FRAME_ROW_HEIGHT = 36;
@@ -16,6 +17,9 @@ const FRAME_ROW_GAP = 25;
 
 const KLING_ASPECT_RATIOS  = ['16:9', '9:16', '1:1'];
 const SEEDANCE_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
+
+const DURATION_OPTIONS = ['3s', '5s', '8s', '10s'];
+const DURATION_MAP: Record<string, number> = { '3s': 3, '5s': 5, '8s': 8, '10s': 10 };
 
 function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
@@ -211,6 +215,38 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     return '16/9';
   })();
 
+  const currentAspectOptions = [
+    ...(isKling && hasImage && data.imageAspectRatio && !aspectRatios.includes(data.imageAspectRatio)
+      ? [data.imageAspectRatio]
+      : []),
+    ...aspectRatios,
+  ];
+
+  const footer = (
+    <>
+      <button
+        onClick={handleGenerate}
+        disabled={isGenerating}
+        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+      >
+        <Play size={12} />
+        {isGenerating ? 'Generating…' : 'Generate'}
+      </button>
+
+      {displayVideoUrl && (
+        <button
+          onClick={() => downloadFromUrl(displayVideoUrl)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      )}
+    </>
+  );
+
   return (
     <NodeWrapper
       title="Video Generation"
@@ -219,17 +255,39 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       selected={selected}
       minWidth={300}
       accentColor={PORT_COLORS.video}
+      titlePosition="outside"
+      footer={footer}
     >
-      <TypedHandle type="target" position={Position.Left} id="prompt"      portType="text"  offset={`${promptHandleTop}px`}      />
-      <TypedHandle type="target" position={Position.Left} id="start_frame" portType="image" offset={`${startFrameHandleTop}px`} />
-      <TypedHandle type="target" position={Position.Left} id="end_frame"   portType="image" offset={`${endFrameHandleTop}px`}   />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="prompt"
+        portType="text"
+        offset={`${promptHandleTop}px`}
+        connected={!!data.promptConnected}
+      />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="start_frame"
+        portType="image"
+        offset={`${startFrameHandleTop}px`}
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'start_frame')}
+      />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="end_frame"
+        portType="image"
+        offset={`${endFrameHandleTop}px`}
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'end_frame')}
+      />
 
       {/* Prompt */}
       <div ref={promptSectionRef} className="mb-3">
         {data.promptConnected ? (
           <div
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
-            style={{ background: 'rgba(59,158,255,0.1)', border: '1px solid rgba(59,158,255,0.25)', color: 'var(--color-accent)' }}
+            style={{ height: 36, background: '#3999F8', color: '#fff', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 12 }}
           >
             <span style={{ fontSize: 10 }}>T</span>
             Prompt connected
@@ -305,35 +363,19 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
-          <select
-            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+          <NodeSelect
+            options={currentAspectOptions}
             value={data.aspectRatio}
-            onChange={(e) => updateData({ aspectRatio: e.target.value })}
-            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-          >
-            {isKling && hasImage && data.imageAspectRatio && (
-              <option value={data.imageAspectRatio}>Custom ({data.imageAspectRatio})</option>
-            )}
-            {aspectRatios
-              .filter((r) => !(isKling && hasImage && r === data.imageAspectRatio))
-              .map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-          </select>
+            onChange={(v) => updateData({ aspectRatio: v })}
+          />
         </div>
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Duration</label>
-          <select
-            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
-            value={data.duration ?? 5}
-            onChange={(e) => updateData({ duration: Number(e.target.value) })}
-            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-          >
-            <option value={3}>3s</option>
-            <option value={5}>5s</option>
-            <option value={8}>8s</option>
-            <option value={10}>10s</option>
-          </select>
+          <NodeSelect
+            options={DURATION_OPTIONS}
+            value={`${data.duration ?? 5}s`}
+            onChange={(v) => updateData({ duration: DURATION_MAP[v] ?? 5 })}
+          />
         </div>
       </div>
 
@@ -345,14 +387,12 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           className="flex items-center text-xs"
           style={{
             height: FRAME_ROW_HEIGHT,
-            marginLeft: -12,
-            paddingLeft: 14,
+            marginLeft: -18,
+            paddingLeft: 20,
             paddingRight: 8,
-            borderRadius: '0 6px 6px 0',
-            background: data.startFrameUrl ? '#3a1a6a' : 'var(--color-bg-surface)',
-            border: data.startFrameUrl ? 'none' : '1px solid rgba(255,255,255,0.08)',
-            borderLeft: 'none',
-            color: data.startFrameUrl ? '#a855f7' : 'var(--color-white-muted)',
+            borderRadius: '4px 16px 16px 4px',
+            background: data.startFrameUrl ? '#a855f7' : 'var(--color-bg-surface)',
+            color: data.startFrameUrl ? '#fff' : 'var(--color-white-muted)',
             marginBottom: FRAME_ROW_GAP,
             transition: 'background 0.15s, color 0.15s',
           }}
@@ -364,14 +404,12 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           className="flex items-center text-xs"
           style={{
             height: FRAME_ROW_HEIGHT,
-            marginLeft: -12,
-            paddingLeft: 14,
+            marginLeft: -18,
+            paddingLeft: 20,
             paddingRight: 8,
-            borderRadius: '0 6px 6px 0',
-            background: data.endFrameUrl ? '#3a1a6a' : 'var(--color-bg-surface)',
-            border: data.endFrameUrl ? 'none' : '1px solid rgba(255,255,255,0.08)',
-            borderLeft: 'none',
-            color: data.endFrameUrl ? '#a855f7' : 'var(--color-white-muted)',
+            borderRadius: '4px 16px 16px 4px',
+            background: data.endFrameUrl ? '#a855f7' : 'var(--color-bg-surface)',
+            color: data.endFrameUrl ? '#fff' : 'var(--color-white-muted)',
             transition: 'background 0.15s, color 0.15s',
           }}
         >
@@ -381,7 +419,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
       {/* Video history navigation */}
       {videoHistory.length > 1 && (
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between my-1.5">
           <button
             onClick={() => navigateHistory(Math.max(0, histIdx - 1))}
             disabled={histIdx === 0}
@@ -405,36 +443,23 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       )}
 
       {displayVideoUrl && (
-        <video
-          src={displayVideoUrl}
-          controls
-          className="w-full block rounded-lg mb-3 nodrag"
-          style={{ aspectRatio: videoAspect }}
-        />
+        <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+          <video
+            src={displayVideoUrl}
+            controls
+            className="w-full block nodrag"
+            style={{ aspectRatio: videoAspect }}
+          />
+        </div>
       )}
 
-      <button
-        onClick={handleGenerate}
-        disabled={isGenerating}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-      >
-        <Play size={12} />
-        {isGenerating ? 'Generating…' : 'Generate'}
-      </button>
-
-      {displayVideoUrl && (
-        <button
-          onClick={() => downloadFromUrl(displayVideoUrl)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download
-        </button>
-      )}
-
-      <TypedHandle type="source" position={Position.Right} id="video" portType="video" />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="video"
+        portType="video"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'video')}
+      />
     </NodeWrapper>
   );
 }

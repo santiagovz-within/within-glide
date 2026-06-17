@@ -14,6 +14,7 @@ import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
 import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
+import { useFlowStore } from '@/lib/stores/flowStore';
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
 
 const MAX_VIDEO_BYTES     = 150 * 1024 * 1024; // 150 MB — hard reject
@@ -170,6 +171,8 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
   const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [showGallery, setShowGallery] = useState(false);
+
+  const storeEdges = useFlowStore(state => state.edges);
 
   // Keep a ref so async callbacks always see the latest mediaType without needing
   // it as a useCallback dependency (avoids re-creating closures on every render).
@@ -426,10 +429,11 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
       selected={selected}
       minWidth={280}
       accentColor={accentColor}
+      titlePosition="outside"
     >
       {/* Processing */}
       {isProcessing && (
-        <div className="relative -m-3 overflow-hidden rounded-b-xl" style={{ minHeight: 90 }}>
+        <div className="relative overflow-hidden" style={{ margin: '-18px', minHeight: 90 }}>
           {previewUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -459,8 +463,14 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
       {/* Error */}
       {!isProcessing && activeError && (
         <div
-          className="-m-3 p-4 rounded-b-xl flex flex-col items-center gap-3"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderTop: 'none' }}
+          className="flex flex-col items-center gap-3"
+          style={{
+            margin: '-18px',
+            padding: 16,
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.2)',
+            borderTop: 'none',
+          }}
         >
           <AlertTriangle size={20} style={{ color: '#f87171', flexShrink: 0 }} />
           <p className="text-xs text-center leading-relaxed" style={{ color: '#fca5a5' }}>
@@ -480,8 +490,9 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
       {/* Image preview */}
       {!isProcessing && !activeError && hasImage && (
         <div
-          className="relative -m-3 overflow-hidden"
+          className="relative overflow-hidden"
           style={{
+            margin: '-18px',
             backgroundImage: 'conic-gradient(#3a3a3a 90deg, #2a2a2a 90deg 180deg, #3a3a3a 180deg 270deg, #2a2a2a 270deg)',
             backgroundSize: '14px 14px',
           }}
@@ -505,7 +516,7 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
 
       {/* Video preview */}
       {!isProcessing && !activeError && hasVideo && (
-        <div className="relative -mx-3 -mt-3">
+        <div className="relative" style={{ margin: '-18px' }}>
           <video
             src={data.videoUrl!}
             controls
@@ -561,7 +572,13 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
         </>
       )}
 
-      <TypedHandle type="source" position={Position.Right} id={handleId} portType={handlePortType} />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id={handleId}
+        portType={handlePortType}
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === handleId)}
+      />
 
       {showGallery && (
         <GalleryPicker onSelect={handleGallerySelect} onClose={() => setShowGallery(false)} />

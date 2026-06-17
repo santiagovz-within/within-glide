@@ -20,6 +20,7 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoToGifNodeData } from '@/types';
 import { downloadFromUrl } from '@/lib/utils/download';
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 // ── Module-level FFmpeg singleton (lazy, shared across all instances) ─────────
 
@@ -118,6 +119,8 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
   const startTime  = data.startTime   ?? 0;
   const duration   = data.duration    ?? 10;
   const dither     = data.ditherLevel ?? 4;
+
+  const storeEdges = useFlowStore(state => state.edges);
 
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [isConverting,  setIsConverting]  = useState(false);
@@ -350,6 +353,116 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
   const dMax = videoDuration ?? 120;
   const sMax = Math.max(0, dMax - 0.5);
 
+  // ── Footer ────────────────────────────────────────────────────────────────
+
+  const footer = (
+    <>
+      {/* Convert button */}
+      <button
+        onClick={handleConvert}
+        disabled={!data.videoUrl || isConverting}
+        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+      >
+        <Play size={12} />
+        {isConverting ? progressLabel || 'Converting…' : 'Convert to GIF'}
+      </button>
+
+      {/* Download button */}
+      {gifUrl && !isConverting && (
+        <button
+          onClick={() => downloadFromUrl(gifUrl, `animation-${Date.now()}.gif`)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download GIF
+        </button>
+      )}
+
+      {/* Send to Figma button with status */}
+      {gifUrl && !isConverting && (
+        <>
+          <button
+            onClick={handleSendToFigma}
+            disabled={figmaStatus === 'sending'}
+            className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
+            style={{
+              borderRadius: 11,
+              background: figmaStatus === 'sent'
+                ? 'rgba(34,197,94,0.15)'
+                : 'rgba(255,255,255,0.06)',
+              color: figmaStatus === 'sent'
+                ? 'var(--color-success)'
+                : figmaStatus === 'error' || figmaStatus === 'no_token'
+                ? '#f87171'
+                : 'var(--color-white-muted)',
+              border: figmaStatus === 'sent'
+                ? '1px solid rgba(34,197,94,0.3)'
+                : figmaStatus === 'error' || figmaStatus === 'no_token'
+                ? '1px solid rgba(239,68,68,0.3)'
+                : '1px solid transparent',
+              cursor: 'pointer',
+            }}
+          >
+            {figmaStatus === 'sending' ? (
+              <>
+                <div
+                  className="animate-spin"
+                  style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--color-white-muted)', flexShrink: 0 }}
+                />
+                Sending…
+              </>
+            ) : figmaStatus === 'sent' ? (
+              <>
+                <Check size={12} style={{ color: 'var(--color-success)' }} />
+                Sent to Figma
+              </>
+            ) : (
+              <>
+                <FigmaIcon size={12} />
+                Send to Figma
+              </>
+            )}
+          </button>
+
+          {/* Inline contextual help / error text */}
+          {figmaStatus === 'no_token' && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: '#f87171' }}>
+              Go to{' '}
+              <button
+                className="underline"
+                style={{ color: '#f87171', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10 }}
+                onClick={() => window.open('/dashboard/settings', '_blank')}
+              >
+                Settings → Figma Integration
+              </button>{' '}
+              to generate your link token.
+            </p>
+          )}
+
+          {figmaStatus === 'error' && figmaError && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: '#f87171' }}>
+              {figmaError}
+            </p>
+          )}
+
+          {figmaStatus === 'sent' && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: 'var(--color-white-muted)' }}>
+              Make sure the Figma plugin is open in your target file — the GIF drops into whatever file is open.
+            </p>
+          )}
+
+          {figmaStatus === 'idle' && (
+            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: 'var(--color-white-muted)', opacity: 0.6 }}>
+              Make sure the Figma plugin is open in your target file.
+            </p>
+          )}
+        </>
+      )}
+    </>
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -359,9 +472,24 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       selected={selected}
       minWidth={300}
       accentColor={PORT_COLORS.image}
+      titlePosition="outside"
+      footer={footer}
     >
-      <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="50%" />
-      <TypedHandle type="source" position={Position.Right} id="gif"  portType="image" />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="video"
+        portType="video"
+        offset="50%"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'video')}
+      />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="gif"
+        portType="image"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'gif')}
+      />
 
       {/* ── No video connected ─────────────────────────────────────────── */}
       {!data.videoUrl && (
@@ -440,7 +568,7 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       {/* ── GIF preview ────────────────────────────────────────────────── */}
       {gifUrl && !isConverting && (
         <>
-          <div className="-mx-3 mb-2 overflow-hidden">
+          <div style={{ margin: '0 -18px 8px -18px', overflow: 'hidden' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={gifUrl}
@@ -453,110 +581,6 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
           {gifSize !== null && (
             <p className="text-center text-xs mb-2" style={{ color: 'var(--color-white-muted)', fontSize: 10 }}>
               {formatBytes(gifSize)}
-            </p>
-          )}
-        </>
-      )}
-
-      {/* ── Convert button ─────────────────────────────────────────────── */}
-      <button
-        onClick={handleConvert}
-        disabled={!data.videoUrl || isConverting}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-      >
-        <Play size={12} />
-        {isConverting ? progressLabel || 'Converting…' : 'Convert to GIF'}
-      </button>
-
-      {/* ── Download ───────────────────────────────────────────────────── */}
-      {gifUrl && !isConverting && (
-        <button
-          onClick={() => downloadFromUrl(gifUrl, `animation-${Date.now()}.gif`)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download GIF
-        </button>
-      )}
-
-      {/* ── Send to Figma ───────────────────────────────────────────────── */}
-      {gifUrl && !isConverting && (
-        <>
-          <button
-            onClick={handleSendToFigma}
-            disabled={figmaStatus === 'sending'}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
-            style={{
-              borderRadius: 11,
-              background: figmaStatus === 'sent'
-                ? 'rgba(34,197,94,0.15)'
-                : 'rgba(255,255,255,0.06)',
-              color: figmaStatus === 'sent'
-                ? 'var(--color-success)'
-                : figmaStatus === 'error' || figmaStatus === 'no_token'
-                ? '#f87171'
-                : 'var(--color-white-muted)',
-              border: figmaStatus === 'sent'
-                ? '1px solid rgba(34,197,94,0.3)'
-                : figmaStatus === 'error' || figmaStatus === 'no_token'
-                ? '1px solid rgba(239,68,68,0.3)'
-                : '1px solid transparent',
-              cursor: 'pointer',
-            }}
-          >
-            {figmaStatus === 'sending' ? (
-              <>
-                <div
-                  className="animate-spin"
-                  style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--color-white-muted)', flexShrink: 0 }}
-                />
-                Sending…
-              </>
-            ) : figmaStatus === 'sent' ? (
-              <>
-                <Check size={12} style={{ color: 'var(--color-success)' }} />
-                Sent to Figma
-              </>
-            ) : (
-              <>
-                <FigmaIcon size={12} />
-                Send to Figma
-              </>
-            )}
-          </button>
-
-          {/* Inline contextual help / error text */}
-          {figmaStatus === 'no_token' && (
-            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: '#f87171' }}>
-              Go to{' '}
-              <button
-                className="underline"
-                style={{ color: '#f87171', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 10 }}
-                onClick={() => window.open('/dashboard/settings', '_blank')}
-              >
-                Settings → Figma Integration
-              </button>{' '}
-              to generate your link token.
-            </p>
-          )}
-
-          {figmaStatus === 'error' && figmaError && (
-            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: '#f87171' }}>
-              {figmaError}
-            </p>
-          )}
-
-          {figmaStatus === 'sent' && (
-            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: 'var(--color-white-muted)' }}>
-              Make sure the Figma plugin is open in your target file — the GIF drops into whatever file is open.
-            </p>
-          )}
-
-          {figmaStatus === 'idle' && (
-            <p className="text-center mt-1 nodrag" style={{ fontSize: 10, color: 'var(--color-white-muted)', opacity: 0.6 }}>
-              Make sure the Figma plugin is open in your target file.
             </p>
           )}
         </>

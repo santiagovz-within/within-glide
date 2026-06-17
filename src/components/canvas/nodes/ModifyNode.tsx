@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { ModelSelect } from './ModelSelect';
+import { NodeSelect } from './NodeSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { ASPECT_RATIOS, RESOLUTIONS } from '@/lib/utils/constants';
 import type { ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData, MediaInputNodeData } from '@/types';
@@ -415,6 +416,10 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     if (nd.naturalWidth && nd.naturalHeight) sourceAspectRatio = nearestAspectRatio(nd.naturalWidth, nd.naturalHeight);
   }
 
+  // suppress unused variable warnings for derived values used only in effects
+  void sourceAspectRatio;
+  void sourceResolution;
+
   const safeIndex    = Math.min(selectedIndex, Math.max(availableImages.length - 1, 0));
   const selectedImage = availableImages[safeIndex];
   const hasImage      = !!selectedImage;
@@ -576,6 +581,35 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     ? `${resizePlan.outputW} × ${resizePlan.outputH}px${resizePlan.needsResize ? ' (scaled to fit)' : ''}`
     : null;
 
+  // ── Footer ────────────────────────────────────────────────────────────────────
+
+  const footer = (
+    <div className="flex flex-col gap-1.5">
+      <button
+        onClick={mode === 'prompt' ? handlePromptGenerate : handleExpandGenerate}
+        disabled={isGenerating || !hasImage || (mode === 'expand' && !hasExpansion)}
+        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+      >
+        <Play size={12} />
+        {mode === 'prompt'
+          ? (isGenerating ? 'Modifying…' : 'Modify')
+          : (isGenerating ? 'Expanding…' : 'Expand')
+        }
+      </button>
+      {data.outputImageUrl && (
+        <button
+          onClick={() => downloadFromUrl(data.outputImageUrl!)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <NodeWrapper
       title="Modify"
@@ -584,12 +618,28 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.image}
+      titlePosition="outside"
+      footer={footer}
     >
       {/* Handles */}
       {mode === 'prompt' && (
-        <TypedHandle type="target" position={Position.Left} id="prompt" portType="text"  offset={`${promptHandleTop}px`} />
+        <TypedHandle
+          type="target"
+          position={Position.Left}
+          id="prompt"
+          portType="text"
+          offset={`${promptHandleTop}px`}
+          connected={!!data.promptConnected}
+        />
       )}
-      <TypedHandle type="target" position={Position.Left} id="image"  portType="image" offset={`${imageHandleTop}px`}  />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="image"
+        portType="image"
+        offset={`${imageHandleTop}px`}
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'image')}
+      />
 
       {/* ── Mode toggle ── */}
       <div
@@ -620,11 +670,11 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           <div ref={promptSectionRef} className="mb-3">
             {data.promptConnected ? (
               <div
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
-                style={{ background: 'rgba(59,158,255,0.1)', border: '1px solid rgba(59,158,255,0.25)', color: 'var(--color-accent)' }}
+                className="flex items-center gap-2 px-3"
+                style={{ height: 36, background: '#3999F8', color: '#fff', borderRadius: 8 }}
               >
                 <span style={{ fontSize: 10 }}>T</span>
-                Prompt connected
+                <span className="text-xs font-medium">Prompt connected</span>
               </div>
             ) : (
               <textarea
@@ -645,12 +695,10 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             className="flex items-center text-xs"
             style={{
               height: IMAGE_ROW_HEIGHT,
-              marginLeft: -12, paddingLeft: 14, paddingRight: 8,
-              borderRadius: '0 6px 6px 0',
-              background: hasImage ? '#3a1a6a' : 'var(--color-bg-surface)',
-              border: hasImage ? 'none' : '1px solid rgba(255,255,255,0.08)',
-              borderLeft: 'none',
-              color: hasImage ? '#a855f7' : 'var(--color-white-muted)',
+              marginLeft: -18, paddingLeft: 20, paddingRight: 8,
+              borderRadius: '4px 16px 16px 4px',
+              background: hasImage ? '#a855f7' : 'var(--color-bg-surface)',
+              color: hasImage ? '#fff' : 'var(--color-white-muted)',
               transition: 'background 0.15s, color 0.15s',
               marginBottom: availableImages.length > 1 ? 8 : 12,
             }}
@@ -686,57 +734,28 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           <div className="flex gap-2 mb-3">
             <div className="flex-1">
               <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
-              <select
-                className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+              <NodeSelect
+                options={ASPECT_RATIOS.map(r => r.value)}
                 value={data.aspectRatio ?? '1:1'}
-                onChange={(e) => updateData({ aspectRatio: e.target.value })}
-                style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-              >
-                {ASPECT_RATIOS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.value}</option>
-                ))}
-              </select>
+                onChange={(v) => updateData({ aspectRatio: v })}
+              />
             </div>
             <div className="flex-1">
               <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Resolution</label>
-              <select
-                className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+              <NodeSelect
+                options={RESOLUTIONS.map(r => r.value)}
                 value={data.resolution ?? '1K'}
-                onChange={(e) => updateData({ resolution: e.target.value })}
-                style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-              >
-                {RESOLUTIONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
+                onChange={(v) => updateData({ resolution: v })}
+              />
             </div>
           </div>
 
           {/* Output preview */}
           {data.outputImageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.outputImageUrl} alt="Modified" className="w-full block rounded-lg mb-3 nodrag" style={{ height: 'auto' }} />
-          )}
-
-          <button
-            onClick={handlePromptGenerate}
-            disabled={isGenerating || !hasImage}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-          >
-            <Play size={12} />
-            {isGenerating ? 'Modifying…' : 'Modify'}
-          </button>
-
-          {data.outputImageUrl && (
-            <button
-              onClick={() => downloadFromUrl(data.outputImageUrl!)}
-              className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-            >
-              <Download size={12} />
-              Download
-            </button>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={data.outputImageUrl} alt="Modified" className="w-full block nodrag" style={{ height: 'auto' }} />
+            </div>
           )}
         </>
       )}
@@ -750,12 +769,10 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             className="flex items-center text-xs mb-3"
             style={{
               height: IMAGE_ROW_HEIGHT,
-              marginLeft: -12, paddingLeft: 14, paddingRight: 8,
-              borderRadius: '0 6px 6px 0',
-              background: hasImage ? '#3a1a6a' : 'var(--color-bg-surface)',
-              border: hasImage ? 'none' : '1px solid rgba(255,255,255,0.08)',
-              borderLeft: 'none',
-              color: hasImage ? '#a855f7' : 'var(--color-white-muted)',
+              marginLeft: -18, paddingLeft: 20, paddingRight: 8,
+              borderRadius: '4px 16px 16px 4px',
+              background: hasImage ? '#a855f7' : 'var(--color-bg-surface)',
+              color: hasImage ? '#fff' : 'var(--color-white-muted)',
               transition: 'background 0.15s, color 0.15s',
             }}
           >
@@ -838,34 +855,21 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
           {/* Output preview */}
           {data.outputImageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.outputImageUrl} alt="Expanded" className="w-full block rounded-lg mb-3 nodrag" style={{ height: 'auto' }} />
-          )}
-
-          <button
-            onClick={handleExpandGenerate}
-            disabled={isGenerating || !hasImage || !hasExpansion}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-          >
-            <Play size={12} />
-            {isGenerating ? 'Expanding…' : 'Expand'}
-          </button>
-
-          {data.outputImageUrl && (
-            <button
-              onClick={() => downloadFromUrl(data.outputImageUrl!)}
-              className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-            >
-              <Download size={12} />
-              Download
-            </button>
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 12 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={data.outputImageUrl} alt="Expanded" className="w-full block nodrag" style={{ height: 'auto' }} />
+            </div>
           )}
         </>
       )}
 
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'image')}
+      />
     </NodeWrapper>
   );
 }

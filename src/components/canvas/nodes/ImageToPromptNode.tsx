@@ -5,7 +5,9 @@ import { Wand2, RefreshCw, Copy, Check, AlertTriangle, ChevronLeft, ChevronRight
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import { NodeSelect } from './NodeSelect';
 import type { ImageToPromptNodeData } from '@/types';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 function autoResize(el: HTMLTextAreaElement) {
   el.style.height = 'auto';
@@ -25,6 +27,8 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isFocused = useRef(false);
+
+  const storeEdges = useFlowStore(state => state.edges);
 
   const [localPrompt, setLocalPrompt] = useState(data.generatedPrompt ?? '');
 
@@ -111,13 +115,47 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.text}
+      titlePosition="outside"
+      footer={
+        <div className="flex gap-1.5">
+          <NodeSelect
+            options={LENGTH_OPTIONS.map(o => o.label)}
+            value={LENGTH_OPTIONS.find(o => o.id === length)?.label ?? 'Auto'}
+            onChange={(label) => { const o = LENGTH_OPTIONS.find(o => o.label === label); if (o) setLength(o.id); }}
+          />
+          <button
+            onClick={handleAnalyze}
+            disabled={!hasImage || isProcessing}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+          >
+            {isProcessing ? (
+              <><RefreshCw size={11} className="animate-spin" /> Analyzing…</>
+            ) : (
+              <><Wand2 size={11} /> Analyze Image</>
+            )}
+          </button>
+        </div>
+      }
     >
-      <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
-      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'image')}
+      />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="prompt"
+        portType="text"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'prompt')}
+      />
 
       {/* Version history navigation */}
       {promptHistory.length > 1 && (
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between my-1.5">
           <button
             onClick={() => navigateHistory(Math.max(0, historyIdx - 1))}
             disabled={historyIdx === 0}
@@ -143,8 +181,11 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       {/* Image preview */}
       {hasImage ? (
         <div
-          className="-mx-3 mb-3 overflow-hidden"
-          style={{ height: 90, position: 'relative',
+          style={{
+            margin: '0 -18px 12px -18px',
+            overflow: 'hidden',
+            height: 90,
+            position: 'relative',
             backgroundImage: 'conic-gradient(#3a3a3a 90deg, #2a2a2a 90deg 180deg, #3a3a3a 180deg 270deg, #2a2a2a 270deg)',
             backgroundSize: '14px 14px',
           }}
@@ -164,31 +205,6 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
           Connect an image to analyze
         </div>
       )}
-
-      {/* Length selector + Analyze button */}
-      <div className="flex gap-1.5 mb-2">
-        <select
-          value={length}
-          onChange={(e) => setLength(e.target.value)}
-          disabled={isProcessing}
-          className="px-2 py-2 text-xs outline-none nodrag shrink-0"
-          style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-        >
-          {LENGTH_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-        </select>
-        <button
-          onClick={handleAnalyze}
-          disabled={!hasImage || isProcessing}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-          style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-        >
-          {isProcessing ? (
-            <><RefreshCw size={11} className="animate-spin" /> Analyzing…</>
-          ) : (
-            <><Wand2 size={11} /> Analyze Image</>
-          )}
-        </button>
-      </div>
 
       {/* Error state */}
       {data.status === 'error' && !hasPrompt && (

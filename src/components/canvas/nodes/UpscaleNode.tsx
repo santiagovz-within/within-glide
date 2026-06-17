@@ -173,6 +173,31 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
     }
   }
 
+  const footerButtons = (
+    <>
+      <button
+        onClick={handleUpscale}
+        disabled={isUpscaling || !inputImageUrl}
+        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+      >
+        <Play size={12} />
+        {isUpscaling ? 'Upscaling…' : 'Upscale'}
+      </button>
+
+      {data.outputImageUrl && (
+        <button
+          onClick={() => downloadFromUrl(data.outputImageUrl!)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      )}
+    </>
+  );
+
   return (
     <NodeWrapper
       title="Upscale"
@@ -181,8 +206,16 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.image}
+      titlePosition="outside"
+      footer={footerButtons}
     >
-      <TypedHandle type="target" position={Position.Left} id="image" portType="image" />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'image')}
+      />
 
       <div className="mb-2">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
@@ -210,38 +243,23 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       </div>
 
       {inputImageUrl && data.outputImageUrl ? (
-        <div className="-mx-3 mb-3 overflow-hidden">
+        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
           <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
         </div>
       ) : inputImageUrl ? (
-        <div className="-mx-3 mb-3 overflow-hidden">
+        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
         </div>
       ) : null}
 
-      <button
-        onClick={handleUpscale}
-        disabled={isUpscaling || !inputImageUrl}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-      >
-        <Play size={12} />
-        {isUpscaling ? 'Upscaling…' : 'Upscale'}
-      </button>
-
-      {data.outputImageUrl && (
-        <button
-          onClick={() => downloadFromUrl(data.outputImageUrl!)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download
-        </button>
-      )}
-
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'image')}
+      />
     </NodeWrapper>
   );
 }

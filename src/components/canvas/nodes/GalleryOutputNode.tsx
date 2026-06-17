@@ -80,6 +80,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
       selected={selected}
       minWidth={320}
       accentColor="#f59e0b"
+      titlePosition="outside"
     >
       {/* Wide hit-area target handle — accepts any connection type */}
       <Handle

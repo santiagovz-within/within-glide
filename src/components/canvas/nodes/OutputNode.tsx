@@ -36,13 +36,44 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
   const mediaType: 'image' | 'video' | undefined = videoUrl ? 'video' : imageUrl ? 'image' : data.mediaType;
 
   return (
-    <NodeWrapper title="Output" icon={<Monitor size={14} />} selected={selected} minWidth={280} accentColor="var(--color-white)">
-      <TypedHandle type="target" position={Position.Left} id="image" portType="image" offset="40%" />
-      <TypedHandle type="target" position={Position.Left} id="video" portType="video" offset="65%" />
+    <NodeWrapper
+      title="Output"
+      icon={<Monitor size={14} />}
+      selected={selected}
+      minWidth={280}
+      accentColor="var(--color-white)"
+      titlePosition="outside"
+      footer={mediaUrl ? (
+        <button
+          onClick={() => downloadFromUrl(mediaUrl)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      ) : undefined}
+    >
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="image"
+        portType="image"
+        offset="40%"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'image')}
+      />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="video"
+        portType="video"
+        offset="65%"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'video')}
+      />
 
       {mediaUrl ? (
         <>
-          <div className="-mx-3 -mt-3 overflow-hidden" style={{ borderRadius: 0 }}>
+          <div style={{ margin: '-18px', overflow: 'hidden' }}>
             {mediaType === 'video' ? (
               <video
                 src={mediaUrl}
@@ -61,14 +92,6 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
               />
             )}
           </div>
-          <button
-            onClick={() => downloadFromUrl(mediaUrl)}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-3 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-            style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-          >
-            <Download size={12} />
-            Download
-          </button>
           {previewOpen && mediaType === 'image' && (
             <MediaPreviewModal url={mediaUrl} type="image" onClose={() => setPreviewOpen(false)} />
           )}

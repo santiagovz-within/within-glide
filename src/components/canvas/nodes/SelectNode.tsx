@@ -74,9 +74,32 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
       selected={selected}
       minWidth={240}
       accentColor={PORT_COLORS.image}
+      titlePosition="outside"
+      footer={currentUrl ? (
+        <button
+          onClick={() => downloadFromUrl(currentUrl)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+      ) : undefined}
     >
-      <TypedHandle type="target" position={Position.Left} id="input" portType="image" />
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="input"
+        portType="image"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'input')}
+      />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'image')}
+      />
 
       {currentUrl ? (
         <>
@@ -107,8 +130,8 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
 
           {/* Selected media preview */}
           <div
-            className="-mx-3 overflow-hidden cursor-pointer nodrag"
-            style={{ borderRadius: 0 }}
+            className="overflow-hidden cursor-pointer nodrag"
+            style={{ margin: '0 -18px', overflow: 'hidden' }}
             onClick={() => setPreviewOpen(true)}
           >
             {mediaType === 'video' ? (
@@ -118,15 +141,6 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
               <img src={currentUrl} alt="Selected" className="w-full block" style={{ height: 'auto' }} />
             )}
           </div>
-
-          <button
-            onClick={() => downloadFromUrl(currentUrl)}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-3 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-            style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-          >
-            <Download size={12} />
-            Download
-          </button>
 
           {previewOpen && (
             <MediaPreviewModal url={currentUrl} type={mediaType} onClose={() => setPreviewOpen(false)} />

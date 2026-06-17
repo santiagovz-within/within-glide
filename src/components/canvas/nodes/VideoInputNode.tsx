@@ -7,6 +7,7 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoInputNodeData } from '@/types';
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 const COMPRESS_THRESHOLD_BYTES = 50 * 1024 * 1024; // 50 MB
 const ACCEPTED_VIDEO_TYPES = 'video/mp4,video/webm,video/quicktime,video/mpeg';
@@ -41,6 +42,8 @@ export function VideoInputNode({ data, selected, id }: NodeProps & { data: Video
   const [error, setError]       = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const storeEdges = useFlowStore(state => state.edges);
 
   function dispatchUpdate(updates: Partial<VideoInputNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
@@ -152,7 +155,7 @@ export function VideoInputNode({ data, selected, id }: NodeProps & { data: Video
   const isProcessing = stage !== null && stage !== 'error';
 
   return (
-    <NodeWrapper title="Video Input" icon={<Film size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.video}>
+    <NodeWrapper title="Video Input" icon={<Film size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.video} titlePosition="outside">
 
       {/* Processing */}
       {isProcessing && (
@@ -195,7 +198,7 @@ export function VideoInputNode({ data, selected, id }: NodeProps & { data: Video
 
       {/* Video preview */}
       {!isProcessing && !error && data.videoUrl && (
-        <div className="relative -mx-3 -mt-3">
+        <div className="relative" style={{ margin: '-18px' }}>
           <video
             src={data.videoUrl}
             controls
@@ -242,7 +245,7 @@ export function VideoInputNode({ data, selected, id }: NodeProps & { data: Video
         </>
       )}
 
-      <TypedHandle type="source" position={Position.Right} id="video" portType="video" />
+      <TypedHandle type="source" position={Position.Right} id="video" portType="video" connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'video')} />
     </NodeWrapper>
   );
 }

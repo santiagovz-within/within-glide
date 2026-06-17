@@ -75,14 +75,51 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.image}
+      titlePosition="outside"
+      footer={
+        <>
+          <button
+            onClick={handleRemove}
+            disabled={isProcessing || !inputImageUrl}
+            className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+          >
+            <Play size={12} />
+            {isProcessing ? 'Processing…' : 'Remove Background'}
+          </button>
+
+          {data.outputImageUrl && (
+            <button
+              onClick={() => downloadFromUrl(data.outputImageUrl!)}
+              className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
+              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+            >
+              <Download size={12} />
+              Download PNG
+            </button>
+          )}
+        </>
+      }
     >
-      <TypedHandle type="target" position={Position.Left}  id="image" portType="image" />
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'image')}
+      />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'image')}
+      />
 
       {/* ── Preview ─────────────────────────────────────────────────────── */}
       {data.outputImageUrl ? (
         // Output on checkerboard so transparency is visible
-        <div className="-mx-3 mb-3 overflow-hidden" style={CHECKERBOARD}>
+        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden', ...CHECKERBOARD }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={data.outputImageUrl}
@@ -92,7 +129,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
           />
         </div>
       ) : inputImageUrl ? (
-        <div className="-mx-3 mb-3 overflow-hidden">
+        <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={inputImageUrl}
@@ -112,29 +149,6 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
         >
           Connect an image source
         </div>
-      )}
-
-      {/* ── Action button ─────────────────────────────────────────────── */}
-      <button
-        onClick={handleRemove}
-        disabled={isProcessing || !inputImageUrl}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-      >
-        <Play size={12} />
-        {isProcessing ? 'Processing…' : 'Remove Background'}
-      </button>
-
-      {/* ── Download ──────────────────────────────────────────────────── */}
-      {data.outputImageUrl && (
-        <button
-          onClick={() => downloadFromUrl(data.outputImageUrl!)}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download PNG
-        </button>
       )}
     </NodeWrapper>
   );

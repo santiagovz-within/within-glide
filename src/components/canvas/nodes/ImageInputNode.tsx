@@ -14,6 +14,7 @@ import type { ProcessStage } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
 import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 // ── Stage types ──────────────────────────────────────────────────────────────
 
@@ -146,6 +147,8 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [showGallery, setShowGallery] = useState(false);
 
+  const storeEdges = useFlowStore(state => state.edges);
+
   function dispatchNodeUpdate(updates: Partial<ImageInputNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', { detail: { nodeId: id, data: updates } }));
   }
@@ -265,11 +268,11 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <NodeWrapper title="Image Input" icon={<Image size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.image}>
+    <NodeWrapper title="Image Input" icon={<Image size={14} />} selected={selected} minWidth={280} accentColor={PORT_COLORS.image} titlePosition="outside">
 
       {/* ── Processing state ───────────────────────────────────────────── */}
       {isProcessing && (
-        <div className="relative -m-3 overflow-hidden rounded-b-xl" style={{ minHeight: 90 }}>
+        <div className="relative overflow-hidden" style={{ margin: '-18px', minHeight: 90 }}>
           {/* Blurred preview background (only for local drops that have a preview) */}
           {previewUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -307,8 +310,8 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
       {/* ── Error state ────────────────────────────────────────────────── */}
       {!isProcessing && activeError && (
         <div
-          className="-m-3 p-4 rounded-b-xl flex flex-col items-center gap-3"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderTop: 'none' }}
+          className="flex flex-col items-center gap-3"
+          style={{ margin: '-18px', padding: 16, borderRadius: '0 0 17px 17px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderTop: 'none' }}
         >
           <AlertTriangle size={20} style={{ color: '#f87171', flexShrink: 0 }} />
           <p className="text-xs text-center leading-relaxed" style={{ color: '#fca5a5' }}>
@@ -328,8 +331,9 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
       {/* ── Image display ──────────────────────────────────────────────── */}
       {!isProcessing && !activeError && data.imageUrl && (
         <div
-          className="relative -m-3 overflow-hidden"
+          className="relative overflow-hidden"
           style={{
+            margin: '-18px',
             backgroundImage:
               'conic-gradient(#3a3a3a 90deg, #2a2a2a 90deg 180deg, #3a3a3a 180deg 270deg, #2a2a2a 270deg)',
             backgroundSize: '14px 14px',
@@ -388,7 +392,13 @@ export function ImageInputNode({ data, selected, id }: NodeProps & { data: Image
         </>
       )}
 
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="image"
+        portType="image"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'image')}
+      />
 
       {showGallery && (
         <GalleryPicker onSelect={handleGallerySelect} onClose={() => setShowGallery(false)} />

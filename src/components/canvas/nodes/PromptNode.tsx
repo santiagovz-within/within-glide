@@ -5,7 +5,9 @@ import { Type, Sunrise, Droplet, Plus, X, ChevronLeft, ChevronRight } from 'luci
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import { NodeSelect } from './NodeSelect';
 import type { PromptNodeData, PaletteColor } from '@/types';
+import { useFlowStore } from '@/lib/stores/flowStore';
 
 const GEMINI_MODELS = [
   { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash' },
@@ -120,6 +122,7 @@ function ColorTextOverlay({ text, palette }: { text: string; palette: PaletteCol
 }
 
 export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNodeData }) {
+  const storeEdges = useFlowStore(state => state.edges);
   const [enhancing, setEnhancing] = useState(false);
   const [geminiModel, setGeminiModel] = useState('gemini-3-flash-preview');
   const [length, setLength] = useState('auto');
@@ -253,19 +256,12 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
     dispatchUpdate({ palette: newPalette });
   }
 
-  const selectStyle: React.CSSProperties = {
-    background: 'var(--color-bg-surface)',
-    border: 'none',
-    color: 'var(--color-white)',
-    borderRadius: 11,
-  };
-
   return (
-    <NodeWrapper title="Prompt" icon={<Type size={14} />} selected={selected} accentColor={PORT_COLORS.text}>
+    <NodeWrapper title="Prompt" icon={<Type size={14} />} selected={selected} accentColor={PORT_COLORS.text} titlePosition="outside">
 
       {/* History navigation */}
       {promptHistory.length > 1 && (
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center justify-between my-1.5">
           <button
             onClick={() => navigateHistory(Math.max(0, historyIdx - 1))}
             disabled={historyIdx === 0}
@@ -329,12 +325,16 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
 
       {/* Model + length selectors */}
       <div className="grid grid-cols-2 gap-1.5 mb-2">
-        <select value={geminiModel} onChange={(e) => setGeminiModel(e.target.value)} className="w-full px-2 py-1.5 text-xs outline-none nodrag" style={selectStyle}>
-          {GEMINI_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
-        <select value={length} onChange={(e) => setLength(e.target.value)} className="w-full px-2 py-1.5 text-xs outline-none nodrag" style={selectStyle}>
-          {LENGTH_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-        </select>
+        <NodeSelect
+          options={GEMINI_MODELS.map(m => m.label)}
+          value={GEMINI_MODELS.find(m => m.id === geminiModel)?.label ?? GEMINI_MODELS[0].label}
+          onChange={(label) => { const m = GEMINI_MODELS.find(m => m.label === label); if (m) setGeminiModel(m.id); }}
+        />
+        <NodeSelect
+          options={LENGTH_OPTIONS.map(o => o.label)}
+          value={LENGTH_OPTIONS.find(o => o.id === length)?.label ?? 'Auto'}
+          onChange={(label) => { const o = LENGTH_OPTIONS.find(o => o.label === label); if (o) setLength(o.id); }}
+        />
       </div>
 
       {/* [Add Palette]  [Enhance →] */}
@@ -399,7 +399,13 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
         </div>
       )}
 
-      <TypedHandle type="source" position={Position.Right} id="prompt" portType="text" />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id="prompt"
+        portType="text"
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === 'prompt')}
+      />
     </NodeWrapper>
   );
 }

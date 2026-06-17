@@ -294,6 +294,69 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
   const hasImageOutput = inputMediaType === 'image' && !!data.outputImageUrl;
   const hasVideoOutput = inputMediaType === 'video' && !!data.outputVideoUrl;
 
+  // ── Footer ──────────────────────────────────────────────────────────────────
+
+  const footer = (
+    <div className="flex flex-col gap-1.5">
+      {inputMediaType === 'image' && (
+        <>
+          <button
+            onClick={handleUpscaleImage}
+            disabled={isRunning || !inputImageUrl}
+            className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+          >
+            <Play size={12} />
+            {isRunning ? 'Upscaling…' : 'Upscale'}
+          </button>
+          {hasImageOutput && (
+            <button
+              onClick={() => downloadFromUrl(data.outputImageUrl!)}
+              className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+            >
+              <Download size={12} />
+              Download
+            </button>
+          )}
+        </>
+      )}
+      {inputMediaType === 'video' && (
+        <>
+          <button
+            onClick={handleUpscaleVideo}
+            disabled={isRunning || !inputVideoUrl}
+            className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+          >
+            <Play size={12} />
+            {isRunning ? 'Upscaling…' : 'Upscale Video'}
+          </button>
+          {hasVideoOutput && (
+            <button
+              onClick={() => downloadFromUrl(data.outputVideoUrl!)}
+              className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+            >
+              <Download size={12} />
+              Download
+            </button>
+          )}
+        </>
+      )}
+      {inputMediaType === null && (
+        <button
+          disabled
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+          style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+        >
+          <Play size={12} />
+          Upscale
+        </button>
+      )}
+    </div>
+  );
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -304,8 +367,16 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       selected={selected}
       minWidth={280}
       accentColor={accentColor}
+      titlePosition="outside"
+      footer={footer}
     >
-      <TypedHandle type="target" position={Position.Left} id="media" portType={inputPortType} />
+      <TypedHandle
+        type="target"
+        position={Position.Left}
+        id="media"
+        portType={inputPortType}
+        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'media')}
+      />
 
       {/* ── No input connected ── */}
       {inputMediaType === null && (
@@ -346,36 +417,15 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           </div>
 
           {inputImageUrl && data.outputImageUrl ? (
-            <div className="-mx-3 mb-3 overflow-hidden">
+            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
               <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
             </div>
           ) : inputImageUrl ? (
-            <div className="-mx-3 mb-3 overflow-hidden">
+            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
             </div>
           ) : null}
-
-          <button
-            onClick={handleUpscaleImage}
-            disabled={isRunning || !inputImageUrl}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-          >
-            <Play size={12} />
-            {isRunning ? 'Upscaling…' : 'Upscale'}
-          </button>
-
-          {hasImageOutput && (
-            <button
-              onClick={() => downloadFromUrl(data.outputImageUrl!)}
-              className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-            >
-              <Download size={12} />
-              Download
-            </button>
-          )}
         </>
       )}
 
@@ -403,43 +453,28 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           </div>
 
           {inputVideoUrl && (
-            <div className="-mx-3 mb-3 overflow-hidden">
+            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
               <video src={inputVideoUrl} controls className="w-full block nodrag" style={{ height: 'auto' }} />
               <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Input</p>
             </div>
           )}
 
           {hasVideoOutput && (
-            <div className="-mx-3 mb-3 overflow-hidden">
+            <div style={{ margin: '0 -18px 12px -18px', overflow: 'hidden' }}>
               <video src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
               <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Output ({upscaleFactor}x)</p>
             </div>
           )}
-
-          <button
-            onClick={handleUpscaleVideo}
-            disabled={isRunning || !inputVideoUrl}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
-          >
-            <Play size={12} />
-            {isRunning ? 'Upscaling…' : 'Upscale Video'}
-          </button>
-
-          {hasVideoOutput && (
-            <button
-              onClick={() => downloadFromUrl(data.outputVideoUrl!)}
-              className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60"
-              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-            >
-              <Download size={12} />
-              Download
-            </button>
-          )}
         </>
       )}
 
-      <TypedHandle type="source" position={Position.Right} id={outputHandleId} portType={outputPortType} />
+      <TypedHandle
+        type="source"
+        position={Position.Right}
+        id={outputHandleId}
+        portType={outputPortType}
+        connected={storeEdges.some(e => e.source === id && e.sourceHandle === outputHandleId)}
+      />
     </NodeWrapper>
   );
 }
