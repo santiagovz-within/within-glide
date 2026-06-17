@@ -2,16 +2,13 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Monitor, Image, Download } from 'lucide-react';
-import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import { MediaPreviewModal } from './MediaPreviewModal';
 import type { OutputNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, VideoGenNodeData, ModifyNodeData, SelectNodeData } from '@/types';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
 export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNodeData }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
   const storeEdges = useFlowStore(state => state.edges);
   const storeNodes = useFlowStore(state => state.nodes);
 
@@ -72,30 +69,25 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
       />
 
       {mediaUrl ? (
-        <>
-          <div style={{ margin: '-18px', overflow: 'hidden' }}>
-            {mediaType === 'video' ? (
-              <video
-                src={mediaUrl}
-                controls
-                className="w-full block"
-                style={{ height: 'auto' }}
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={mediaUrl}
-                alt="Output"
-                className="w-full block nodrag cursor-pointer"
-                style={{ height: 'auto' }}
-                onClick={() => setPreviewOpen(true)}
-              />
-            )}
-          </div>
-          {previewOpen && mediaType === 'image' && (
-            <MediaPreviewModal url={mediaUrl} type="image" onClose={() => setPreviewOpen(false)} />
+        <div style={{ margin: '-18px', overflow: 'hidden' }}>
+          {mediaType === 'video' ? (
+            <video
+              src={mediaUrl}
+              controls
+              className="w-full block"
+              style={{ height: 'auto' }}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={mediaUrl}
+              alt="Output"
+              className="w-full block"
+              draggable={false}
+              style={{ height: 'auto' }}
+            />
           )}
-        </>
+        </div>
       ) : (
         <div
           className="flex flex-col items-center justify-center gap-2"
