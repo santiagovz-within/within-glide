@@ -10,6 +10,7 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
 import { IMAGE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
+import { NodeSelect } from './NodeSelect';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
@@ -25,6 +26,7 @@ function autoResize(el: HTMLTextAreaElement) {
 
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const isOutputConnected = useFlowStore((s) => s.edges.some((e) => e.source === id && e.sourceHandle === 'image'));
   const genHistory = data.generationHistory ?? [];
   const [histIdx, setHistIdx] = useState(() => Math.max(0, genHistory.length - 1));
   const prevHistLen = useRef(genHistory.length);
@@ -161,7 +163,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       <button
         onClick={handleGenerate}
         disabled={isGenerating}
-        className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
         style={{ background: '#fff', color: '#000', borderRadius: 11 }}
       >
         <Play size={12} />
@@ -170,7 +172,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {displayImages.length > 0 && (
         <button
           onClick={() => downloadFromUrl(displayImages[0])}
-          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
           style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
         >
           <Download size={12} />
@@ -229,8 +231,8 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       <div ref={promptSectionRef} className="mb-3">
         {data.promptConnected ? (
           <div
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
-            style={{ background: '#1e3f6a', color: '#fff' }}
+            className="flex items-center gap-2 px-3 rounded-lg text-xs font-medium"
+            style={{ height: REF_ROW_HEIGHT, background: '#3999F8', color: '#fff' }}
           >
             <span style={{ fontSize: 10 }}>T</span>
             Prompt connected
@@ -303,29 +305,19 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
-          <select
-            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+          <NodeSelect
+            options={ASPECT_RATIOS.map((r) => r.value)}
             value={data.aspectRatio}
-            onChange={(e) => updateData({ aspectRatio: e.target.value })}
-            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-          >
-            {ASPECT_RATIOS.map((r) => (
-              <option key={r.value} value={r.value}>{r.value}</option>
-            ))}
-          </select>
+            onChange={(v) => updateData({ aspectRatio: v })}
+          />
         </div>
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Resolution</label>
-          <select
-            className="w-full px-2 py-1.5 rounded-lg text-xs outline-none nodrag"
+          <NodeSelect
+            options={RESOLUTIONS}
             value={data.resolution}
-            onChange={(e) => updateData({ resolution: e.target.value })}
-            style={{ background: 'var(--color-bg-surface)', border: 'none', color: 'var(--color-white)', borderRadius: 11 }}
-          >
-            {RESOLUTIONS.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
-          </select>
+            onChange={(v) => updateData({ resolution: v })}
+          />
         </div>
       </div>
 
@@ -360,7 +352,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    background: i < data.numImages ? '#a855f7' : 'rgba(255,255,255,0.18)',
+                    background: i < data.numImages ? '#a855f7' : '#4a4a4f',
                     top: '50%',
                     left: `${tickPct}%`,
                     transform: 'translate(-50%, -50%)',
@@ -382,7 +374,6 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
               left: `${sliderPct}%`,
               transform: 'translate(-50%, -50%)',
               pointerEvents: 'none',
-              boxShadow: '0 0 0 4px rgba(168,85,247,0.2)',
             }}
           />
           {/* Invisible native input for interaction */}
@@ -474,7 +465,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </div>
       )}
 
-      <TypedHandle type="source" position={Position.Right} id="image" portType="image" />
+      <TypedHandle type="source" position={Position.Right} id="image" portType="image" connected={isOutputConnected} />
     </NodeWrapper>
   );
 }
