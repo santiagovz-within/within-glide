@@ -27,7 +27,6 @@ export function CustomEdge({
     targetPosition,
   });
 
-  // Derive color from the source port type
   const sourceNode = getNode(source);
   const srcKey = `${sourceNode?.type}:${sourceHandleId ?? ''}:source`;
   const portType = PORT_TYPE_MAP[srcKey] ?? 'text';
@@ -41,23 +40,22 @@ export function CustomEdge({
   }
 
   function onHoverEnd() {
-    leaveTimer.current = setTimeout(() => setHovered(false), 300);
+    leaveTimer.current = setTimeout(() => setHovered(false), 400);
   }
 
   function deleteEdge(e: React.MouseEvent) {
     e.stopPropagation();
+    e.preventDefault();
     setEdges((edges) => edges.filter((edge) => edge.id !== id));
   }
 
   return (
     <>
-      {/* Visible path */}
       <path
         d={edgePath}
         stroke={color}
         strokeWidth={isActive ? 2.5 : 2}
         fill="none"
-        strokeDasharray="none"
         style={{
           filter: selected ? `drop-shadow(0 0 5px ${color}99)` : undefined,
           transition: 'stroke-width 0.1s',
@@ -65,49 +63,39 @@ export function CustomEdge({
         }}
       />
 
-      {/* Wide transparent hit path — 28px stroke for easy hovering */}
+      {/* Wide transparent hit path — 'stroke' overrides inherited visibleStroke so transparent stroke fires events */}
       <path
         d={edgePath}
         stroke="transparent"
         strokeWidth={28}
         fill="none"
-        style={{ cursor: 'pointer' }}
+        style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}
       />
 
-      {/* SVG delete button — no foreignObject gap */}
-      {isActive && (
-        <g
-          onClick={deleteEdge}
-          onMouseEnter={onHoverStart}
-          onMouseLeave={onHoverEnd}
-          style={{ cursor: 'pointer' }}
-        >
-          {/* Transparent hit circle (larger than visible button) */}
-          <circle cx={labelX} cy={labelY} r={28} fill="transparent" />
-          {/* Visible circle */}
-          <circle
-            cx={labelX}
-            cy={labelY}
-            r={9}
-            fill="var(--color-bg-elevated)"
-            stroke={color}
-            strokeWidth={1.5}
-          />
-          {/* X lines */}
-          <line
-            x1={labelX - 3.5} y1={labelY - 3.5}
-            x2={labelX + 3.5} y2={labelY + 3.5}
-            stroke={color} strokeWidth={1.5} strokeLinecap="round"
-          />
-          <line
-            x1={labelX + 3.5} y1={labelY - 3.5}
-            x2={labelX - 3.5} y2={labelY + 3.5}
-            stroke={color} strokeWidth={1.5} strokeLinecap="round"
-          />
-        </g>
-      )}
+      {/*
+       * Always in DOM — opacity/pointerEvents toggled, not mount/unmount.
+       * 'all' overrides .react-flow__edge { pointer-events: visibleStroke }
+       * which would otherwise make the transparent fill circle unclickable.
+       */}
+      <g
+        onClick={deleteEdge}
+        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+        onMouseEnter={onHoverStart}
+        onMouseLeave={onHoverEnd}
+        style={{
+          cursor: 'pointer',
+          pointerEvents: isActive ? 'all' : 'none',
+          opacity: isActive ? 1 : 0,
+          transition: 'opacity 0.1s',
+        }}
+      >
+        <circle cx={labelX} cy={labelY} r={28} fill="transparent" />
+        <circle cx={labelX} cy={labelY} r={9} fill="var(--color-bg-elevated)" stroke={color} strokeWidth={1.5} />
+        <line x1={labelX - 3.5} y1={labelY - 3.5} x2={labelX + 3.5} y2={labelY + 3.5} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+        <line x1={labelX + 3.5} y1={labelY - 3.5} x2={labelX - 3.5} y2={labelY + 3.5} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
+      </g>
     </>
   );
 }
