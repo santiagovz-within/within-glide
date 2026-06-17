@@ -14,7 +14,7 @@ const GEN_COUNTS  = [1, 2, 3, 4]  as const;
 function segBtn(active: boolean): React.CSSProperties {
   return {
     padding: '5px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.065em',
-    background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
+    background: active ? 'var(--segbtn-active-bg)' : 'transparent',
     color: active ? 'var(--color-white)' : 'var(--color-white-muted)',
     cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' as const,
   };
@@ -23,13 +23,13 @@ function segBtn(active: boolean): React.CSSProperties {
 const SELECT_STYLE: React.CSSProperties = {
   padding: '5px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
   letterSpacing: '0.065em', cursor: 'pointer', outline: 'none',
-  background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)',
+  background: 'var(--select-bg)', border: '1px solid var(--select-border)',
   color: 'var(--color-white)',
 };
 
 const SEG_WRAP: React.CSSProperties = {
   display: 'flex', flexShrink: 0, borderRadius: 999, overflow: 'hidden',
-  border: '1px solid rgba(255,255,255,0.1)',
+  border: '1px solid var(--segbtn-border)',
 };
 
 interface ChatInputProps {
@@ -149,10 +149,10 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
     <div style={{ padding: '0 12px 12px', background: 'var(--color-bg-darkest)' }}>
       <div style={{
         borderRadius: 18,
-        background: 'rgba(14,14,18,0.95)',
+        background: 'var(--chatinput-bg)',
         backdropFilter: 'blur(28px)',
         WebkitBackdropFilter: 'blur(28px)',
-        border: '1px solid rgba(255,255,255,0.09)',
+        border: '1px solid var(--chatinput-border)',
         boxShadow: '0 -8px 32px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3)',
       }}>
 
@@ -164,14 +164,14 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
             {(['image', 'video'] as const).map((m, i) => (
               <button key={m} onClick={() => { setMode(m); setReferenceImages([]); }} style={{
                 ...segBtn(mode === m),
-                borderRight: i === 0 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                borderRight: i === 0 ? '1px solid var(--chatinput-divider)' : 'none',
               }}>
                 {m === 'image' ? 'IMAGE' : 'VIDEO'}
               </button>
             ))}
           </div>
 
-          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', flexShrink: 0, margin: '0 2px' }} />
+          <div style={{ width: 1, height: 16, background: 'var(--chatinput-divider)', flexShrink: 0, margin: '0 2px' }} />
 
           {/* Model */}
           <select value={settings.model} onChange={e => handleModelChange(e.target.value)} style={SELECT_STYLE}>
@@ -189,7 +189,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
               {RESOLUTIONS.map((r, i) => (
                 <button key={r} onClick={() => updateSettings({ resolution: r })} style={{
                   ...segBtn(settings.resolution === r),
-                  borderRight: i < RESOLUTIONS.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                  borderRight: i < RESOLUTIONS.length - 1 ? '1px solid var(--chatinput-divider)' : 'none',
                 }}>
                   {r}
                 </button>
@@ -204,7 +204,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
                 <button key={n} onClick={() => updateSettings({ numGenerations: n })} style={{
                   ...segBtn(settings.numGenerations === n),
                   minWidth: 28, justifyContent: 'center' as const,
-                  borderRight: i < GEN_COUNTS.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                  borderRight: i < GEN_COUNTS.length - 1 ? '1px solid var(--chatinput-divider)' : 'none',
                 }}>
                   {n}
                 </button>
@@ -218,7 +218,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
               {DURATIONS.map((d, i) => (
                 <button key={d} onClick={() => updateSettings({ duration: d })} style={{
                   ...segBtn(settings.duration === d),
-                  borderRight: i < DURATIONS.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                  borderRight: i < DURATIONS.length - 1 ? '1px solid var(--chatinput-divider)' : 'none',
                 }}>
                   {d}s
                 </button>
@@ -366,7 +366,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
         )}
 
         {/* Divider */}
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.07)', margin: '0 12px' }} />
+        <div style={{ height: 1, background: 'var(--color-white-subtle)', margin: '0 12px' }} />
 
         {/* ── Prompt row ──────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px' }}>
@@ -388,7 +388,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
               ))}
               {/* Uploading placeholders */}
               {Array.from({ length: imgUploadingCount }).map((_, i) => (
-                <div key={`uploading-${i}`} style={{ width: 30, height: 30, borderRadius: 6, flexShrink: 0, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div key={`uploading-${i}`} style={{ width: 30, height: 30, borderRadius: 6, flexShrink: 0, background: 'var(--color-bg-hover)', border: '1px solid var(--chatinput-divider)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Loader2 size={10} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
                 </div>
               ))}
@@ -434,8 +434,8 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
               flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
               padding: '6px 16px', borderRadius: 999, fontSize: 11, fontWeight: 700,
               letterSpacing: '0.065em', cursor: 'pointer', border: 'none', transition: 'opacity 0.15s',
-              background: !prompt.trim() || isGenerating ? 'rgba(255,255,255,0.15)' : '#fff',
-              color: !prompt.trim() || isGenerating ? 'var(--color-white-muted)' : '#000',
+              background: !prompt.trim() || isGenerating ? 'var(--color-white-subtle)' : 'var(--action-btn-bg)',
+              color: !prompt.trim() || isGenerating ? 'var(--color-white-muted)' : 'var(--action-btn-color)',
               opacity: !prompt.trim() || isGenerating ? 0.5 : 1,
             }}
           >

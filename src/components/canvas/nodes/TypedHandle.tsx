@@ -13,11 +13,13 @@ export const PORT_COLORS: Record<PortType, string> = {
   neutral: '#6b7280',
 };
 
+// Inactive tints and icon colors are now CSS variables so light mode can override them.
+// PORT_TINTS kept for reference only — not used in rendering.
 export const PORT_TINTS: Record<PortType, string> = {
-  text:    '#1e3f6a',
-  image:   '#3a1a6a',
-  video:   '#114a32',
-  neutral: '#1f2024',
+  text:    'var(--port-tint-text)',
+  image:   'var(--port-tint-image)',
+  video:   'var(--port-tint-video)',
+  neutral: 'var(--port-tint-neutral)',
 };
 
 // Registry: `nodeType:handleId:source|target` → PortType
@@ -103,12 +105,12 @@ export function TypedHandle({ portType, offset, position, badge, connected, ...r
         width: 36,
         height: 36,
         borderRadius: '50%',
-        background: isActive ? color : tint,
+        background: isActive ? color : `var(--port-tint-${portType})`,
         border: 'none',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: isActive ? '#fff' : color,
+        color: isActive ? '#fff' : `var(--port-icon-inactive-${portType})`,
         pointerEvents: 'all',
         transition: 'background 0.15s, color 0.15s',
         ...offsetStyle,

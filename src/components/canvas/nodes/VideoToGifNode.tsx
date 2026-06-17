@@ -362,7 +362,7 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
         onClick={handleConvert}
         disabled={!data.videoUrl || isConverting}
         className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+        style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
       >
         <Play size={12} />
         {isConverting ? progressLabel || 'Converting…' : 'Convert to GIF'}

@@ -82,7 +82,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
             onClick={handleRemove}
             disabled={isProcessing || !inputImageUrl}
             className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+            style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
           >
             <Play size={12} />
             {isProcessing ? 'Processing…' : 'Remove Background'}

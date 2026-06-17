@@ -19,6 +19,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
+import { useThemeStore } from '@/lib/stores/themeStore';
 import { PromptNode } from './nodes/PromptNode';
 import { ImageInputNode } from './nodes/ImageInputNode';
 import { ImageToPromptNode } from './nodes/ImageToPromptNode';
@@ -138,6 +139,7 @@ interface FlowCanvasProps {
 
 export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, setNodes, setEdges } = useFlowStore();
+  const theme = useThemeStore((s) => s.theme);
   const allowedTypes = isTestUser ? (['mediaInputNode', 'videoToGifNode'] as import('@/types').NodeType[]) : undefined;
   const { screenToFlowPosition } = useReactFlow();
   const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
@@ -822,7 +824,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         selectionKeyCode="Shift"
         style={{ background: 'var(--color-bg-darkest)' }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color="rgba(255,255,255,0.18)" />
+        <Background variant={BackgroundVariant.Dots} gap={28} size={1.5} color={theme === 'light' ? '#29292A' : 'rgba(255,255,255,0.18)'} />
         <Controls showInteractive={false} />
         <MiniMap
           nodeColor="var(--color-bg-surface)"

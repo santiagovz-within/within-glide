@@ -228,7 +228,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         onClick={handleGenerate}
         disabled={isGenerating}
         className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+        style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
       >
         <Play size={12} />
         {isGenerating ? 'Generating…' : 'Generate'}
@@ -350,7 +350,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
                 style={{
                   width: 12,
                   height: 12,
-                  background: '#fff',
+                  background: 'var(--color-white)',
                   left: 2,
                   transform: (data.generateAudio ?? true) ? 'translateX(14px)' : 'translateX(0)',
                   transition: 'transform 0.15s ease',

@@ -164,7 +164,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         onClick={handleGenerate}
         disabled={isGenerating}
         className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+        style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
       >
         <Play size={12} />
         {isGenerating ? 'Generating…' : 'Generate'}
@@ -273,7 +273,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             style={{
               padding: '3px 10px 5px 10px',
               borderRadius: 8,
-              background: isEditMode ? '#3A196A' : 'rgba(255,255,255,0.05)',
+              background: isEditMode ? 'var(--tag-image-bg)' : 'var(--color-white-subtle)',
               transition: 'background 0.15s',
             }}
           >
@@ -282,7 +282,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                background: isEditMode ? '#B36AF7' : 'rgba(255,255,255,0.25)',
+                background: isEditMode ? 'var(--tag-image-dot)' : 'var(--color-white-muted)',
                 transition: 'background 0.15s',
                 flexShrink: 0,
               }}
@@ -291,7 +291,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
               style={{
                 fontSize: 10,
                 fontWeight: 500,
-                color: isEditMode ? '#B36AF7' : 'var(--color-white-muted)',
+                color: isEditMode ? 'var(--tag-image-text)' : 'var(--color-white-muted)',
                 transition: 'color 0.15s',
               }}
             >

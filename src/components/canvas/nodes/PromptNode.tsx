@@ -355,7 +355,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
           onClick={handleEnhance}
           disabled={enhancing || !data.prompt?.trim()}
           className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-          style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+          style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
         >
           <Sunrise size={11} className={enhancing ? 'animate-pulse' : ''} />
           {enhancing ? 'Enhancing…' : 'Enhance'}

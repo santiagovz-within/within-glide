@@ -589,7 +589,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         onClick={mode === 'prompt' ? handlePromptGenerate : handleExpandGenerate}
         disabled={isGenerating || !hasImage || (mode === 'expand' && !hasExpansion)}
         className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-        style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+        style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
       >
         <Play size={12} />
         {mode === 'prompt'

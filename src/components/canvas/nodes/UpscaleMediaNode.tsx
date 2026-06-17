@@ -87,7 +87,7 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
         >
           <div
             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full flex items-center justify-center"
-            style={{ width: 22, height: 22, background: '#fff', color: '#000' }}
+            style={{ width: 22, height: 22, background: 'var(--color-white)', color: 'var(--color-bg-darkest)' }}
           >
             <Maximize2 size={12} />
           </div>
@@ -312,7 +312,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
             onClick={handleUpscaleImage}
             disabled={isRunning || !inputImageUrl}
             className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+            style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
           >
             <Play size={12} />
             {isRunning ? 'Upscaling…' : 'Upscale'}
@@ -335,7 +335,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
             onClick={handleUpscaleVideo}
             disabled={isRunning || !inputVideoUrl}
             className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-            style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+            style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
           >
             <Play size={12} />
             {isRunning ? 'Upscaling…' : 'Upscale Video'}
@@ -356,7 +356,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         <button
           disabled
           className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
-          style={{ background: '#fff', color: '#000', borderRadius: 11 }}
+          style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
         >
           <Play size={12} />
           Upscale
