@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 
 const TARGET_BYTES = 150 * 1024;
@@ -38,8 +38,9 @@ export async function POST() {
       .from('profiles').select('is_admin').eq('id', user.id).single();
     if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    // Fetch all flows with a thumbnail that isn't already a GCS signed URL
-    const { data: flows } = await supabase
+    // Use admin client to bypass RLS and read all users' flows
+    const adminDb = createAdminClient();
+    const { data: flows } = await adminDb
       .from('flows')
       .select('id, user_id, thumbnail_url')
       .not('thumbnail_url', 'is', null);
@@ -78,7 +79,7 @@ export async function POST() {
         await uploadToGCS(compressed, objectPath, 'image/jpeg');
         const signedUrl = await getSignedReadUrl(objectPath);
 
-        await supabase.from('flows').update({ thumbnail_url: signedUrl }).eq('id', flow.id);
+        await adminDb.from('flows').update({ thumbnail_url: signedUrl }).eq('id', flow.id);
         updated++;
       } catch {
         failed++;
