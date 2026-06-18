@@ -386,6 +386,43 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
           animated: false,
         }));
 
+        // Reconstruct inputImageUrls / imagePortCount for pasted imageGenNodes.
+        // pasteCleanData zeroes these out, but the edges are still present —
+        // we replicate the same URL-extraction logic as onConnectHandler so
+        // all ref_ ports show correctly without needing a propagation event.
+        const allPastedEdges = [...internalEdges, ...externalEdges];
+        for (const edge of allPastedEdges) {
+          if (!edge.targetHandle?.startsWith('ref_')) continue;
+          const tgtIdx = newNodes.findIndex((n) => n.id === edge.target);
+          if (tgtIdx === -1) continue;
+
+          const sourceNode = newNodes.find((n) => n.id === edge.source)
+            ?? nodesRef.current.find((n) => n.id === edge.source);
+          if (!sourceNode) continue;
+
+          let imageUrl: string | undefined;
+          if (sourceNode.type === 'imageInputNode')   imageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
+          else if (sourceNode.type === 'mediaInputNode')   imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
+          else if (sourceNode.type === 'upscaleMediaNode') imageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl;
+          else if (sourceNode.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
+          else if (sourceNode.type === 'upscaleNode')  imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+          else if (sourceNode.type === 'modifyNode')   imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
+          else if (sourceNode.type === 'selectNode')   imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
+          else if (sourceNode.type === 'removeBgNode') imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
+          if (!imageUrl) continue;
+
+          const tgtData = newNodes[tgtIdx].data as ImageGenNodeData;
+          const urls = [...(tgtData.inputImageUrls ?? [])];
+          const refIdx = parseInt(edge.targetHandle.split('_')[1]);
+          urls[refIdx] = imageUrl;
+          const filled = urls.filter(Boolean).length;
+          const maxRefs = MODELS[tgtData.model as keyof typeof MODELS]?.maxReferenceImages ?? 14;
+          newNodes[tgtIdx] = {
+            ...newNodes[tgtIdx],
+            data: { ...newNodes[tgtIdx].data, inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) } as NodeData,
+          };
+        }
+
         setNodes([...nodesRef.current.map((n) => ({ ...n, selected: false })), ...newNodes]);
         setEdges([...edgesRef.current, ...internalEdges, ...externalEdges]);
         e.preventDefault();
