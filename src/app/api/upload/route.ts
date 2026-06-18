@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { MAX_UPLOAD_SIZE_BYTES } from '@/lib/utils/constants';
+import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,22 +27,13 @@ export async function POST(request: NextRequest) {
     }
 
     const ext = file.name.split('.').pop() ?? 'jpg';
-    const filename = `${user.id}/refs/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const objectPath = `refs/${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = new Uint8Array(arrayBuffer);
+    await uploadToGCS(arrayBuffer, objectPath, file.type);
+    const url = await getSignedReadUrl(objectPath);
 
-    const { error } = await supabase.storage
-      .from('uploads')
-      .upload(filename, buffer, { contentType: file.type, upsert: false });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filename);
-
-    return NextResponse.json({ url: publicUrl });
+    return NextResponse.json({ url });
   } catch (err) {
     console.error('Upload error:', err);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

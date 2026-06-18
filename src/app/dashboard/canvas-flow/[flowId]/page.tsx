@@ -75,7 +75,21 @@ export default function FlowEditorPage() {
       setSaving(true);
       try {
         const rawThumb = extractThumbnail(nodes);
-        const thumbnail = rawThumb ? (await compressToThumbnailDataUrl(rawThumb) ?? rawThumb) : null;
+        let thumbnail: string | null = null;
+        if (rawThumb) {
+          const dataUrl = await compressToThumbnailDataUrl(rawThumb);
+          if (dataUrl) {
+            const res = await fetch('/api/thumbnails/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ dataUrl, flowId }),
+            });
+            if (res.ok) {
+              const { url } = await res.json();
+              thumbnail = url ?? null;
+            }
+          }
+        }
         await supabase
           .from('flows')
           .update({

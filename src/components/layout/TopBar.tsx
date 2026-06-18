@@ -9,6 +9,21 @@ import type { Node } from '@xyflow/react';
 import type { NodeData, ImageGenNodeData, UpscaleNodeData, ImageInputNodeData } from '@/types';
 import { compressToThumbnailDataUrl } from '@/lib/utils/imageProcessing';
 
+async function uploadThumbnailToGCS(dataUrl: string, flowId: string): Promise<string | null> {
+  try {
+    const res = await fetch('/api/thumbnails/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, flowId }),
+    });
+    if (!res.ok) return null;
+    const { url } = await res.json();
+    return url ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function extractThumbnail(nodes: Node<NodeData>[]): string | null {
   for (const node of nodes) {
     if (node.type === 'imageGenNode') {
@@ -83,7 +98,11 @@ export function TopBar({ flowId }: TopBarProps) {
     setSaving(true);
     try {
       const rawThumb = extractThumbnail(nodes);
-      const thumbnail = rawThumb ? (await compressToThumbnailDataUrl(rawThumb) ?? rawThumb) : null;
+      let thumbnail: string | null = null;
+      if (rawThumb) {
+        const dataUrl = await compressToThumbnailDataUrl(rawThumb);
+        if (dataUrl) thumbnail = await uploadThumbnailToGCS(dataUrl, flowId);
+      }
       await supabase
         .from('flows')
         .update({
@@ -112,7 +131,11 @@ export function TopBar({ flowId }: TopBarProps) {
     setSavingBase(true);
     try {
       const rawThumb = extractThumbnail(nodes);
-      const thumbnail = rawThumb ? (await compressToThumbnailDataUrl(rawThumb) ?? rawThumb) : null;
+      let thumbnail: string | null = null;
+      if (rawThumb) {
+        const dataUrl = await compressToThumbnailDataUrl(rawThumb);
+        if (dataUrl) thumbnail = await uploadThumbnailToGCS(dataUrl, flowId);
+      }
       await supabase.from('flows').update({
         is_template: !isBaseFlow,
         flow_data: {

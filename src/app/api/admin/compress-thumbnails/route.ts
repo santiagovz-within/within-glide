@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
 
 const TARGET_BYTES = 150 * 1024;
 
@@ -24,6 +25,9 @@ async function sharpCompress(input: Buffer): Promise<Buffer> {
   return buf;
 }
 
+// Migrates all flow thumbnails (data URLs and Supabase Storage URLs) to GCS.
+// Data URLs are compressed with sharp before uploading.
+// External URLs are fetched, optionally compressed, then uploaded.
 export async function POST() {
   try {
     const supabase = await createClient();
@@ -34,9 +38,10 @@ export async function POST() {
       .from('profiles').select('is_admin').eq('id', user.id).single();
     if (!profile?.is_admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+    // Fetch all flows with a thumbnail that isn't already a GCS signed URL
     const { data: flows } = await supabase
       .from('flows')
-      .select('id, thumbnail_url')
+      .select('id, user_id, thumbnail_url')
       .not('thumbnail_url', 'is', null);
 
     if (!flows?.length) return NextResponse.json({ updated: 0, skipped: 0, failed: 0, total: 0 });
@@ -45,33 +50,36 @@ export async function POST() {
 
     for (const flow of flows) {
       const thumb = flow.thumbnail_url as string;
+
+      // Skip if already a GCS signed URL (contains storage.googleapis.com)
+      if (thumb.includes('storage.googleapis.com')) { skipped++; continue; }
+
       try {
+        let imageBuffer: Buffer;
+
         if (thumb.startsWith('data:')) {
-          // ── Data URL (auto-generated thumbnail stored in DB) ──────────────
           const base64 = thumb.split(',')[1];
           if (!base64) { skipped++; continue; }
-          const original = Buffer.from(base64, 'base64');
-          if (original.byteLength <= TARGET_BYTES) { skipped++; continue; }
-          const compressed = await sharpCompress(original);
-          const newDataUrl = `data:image/jpeg;base64,${compressed.toString('base64')}`;
-          await supabase.from('flows').update({ thumbnail_url: newDataUrl }).eq('id', flow.id);
-          updated++;
+          imageBuffer = Buffer.from(base64, 'base64');
         } else {
-          // ── External URL (Supabase storage or GCS) ────────────────────────
+          // External URL (Supabase Storage public URL, etc.) — fetch it
           const res = await fetch(thumb);
           if (!res.ok) { failed++; continue; }
-          const original = Buffer.from(await res.arrayBuffer());
-          if (original.byteLength <= TARGET_BYTES) { skipped++; continue; }
-          const compressed = await sharpCompress(original);
-          const filename = `${user.id}/thumbnails/${flow.id}.jpg`;
-          const { error: uploadErr } = await supabase.storage
-            .from('uploads')
-            .upload(filename, compressed, { contentType: 'image/jpeg', upsert: true });
-          if (uploadErr) { failed++; continue; }
-          const { data: { publicUrl } } = supabase.storage.from('uploads').getPublicUrl(filename);
-          await supabase.from('flows').update({ thumbnail_url: publicUrl }).eq('id', flow.id);
-          updated++;
+          imageBuffer = Buffer.from(await res.arrayBuffer());
         }
+
+        // Compress if over target
+        const compressed = imageBuffer.byteLength > TARGET_BYTES
+          ? await sharpCompress(imageBuffer)
+          : imageBuffer;
+
+        const ownerId = (flow.user_id as string | null) ?? user.id;
+        const objectPath = `thumbnails/${ownerId}/${flow.id}.jpg`;
+        await uploadToGCS(compressed, objectPath, 'image/jpeg');
+        const signedUrl = await getSignedReadUrl(objectPath);
+
+        await supabase.from('flows').update({ thumbnail_url: signedUrl }).eq('id', flow.id);
+        updated++;
       } catch {
         failed++;
       }
