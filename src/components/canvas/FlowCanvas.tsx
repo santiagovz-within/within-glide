@@ -386,29 +386,49 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
           animated: false,
         }));
 
-        // Reconstruct inputImageUrls / imagePortCount for pasted imageGenNodes.
-        // pasteCleanData zeroes these out, but the edges are still present —
-        // we replicate the same URL-extraction logic as onConnectHandler so
-        // all ref_ ports show correctly without needing a propagation event.
+        // Reconstruct connection-derived state for pasted nodes.
+        // pasteCleanData intentionally clears derived fields (promptConnected,
+        // imagePortCount, inputImageUrls…) but leaves the edges intact, so we
+        // mirror the same logic as onConnectHandler to restore them before render.
         const allPastedEdges = [...internalEdges, ...externalEdges];
         for (const edge of allPastedEdges) {
-          if (!edge.targetHandle?.startsWith('ref_')) continue;
           const tgtIdx = newNodes.findIndex((n) => n.id === edge.target);
           if (tgtIdx === -1) continue;
-
           const sourceNode = newNodes.find((n) => n.id === edge.source)
             ?? nodesRef.current.find((n) => n.id === edge.source);
           if (!sourceNode) continue;
 
+          // ── Prompt connections ──────────────────────────────────────────
+          if (edge.targetHandle === 'prompt') {
+            let prompt: string | undefined;
+            if (sourceNode.type === 'promptNode') {
+              prompt = (sourceNode.data as { prompt?: string }).prompt;
+            } else if (sourceNode.type === 'imageToPromptNode') {
+              prompt = (sourceNode.data as ImageToPromptNodeData).generatedPrompt ?? undefined;
+            }
+            newNodes[tgtIdx] = {
+              ...newNodes[tgtIdx],
+              data: {
+                ...newNodes[tgtIdx].data,
+                promptConnected: true,
+                ...(prompt !== undefined ? { prompt } : {}),
+              } as NodeData,
+            };
+            continue;
+          }
+
+          // ── Multi-image ref_ connections (imageGenNode) ─────────────────
+          if (!edge.targetHandle?.startsWith('ref_')) continue;
+
           let imageUrl: string | undefined;
-          if (sourceNode.type === 'imageInputNode')   imageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
+          if (sourceNode.type === 'imageInputNode')        imageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
           else if (sourceNode.type === 'mediaInputNode')   imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
           else if (sourceNode.type === 'upscaleMediaNode') imageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl;
-          else if (sourceNode.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
-          else if (sourceNode.type === 'upscaleNode')  imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
-          else if (sourceNode.type === 'modifyNode')   imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
-          else if (sourceNode.type === 'selectNode')   imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
-          else if (sourceNode.type === 'removeBgNode') imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
+          else if (sourceNode.type === 'imageGenNode')     imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
+          else if (sourceNode.type === 'upscaleNode')      imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+          else if (sourceNode.type === 'modifyNode')       imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
+          else if (sourceNode.type === 'selectNode')       imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
+          else if (sourceNode.type === 'removeBgNode')     imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
           if (!imageUrl) continue;
 
           const tgtData = newNodes[tgtIdx].data as ImageGenNodeData;
