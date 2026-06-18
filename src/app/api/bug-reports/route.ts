@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { title, description } = await request.json();
+  const { title, description, image_url } = await request.json();
   if (!title?.trim() || !description?.trim()) {
     return NextResponse.json({ error: 'Title and description are required' }, { status: 400 });
   }
@@ -75,7 +75,13 @@ export async function POST(request: NextRequest) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('bug_reports')
-    .insert({ user_id: user.id, title: title.trim(), description: description.trim(), status: 'open' })
+    .insert({
+      user_id: user.id,
+      title: title.trim(),
+      description: description.trim(),
+      image_url: image_url ?? null,
+      status: 'open',
+    })
     .select()
     .single();
 

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS bug_reports (
   user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   title       text        NOT NULL,
   description text        NOT NULL,
+  image_url   text,
   status      text        NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved')),
   resolved_by uuid        REFERENCES auth.users(id),
   resolved_at timestamptz,

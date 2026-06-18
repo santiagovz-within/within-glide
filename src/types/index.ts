@@ -399,6 +399,7 @@ export interface BugReport {
   user_id: string;
   title: string;
   description: string;
+  image_url?: string | null;
   status: 'open' | 'resolved';
   resolved_by: string | null;
   resolved_at: string | null;

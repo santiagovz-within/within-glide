@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Bug, Plus, X, Send, CheckCircle, Clock, MessageSquare, RefreshCw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Bug, Plus, X, Send, CheckCircle, Clock, MessageSquare, RefreshCw, ImageIcon } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatDistanceToNow, formatDate } from '@/lib/utils/date';
 import type { BugReport, BugReportDetail } from '@/types';
@@ -17,7 +17,11 @@ export default function BugReportsPage() {
 
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [commentText, setCommentText] = useState('');
   const [commenting, setCommenting] = useState(false);
@@ -63,23 +67,63 @@ export default function BugReportsPage() {
     }
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  }
+
+  function removeImage() {
+    setImageFile(null);
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setImagePreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setFormTitle('');
+    setFormDesc('');
+    removeImage();
+    setSubmitError(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!formTitle.trim() || !formDesc.trim() || submitting) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
+      let imageUrl: string | null = null;
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append('file', imageFile);
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (!uploadRes.ok) {
+          const { error } = await uploadRes.json().catch(() => ({ error: 'Upload failed' }));
+          setSubmitError(`Screenshot upload failed: ${error}`);
+          return;
+        }
+        const { url } = await uploadRes.json();
+        imageUrl = url ?? null;
+      }
+
       const res = await fetch('/api/bug-reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: formTitle, description: formDesc }),
+        body: JSON.stringify({ title: formTitle, description: formDesc, image_url: imageUrl }),
       });
       if (res.ok) {
-        setFormTitle('');
-        setFormDesc('');
-        setShowForm(false);
+        closeForm();
         setTab('open');
         await loadReports();
+      } else {
+        const { error } = await res.json().catch(() => ({ error: 'Submission failed' }));
+        setSubmitError(error ?? 'Failed to submit report');
       }
+    } catch {
+      setSubmitError('Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -239,6 +283,12 @@ export default function BugReportsPage() {
                     <span className="text-xs" style={{ color: 'var(--color-white-muted)', opacity: 0.6 }}>
                       @{report.author_username}
                     </span>
+                    {report.image_url && (
+                      <>
+                        <span style={{ color: 'var(--color-white-muted)', opacity: 0.3 }}>·</span>
+                        <ImageIcon size={10} style={{ color: 'var(--color-white-muted)', opacity: 0.5 }} />
+                      </>
+                    )}
                     <span style={{ color: 'var(--color-white-muted)', opacity: 0.3 }}>·</span>
                     <span className="text-xs" style={{ color: 'var(--color-white-muted)', opacity: 0.6 }}>
                       {formatDistanceToNow(report.created_at)}
@@ -332,13 +382,26 @@ export default function BugReportsPage() {
 
               {/* Description */}
               <div
-                className="p-4 rounded-xl mb-8"
+                className="p-4 rounded-xl mb-5"
                 style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
               >
                 <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--color-white)' }}>
                   {selected.description}
                 </p>
               </div>
+
+              {/* Screenshot */}
+              {selected.image_url && (
+                <div className="mb-8 rounded-xl overflow-hidden" style={{ border: 'var(--border-default)' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={selected.image_url}
+                    alt="Bug report screenshot"
+                    className="w-full max-h-96 object-contain"
+                    style={{ background: 'var(--color-bg-surface)', display: 'block' }}
+                  />
+                </div>
+              )}
 
               {/* Comments section */}
               <div>
@@ -427,7 +490,7 @@ export default function BugReportsPage() {
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
           style={{ background: 'rgba(0,0,0,0.75)' }}
-          onClick={() => setShowForm(false)}
+          onClick={closeForm}
         >
           <div
             className="relative rounded-xl overflow-hidden"
@@ -450,7 +513,7 @@ export default function BugReportsPage() {
                   New Bug Report
                 </span>
               </div>
-              <button onClick={() => setShowForm(false)} className="p-0.5 rounded hover:opacity-60">
+              <button onClick={closeForm} className="p-0.5 rounded hover:opacity-60">
                 <X size={14} style={{ color: 'var(--color-white-muted)' }} />
               </button>
             </div>
@@ -479,6 +542,7 @@ export default function BugReportsPage() {
                   required
                 />
               </div>
+
               <div>
                 <label
                   className="block text-xs font-medium mb-1.5"
@@ -500,10 +564,70 @@ export default function BugReportsPage() {
                   required
                 />
               </div>
+
+              {/* Screenshot attachment */}
+              <div>
+                <label
+                  className="block text-xs font-medium mb-1.5"
+                  style={{ color: 'var(--color-white-muted)' }}
+                >
+                  Screenshot <span style={{ opacity: 0.5 }}>(optional)</span>
+                </label>
+                {imagePreviewUrl ? (
+                  <div className="relative rounded-lg overflow-hidden" style={{ border: 'var(--border-default)' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imagePreviewUrl}
+                      alt="Screenshot preview"
+                      className="w-full object-contain"
+                      style={{ maxHeight: 180, background: 'var(--color-bg-surface)', display: 'block' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={removeImage}
+                      className="absolute top-2 right-2 p-1 rounded-full hover:opacity-80 transition-opacity"
+                      style={{ background: 'rgba(0,0,0,0.6)' }}
+                    >
+                      <X size={11} style={{ color: '#fff' }} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-lg text-sm transition-opacity hover:opacity-70"
+                    style={{
+                      border: '1px dashed var(--color-white-subtle)',
+                      color: 'var(--color-white-muted)',
+                    }}
+                  >
+                    <ImageIcon size={14} />
+                    Attach screenshot
+                  </button>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+              </div>
+
+              {/* Error message */}
+              {submitError && (
+                <p
+                  className="text-xs px-3 py-2 rounded-lg"
+                  style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}
+                >
+                  {submitError}
+                </p>
+              )}
+
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={closeForm}
                   className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity hover:opacity-80"
                   style={{
                     background: 'var(--color-bg-surface)',
@@ -520,7 +644,7 @@ export default function BugReportsPage() {
                   style={{ background: 'var(--color-accent)', color: '#fff' }}
                 >
                   {submitting && <RefreshCw size={13} className="animate-spin" />}
-                  Submit Report
+                  {submitting ? 'Submitting…' : 'Submit Report'}
                 </button>
               </div>
             </form>
