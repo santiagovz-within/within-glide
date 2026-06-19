@@ -40,7 +40,7 @@ import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, RemoveBgNodeData, MediaInputNodeData, UpscaleMediaNodeData } from '@/types';
+import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, VideoInputNodeData, RemoveBgNodeData, MediaInputNodeData, UpscaleMediaNodeData } from '@/types';
 import { MODELS } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
@@ -414,6 +414,42 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
                 ...(prompt !== undefined ? { prompt } : {}),
               } as NodeData,
             };
+            continue;
+          }
+
+          // ── start_frame / end_frame → videoGenNode ─────────────────────
+          if (edge.targetHandle === 'start_frame' || edge.targetHandle === 'end_frame') {
+            let imageUrl: string | undefined;
+            if (sourceNode.type === 'imageInputNode')        imageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
+            else if (sourceNode.type === 'mediaInputNode')   imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
+            else if (sourceNode.type === 'upscaleMediaNode') imageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl;
+            else if (sourceNode.type === 'imageGenNode')     imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
+            else if (sourceNode.type === 'upscaleNode')      imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
+            else if (sourceNode.type === 'modifyNode')       imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
+            else if (sourceNode.type === 'selectNode')       imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
+            else if (sourceNode.type === 'removeBgNode')     imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
+            if (imageUrl) {
+              const field = edge.targetHandle === 'start_frame' ? 'startFrameUrl' : 'endFrameUrl';
+              newNodes[tgtIdx] = {
+                ...newNodes[tgtIdx],
+                data: { ...newNodes[tgtIdx].data, [field]: imageUrl } as NodeData,
+              };
+            }
+            continue;
+          }
+
+          // ── video / video_in → videoUrl on target ──────────────────────
+          if (edge.targetHandle === 'video' || edge.targetHandle === 'video_in') {
+            let videoUrl: string | undefined;
+            if (sourceNode.type === 'videoGenNode')        videoUrl = (sourceNode.data as VideoGenNodeData).videoUrl;
+            else if (sourceNode.type === 'videoInputNode') videoUrl = (sourceNode.data as VideoInputNodeData).videoUrl;
+            else if (sourceNode.type === 'mediaInputNode') videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
+            if (videoUrl) {
+              newNodes[tgtIdx] = {
+                ...newNodes[tgtIdx],
+                data: { ...newNodes[tgtIdx].data, videoUrl } as NodeData,
+              };
+            }
             continue;
           }
 
