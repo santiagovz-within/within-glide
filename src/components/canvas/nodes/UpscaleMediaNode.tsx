@@ -142,6 +142,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       case 'mediaInputNode':   inputVideoUrl = (sourceNode.data as MediaInputNodeData).videoUrl; break;
       case 'videoUpscaleNode': inputVideoUrl = (sourceNode.data as VideoUpscaleNodeData).videoUrl; break;
       case 'upscaleMediaNode': inputVideoUrl = (sourceNode.data as UpscaleMediaNodeData).outputVideoUrl; break;
+      case 'modifyNode':       inputVideoUrl = (sourceNode.data as ModifyNodeData).outputVideoUrl; break;
     }
   }
 

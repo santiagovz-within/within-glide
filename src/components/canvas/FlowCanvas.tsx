@@ -444,6 +444,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
             if (sourceNode.type === 'videoGenNode')        videoUrl = (sourceNode.data as VideoGenNodeData).videoUrl;
             else if (sourceNode.type === 'videoInputNode') videoUrl = (sourceNode.data as VideoInputNodeData).videoUrl;
             else if (sourceNode.type === 'mediaInputNode') videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
+            else if (sourceNode.type === 'modifyNode')     videoUrl = (sourceNode.data as ModifyNodeData).outputVideoUrl;
             if (videoUrl) {
               newNodes[tgtIdx] = {
                 ...newNodes[tgtIdx],
@@ -515,6 +516,15 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         return false;
       }
 
+      // modifyNode's image input accepts image or video (video triggers outpaint mode)
+      if (targetNode.type === 'modifyNode' && conn.targetHandle === 'image') {
+        if (srcType === 'image' || srcType === 'video') return true;
+        if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
+        setInvalidToast(true);
+        invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
+        return false;
+      }
+
       if (!srcType || !tgtType) return true;
 
       if (srcType !== tgtType) {
@@ -557,6 +567,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
       if (targetNodeType === 'videoToGifNode')    return 'video';
       if (targetNodeType === 'videoUpscaleNode')  return 'video_in';
       if (targetNodeType === 'upscaleMediaNode')  return 'media';
+      if (targetNodeType === 'modifyNode')        return 'image';
     }
     return null;
   }
@@ -734,6 +745,7 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         else if (sourceNode?.type === 'mediaInputNode')   videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
         else if (sourceNode?.type === 'upscaleMediaNode') videoUrl = (sourceNode.data as UpscaleMediaNodeData).outputVideoUrl;
         else if (sourceNode?.type === 'videoUpscaleNode') videoUrl = (sourceNode.data as { videoUrl?: string }).videoUrl;
+        else if (sourceNode?.type === 'modifyNode')       videoUrl = (sourceNode.data as ModifyNodeData).outputVideoUrl;
         if (videoUrl) updateNodeData(connection.target, { videoUrl });
       }
     },
