@@ -70,7 +70,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ requestId: request_id, status: 'pending' });
   } catch (err) {
-    console.error('[video-outpaint] submit error:', err);
-    return NextResponse.json({ error: 'Failed to submit outpaint job', details: String(err) }, { status: 500 });
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error('[video-outpaint] submit error:', detail, err);
+    return NextResponse.json({ error: 'Failed to submit outpaint job', details: detail }, { status: 500 });
   }
 }

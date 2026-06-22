@@ -439,6 +439,7 @@ function VideoOutpaintCanvas({ videoUrl, srcAspect, tgtAspect }: {
 
 export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const promptSectionRef = useRef<HTMLDivElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -728,11 +729,18 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
   // ── Video: Outpaint generate + poll ────────────────────────────────────────
 
+  function stopGenerating() {
+    isGeneratingRef.current = false;
+    setIsGenerating(false);
+  }
+
   async function handleVideoOutpaintGenerate() {
-    if (isGenerating || !inputVideoUrl) return;
+    // Synchronous ref guard prevents double-fire before React re-renders the disabled button
+    if (isGeneratingRef.current || !inputVideoUrl) return;
     const prompt = data.outpaintPrompt?.trim() || VIDEO_OUTPAINT_DEFAULT_PROMPT;
     if (!prompt) return;
 
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     updateData({ status: 'processing' });
 
@@ -758,22 +766,23 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         pollVideoOutpaint(result.requestId);
       } else {
         updateData({ status: 'error' });
-        setIsGenerating(false);
+        stopGenerating();
       }
     } catch {
       updateData({ status: 'error' });
-      setIsGenerating(false);
+      stopGenerating();
     }
   }
 
   function pollVideoOutpaint(requestId: string) {
     let attempts = 0;
+    let consecutiveErrors = 0;
     const interval = setInterval(async () => {
       attempts++;
       if (attempts > 120) {
         clearInterval(interval);
         updateData({ status: 'error' });
-        setIsGenerating(false);
+        stopGenerating();
         return;
       }
       try {
@@ -785,13 +794,25 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
           }));
-          setIsGenerating(false);
-        } else if (result.status === 'failed') {
+          stopGenerating();
+        } else if (result.status === 'failed' || result.status === 'error') {
+          consecutiveErrors++;
+          if (result.status === 'failed' || consecutiveErrors >= 3) {
+            clearInterval(interval);
+            updateData({ status: 'error' });
+            stopGenerating();
+          }
+        } else {
+          consecutiveErrors = 0;
+        }
+      } catch {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) {
           clearInterval(interval);
           updateData({ status: 'error' });
-          setIsGenerating(false);
+          stopGenerating();
         }
-      } catch { /* keep polling */ }
+      }
     }, 5000);
   }
 

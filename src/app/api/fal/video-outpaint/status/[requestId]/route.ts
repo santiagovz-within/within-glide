@@ -61,6 +61,8 @@ export async function GET(
     });
   } catch (err) {
     console.error('[video-outpaint/status] error:', err);
-    return NextResponse.json({ error: 'Status check failed' }, { status: 500 });
+    // Return status: 'error' (not HTTP 500) so the client poll loop can count
+    // consecutive failures and stop rather than polling indefinitely.
+    return NextResponse.json({ status: 'error', detail: String(err) });
   }
 }
