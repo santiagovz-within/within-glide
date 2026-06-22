@@ -37,8 +37,6 @@ const ASPECT_PRESETS = [
 ];
 
 const OUTPAINT_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'];
-const OUTPAINT_RESOLUTIONS = ['720p', '1080p'] as const;
-const OUTPAINT_FPS_OPTIONS = [24, 30, 60];
 
 const VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT = 'color distortion, overexposure, static, blurry details, subtitles, style, artwork, painting, frame, still, dim overall tone, worst quality, low quality, JPEG compression artifacts, ugly, mutilated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, motionless frame, cluttered background, three legs, crowded background, walking backwards';
 
@@ -810,6 +808,8 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const hasOutpaintPrompt  = !!(data.outpaintPrompt?.trim());
   const hasVideoOutput     = inputMediaType === 'video' && !!data.outputVideoUrl;
 
+  const nodeTitle = inputMediaType === 'video' ? 'Modify (Video Expand)' : 'Modify';
+
   // ── Footer ────────────────────────────────────────────────────────────────────
 
   const footer = (
@@ -867,7 +867,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
   return (
     <NodeWrapper
-      title="Modify"
+      title={nodeTitle}
       icon={<Sliders size={14} />}
       status={data.status}
       selected={selected}
@@ -877,7 +877,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       footer={footer}
     >
       {/* Handles */}
-      {inputMediaType !== 'video' && mode === 'prompt' && (
+      {inputMediaType === 'image' && mode === 'prompt' && (
         <TypedHandle
           type="target"
           position={Position.Left}
@@ -912,7 +912,8 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       {/* ── No input ── */}
       {inputMediaType === null && (
         <div
-          className="flex items-center justify-center rounded-lg mb-3"
+          ref={imageSlotRef}
+          className="flex items-center justify-center rounded-lg"
           style={{ height: 52, background: 'var(--color-bg-surface)', border: '1px dashed rgba(255,255,255,0.12)', color: 'var(--color-white-muted)', fontSize: 12 }}
         >
           Connect an image or video
@@ -1166,41 +1167,19 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           <div className="flex gap-2 mb-3">
             <div className="flex-1">
               <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Resolution</label>
-              <div className="flex gap-1">
-                {OUTPAINT_RESOLUTIONS.map((r) => (
-                  <button
-                    key={r}
-                    className="nodrag flex-1 py-1 text-xs font-medium rounded-lg transition-colors"
-                    style={{
-                      background: outpaintResolution === r ? '#fff' : 'var(--color-bg-surface)',
-                      color:      outpaintResolution === r ? '#000' : 'var(--color-white-muted)',
-                      border: 'var(--border-default)',
-                    }}
-                    onClick={() => updateData({ outpaintResolution: r })}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
+              <NodeSelect
+                options={['720p', '1080p']}
+                value={outpaintResolution}
+                onChange={(v) => updateData({ outpaintResolution: v as '720p' | '1080p' })}
+              />
             </div>
             <div className="flex-1">
               <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>FPS</label>
-              <div className="flex gap-1">
-                {OUTPAINT_FPS_OPTIONS.map((f) => (
-                  <button
-                    key={f}
-                    className="nodrag flex-1 py-1 text-xs font-medium rounded-lg transition-colors"
-                    style={{
-                      background: outpaintFps === f ? '#fff' : 'var(--color-bg-surface)',
-                      color:      outpaintFps === f ? '#000' : 'var(--color-white-muted)',
-                      border: 'var(--border-default)',
-                    }}
-                    onClick={() => updateData({ outpaintFps: f })}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
+              <NodeSelect
+                options={['24', '30', '60']}
+                value={String(outpaintFps)}
+                onChange={(v) => updateData({ outpaintFps: Number(v) })}
+              />
             </div>
           </div>
 
@@ -1213,7 +1192,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
               placeholder="Describe the outpainted surroundings…"
               value={data.outpaintPrompt ?? ''}
               onChange={(e) => { autoResize(e.target); updateData({ outpaintPrompt: e.target.value }); }}
-              style={{ background: 'var(--color-bg-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 10px', color: 'var(--color-white)', resize: 'none', overflow: 'hidden', minHeight: 56, width: '100%' }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--color-white)', resize: 'none', overflow: 'hidden', minHeight: 40 }}
             />
           </div>
 
@@ -1225,7 +1204,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
               rows={3}
               value={data.outpaintNegativePrompt ?? VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT}
               onChange={(e) => { autoResize(e.target); updateData({ outpaintNegativePrompt: e.target.value }); }}
-              style={{ background: 'var(--color-bg-surface)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '8px 10px', color: 'var(--color-white-muted)', resize: 'none', overflow: 'hidden', minHeight: 72, width: '100%' }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--color-white-muted)', resize: 'none', overflow: 'hidden', minHeight: 40 }}
             />
           </div>
 
