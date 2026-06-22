@@ -442,6 +442,8 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const [selectedIndex, setSelectedIndex] = useState(0);
   const promptSectionRef = useRef<HTMLDivElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const outpaintPromptRef = useRef<HTMLTextAreaElement>(null);
+  const outpaintNegPromptRef = useRef<HTMLTextAreaElement>(null);
   const imageSlotRef = useRef<HTMLDivElement>(null);
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [imageHandleTop, setImageHandleTop]   = useState(130);
@@ -609,6 +611,11 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   useEffect(() => {
     if (promptTextareaRef.current) autoResize(promptTextareaRef.current);
   }, [data.prompt]);
+
+  useLayoutEffect(() => {
+    if (outpaintPromptRef.current) autoResize(outpaintPromptRef.current);
+    if (outpaintNegPromptRef.current) autoResize(outpaintNegPromptRef.current);
+  });
 
   useLayoutEffect(() => {
     if (promptSectionRef.current) {
@@ -1188,6 +1195,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           <div className="mb-3">
             <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Prompt</label>
             <textarea
+              ref={outpaintPromptRef}
               className="w-full text-xs outline-none nodrag"
               rows={2}
               placeholder="Describe the outpainted surroundings…"
@@ -1201,6 +1209,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           <div className="mb-3">
             <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Negative Prompt</label>
             <textarea
+              ref={outpaintNegPromptRef}
               className="w-full text-xs outline-none nodrag"
               rows={3}
               value={data.outpaintNegativePrompt ?? VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT}
