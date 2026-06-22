@@ -38,6 +38,7 @@ const ASPECT_PRESETS = [
 
 const OUTPAINT_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'];
 
+const VIDEO_OUTPAINT_DEFAULT_PROMPT = 'This same scene, extending the environment naturally beyond the original frame.';
 const VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT = 'color distortion, overexposure, static, blurry details, subtitles, style, artwork, painting, frame, still, dim overall tone, worst quality, low quality, JPEG compression artifacts, ugly, mutilated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, motionless frame, cluttered background, three legs, crowded background, walking backwards';
 
 type AnchorKey = 'tl' | 't' | 'tr' | 'l' | 'c' | 'r' | 'bl' | 'b' | 'br';
@@ -722,7 +723,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
   async function handleVideoOutpaintGenerate() {
     if (isGenerating || !inputVideoUrl) return;
-    const prompt = data.outpaintPrompt?.trim();
+    const prompt = data.outpaintPrompt?.trim() || VIDEO_OUTPAINT_DEFAULT_PROMPT;
     if (!prompt) return;
 
     setIsGenerating(true);
@@ -805,7 +806,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const outpaintAspect     = data.outpaintAspectRatio ?? '16:9';
   const outpaintResolution = data.outpaintResolution  ?? '720p';
   const outpaintFps        = data.outpaintFps         ?? 24;
-  const hasOutpaintPrompt  = !!(data.outpaintPrompt?.trim());
+  const hasOutpaintPrompt  = !!(data.outpaintPrompt?.trim() ?? VIDEO_OUTPAINT_DEFAULT_PROMPT);
   const hasVideoOutput     = inputMediaType === 'video' && !!data.outputVideoUrl;
 
   const nodeTitle = inputMediaType === 'video' ? 'Modify (Video Expand)' : 'Modify';
@@ -1190,7 +1191,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
               className="w-full text-xs outline-none nodrag"
               rows={2}
               placeholder="Describe the outpainted surroundings…"
-              value={data.outpaintPrompt ?? ''}
+              value={data.outpaintPrompt ?? VIDEO_OUTPAINT_DEFAULT_PROMPT}
               onChange={(e) => { autoResize(e.target); updateData({ outpaintPrompt: e.target.value }); }}
               style={{ background: 'transparent', border: 'none', color: 'var(--color-white)', resize: 'none', overflow: 'hidden', minHeight: 40 }}
             />
