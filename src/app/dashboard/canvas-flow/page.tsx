@@ -9,6 +9,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import type { Flow } from '@/types';
 import { formatDistanceToNow } from '@/lib/utils/date';
+import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -195,6 +196,7 @@ export default function CanvasFlowPage() {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editingBaseId, setEditingBaseId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin]     = useState(false);
+  const [resolvedThumbs, setResolvedThumbs] = useState<Map<string, string>>(new Map());
 
   const supabase = createClient();
 
@@ -220,6 +222,15 @@ export default function CanvasFlowPage() {
   }, [supabase]);
 
   useEffect(() => { loadFlows(); }, [loadFlows]);
+
+  // Batch-resolve all thumbnail URLs (both gcs: refs and old stored signed URLs).
+  useEffect(() => {
+    const allUrls = [...flows, ...baseFlows]
+      .map(f => f.thumbnail_url)
+      .filter(Boolean) as string[];
+    if (allUrls.length === 0) return;
+    resolveGcsRefs(allUrls).then(setResolvedThumbs);
+  }, [flows, baseFlows]);
 
   async function createNewFlow(
     title = 'Untitled Flow',
@@ -321,7 +332,7 @@ export default function CanvasFlowPage() {
                   >
                     {bf.thumbnail_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={bf.thumbnail_url} alt={bf.title} className="w-full h-full object-cover" />
+                      <img src={resolvedThumbs.get(bf.thumbnail_url) ?? bf.thumbnail_url} alt={bf.title} className="w-full h-full object-cover" />
                     ) : icon ? (
                       <span style={{ fontSize: 36 }}>{icon}</span>
                     ) : (
@@ -488,6 +499,7 @@ export default function CanvasFlowPage() {
               <FlowCard
                 key={flow.id}
                 flow={flow}
+                resolvedThumbnailUrl={flow.thumbnail_url ? resolvedThumbs.get(flow.thumbnail_url) : undefined}
                 menuOpen={menuOpenId === flow.id}
                 onMenuToggle={(e) => {
                   e.stopPropagation();
@@ -515,6 +527,7 @@ export default function CanvasFlowPage() {
 
 function FlowCard({
   flow,
+  resolvedThumbnailUrl,
   menuOpen,
   onMenuToggle,
   onOpen,
@@ -522,12 +535,14 @@ function FlowCard({
   onDelete,
 }: {
   flow: Flow;
+  resolvedThumbnailUrl?: string;
   menuOpen: boolean;
   onMenuToggle: (e: React.MouseEvent) => void;
   onOpen: () => void;
   onRename: () => void;
   onDelete: () => void;
 }) {
+  const thumb = resolvedThumbnailUrl ?? flow.thumbnail_url;
   return (
     <CardShell onClick={onOpen}>
       {/* Thumbnail */}
@@ -535,9 +550,9 @@ function FlowCard({
         className="aspect-video flex items-center justify-center rounded-t-xl overflow-hidden"
         style={{ background: 'var(--color-bg-surface)' }}
       >
-        {flow.thumbnail_url ? (
+        {thumb ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={flow.thumbnail_url} alt={flow.title} className="w-full h-full object-cover" />
+          <img src={thumb} alt={flow.title} className="w-full h-full object-cover" />
         ) : (
           <Workflow size={32} className="opacity-20" style={{ color: 'var(--color-white)' }} />
         )}

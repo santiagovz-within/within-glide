@@ -11,20 +11,50 @@ export function gcsPathFromRef(ref: string): string {
 }
 
 /**
- * Batch-resolves GCS refs to signed read URLs via the `/api/media/sign` endpoint.
- * Non-GCS URLs pass through unchanged.
- * Returns a Map of original ref → resolved URL.
+ * Returns true when `url` is an old stored signed GCS URL
+ * (https://storage.googleapis.com/<bucket>/<path>?...X-Goog-Signature=...).
+ * These were stored directly in the DB before canonical gcs: refs were adopted,
+ * and they expire after 7 days.
+ */
+export function isSignedGcsUrl(url: string | null | undefined): url is string {
+  return (
+    typeof url === 'string' &&
+    url.startsWith('https://storage.googleapis.com/') &&
+    url.includes('X-Goog-Signature=')
+  );
+}
+
+/**
+ * Extracts the raw GCS object path from a stored signed URL.
+ * Returns null if the URL doesn't match the expected pattern.
+ */
+export function extractGcsPathFromSignedUrl(url: string): string | null {
+  // Pattern: https://storage.googleapis.com/<bucket>/<path>?<query>
+  const withoutBase = url.slice('https://storage.googleapis.com/'.length);
+  const slashIdx = withoutBase.indexOf('/');
+  if (slashIdx === -1) return null;
+  const pathWithQuery = withoutBase.slice(slashIdx + 1);
+  const qIdx = pathWithQuery.indexOf('?');
+  const encoded = qIdx === -1 ? pathWithQuery : pathWithQuery.slice(0, qIdx);
+  return decodeURIComponent(encoded);
+}
+
+/**
+ * Batch-resolves GCS refs and old stored signed URLs to fresh signed read URLs
+ * via the `/api/media/sign` endpoint.
+ * Non-GCS values pass through unchanged.
+ * Returns a Map of original ref/url → resolved URL.
  */
 export async function resolveGcsRefs(
   refs: (string | null | undefined)[],
 ): Promise<Map<string, string>> {
-  const gcsPaths = refs.filter(isGcsRef) as string[];
-  if (gcsPaths.length === 0) return new Map();
+  const toSign = refs.filter(r => isGcsRef(r) || isSignedGcsUrl(r)) as string[];
+  if (toSign.length === 0) return new Map();
 
   const res = await fetch('/api/media/sign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ paths: gcsPaths }),
+    body: JSON.stringify({ paths: toSign }),
   });
   if (!res.ok) return new Map();
   const { urls } = await res.json() as { urls: Record<string, string> };
@@ -32,11 +62,11 @@ export async function resolveGcsRefs(
 }
 
 /**
- * Resolves a single URL: if it's a GCS ref, fetches a signed URL;
- * otherwise returns it unchanged.
+ * Resolves a single URL: if it's a GCS ref or an old stored signed URL,
+ * fetches a fresh signed URL; otherwise returns it unchanged.
  */
 export async function resolveMediaUrl(url: string): Promise<string> {
-  if (!isGcsRef(url)) return url;
+  if (!isGcsRef(url) && !isSignedGcsUrl(url)) return url;
   const map = await resolveGcsRefs([url]);
   return map.get(url) ?? url;
 }

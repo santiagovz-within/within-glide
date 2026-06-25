@@ -20,10 +20,11 @@ export async function POST(request: NextRequest) {
     const slug = flowId ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const objectPath = `thumbnails/${user.id}/${slug}.jpg`;
 
-    await uploadToGCS(buffer, objectPath, 'image/jpeg');
+    const ref = await uploadToGCS(buffer, objectPath, 'image/jpeg');
     const url = await getSignedReadUrl(objectPath);
 
-    return NextResponse.json({ url });
+    // Return both: `ref` (canonical gcs: path) for DB storage, `url` for immediate display.
+    return NextResponse.json({ url, ref });
   } catch (err) {
     console.error('Thumbnail upload error:', err);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

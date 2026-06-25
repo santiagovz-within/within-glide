@@ -41,13 +41,11 @@ export default function FlowEditorPage() {
   const [isTestUser, setIsTestUser] = useState(false);
 
   const loadFlow = useCallback(async () => {
-    const { data } = await supabase
-      .from('flows')
-      .select('*')
-      .eq('id', flowId)
-      .single();
+    const res = await fetch(`/api/flows/${flowId}`);
+    if (!res.ok) return;
+    const { data } = await res.json();
     if (data) setCurrentFlow(data);
-  }, [flowId, supabase, setCurrentFlow]);
+  }, [flowId, setCurrentFlow]);
 
   useEffect(() => {
     async function checkTestUser() {
@@ -85,8 +83,8 @@ export default function FlowEditorPage() {
               body: JSON.stringify({ dataUrl, flowId }),
             });
             if (res.ok) {
-              const { url } = await res.json();
-              thumbnail = url ?? null;
+              const { ref } = await res.json();
+              thumbnail = ref ?? null;
             }
           }
         }

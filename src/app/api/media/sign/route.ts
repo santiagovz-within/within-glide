@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { signGcsRef, isGcsRef } from '@/lib/gcs';
+import { signGcsRef, isGcsRef, getSignedReadUrl } from '@/lib/gcs';
+import { isSignedGcsUrl, extractGcsPathFromSignedUrl } from '@/lib/utils/mediaUtils';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -12,9 +13,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ urls: {} });
   }
 
+  // Accept both canonical gcs: refs (new records) and stored signed GCS URLs (old records).
+  // Signed URLs may be stale or have been signed with a malformed key — always re-sign fresh.
+  const signable = paths.filter(p => isGcsRef(p) || isSignedGcsUrl(p));
+
   const entries = await Promise.all(
-    paths.filter(isGcsRef).map(async (ref) => {
-      const url = await signGcsRef(ref);
+    signable.map(async (ref) => {
+      let url: string;
+      if (isGcsRef(ref)) {
+        url = await signGcsRef(ref);
+      } else {
+        const path = extractGcsPathFromSignedUrl(ref)!;
+        url = await getSignedReadUrl(path);
+      }
       return [ref, url] as [string, string];
     })
   );

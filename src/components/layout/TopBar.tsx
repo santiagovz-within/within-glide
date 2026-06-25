@@ -17,8 +17,8 @@ async function uploadThumbnailToGCS(dataUrl: string, flowId: string): Promise<st
       body: JSON.stringify({ dataUrl, flowId }),
     });
     if (!res.ok) return null;
-    const { url } = await res.json();
-    return url ?? null;
+    const { ref } = await res.json();
+    return ref ?? null;
   } catch {
     return null;
   }
