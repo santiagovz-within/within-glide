@@ -363,16 +363,23 @@ function AnchorPicker({ value, onChange }: { value: AnchorKey; onChange: (v: Anc
 
 // ── VideoOutpaintCanvas ────────────────────────────────────────────────────────
 // Read-only preview: shows the source video framed inside the target aspect ratio.
+// Measures actual video dimensions via onLoadedMetadata instead of trusting
+// source-node metadata, which is often missing or wrong for video inputs.
 
-function VideoOutpaintCanvas({ videoUrl, srcAspect, tgtAspect }: {
+function VideoOutpaintCanvas({ videoUrl, tgtAspect }: {
   videoUrl?: string;
-  srcAspect: string;
   tgtAspect: string;
 }) {
-  const [srcW, srcH] = srcAspect.split(':').map(Number);
+  const [videoSize, setVideoSize] = useState<{ w: number; h: number } | null>(null);
+
+  // Reset measured size whenever the source URL changes.
+  useEffect(() => { setVideoSize(null); }, [videoUrl]);
+
   const [tgtW, tgtH] = tgtAspect.split(':').map(Number);
-  const srcRatio = srcW / srcH;
   const tgtRatio = tgtW / tgtH;
+
+  // Use measured dimensions; fall back to filling the whole target while loading.
+  const srcRatio = videoSize ? videoSize.w / videoSize.h : tgtRatio;
 
   // Fit target into CANVAS_MAX_W × CANVAS_MAX_H
   const rawH = CANVAS_MAX_W / tgtRatio;
@@ -393,7 +400,8 @@ function VideoOutpaintCanvas({ videoUrl, srcAspect, tgtAspect }: {
     srcY = Math.round((tgtDispH - srcDispH) / 2);
   }
 
-  const hasExpansion = Math.abs(tgtRatio - srcRatio) > 0.01;
+  // Only show expansion chrome once we've actually measured the video.
+  const hasExpansion = videoSize !== null && Math.abs(tgtRatio - srcRatio) > 0.01;
   const STRIPE = 'repeating-linear-gradient(-45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 3px, transparent 3px, transparent 7px)';
 
   return (
@@ -401,6 +409,23 @@ function VideoOutpaintCanvas({ videoUrl, srcAspect, tgtAspect }: {
       className="nodrag mx-auto mb-3"
       style={{ position: 'relative', width: tgtDispW, height: tgtDispH, userSelect: 'none', flexShrink: 0 }}
     >
+      {/* Hidden video used only to read videoWidth / videoHeight on load */}
+      {videoUrl && (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <video
+          key={videoUrl}
+          src={videoUrl}
+          muted
+          playsInline
+          preload="metadata"
+          style={{ display: 'none' }}
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget;
+            if (v.videoWidth && v.videoHeight) setVideoSize({ w: v.videoWidth, h: v.videoHeight });
+          }}
+        />
+      )}
+
       {hasExpansion && (
         <div style={{ position: 'absolute', inset: 0, background: STRIPE, borderRadius: 6, border: '1px solid rgba(255,255,255,0.08)' }} />
       )}
@@ -1167,7 +1192,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           {/* Outpaint canvas preview */}
           <VideoOutpaintCanvas
             videoUrl={inputVideoUrl}
-            srcAspect={sourceVideoAspect}
             tgtAspect={outpaintAspect}
           />
 
