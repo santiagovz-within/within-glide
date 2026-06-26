@@ -15,8 +15,9 @@ import { useFlowStore } from '@/lib/stores/flowStore';
 const FRAME_ROW_HEIGHT = 36;
 const FRAME_ROW_GAP = 25;
 
-const KLING_ASPECT_RATIOS  = ['16:9', '9:16', '1:1'];
+const KLING_ASPECT_RATIOS    = ['16:9', '9:16', '1:1'];
 const SEEDANCE_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
+const SEEDANCE_RESOLUTIONS   = ['720p', '1080p', '4k'];
 
 const DURATION_OPTIONS = ['3s', '5s', '8s', '10s'];
 const DURATION_MAP: Record<string, number> = { '3s': 3, '5s': 5, '8s': 8, '10s': 10 };
@@ -152,6 +153,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           startFrameUrl: data.startFrameUrl,
           endFrameUrl: data.endFrameUrl,
           generateAudio: data.generateAudio ?? true,
+          seedanceResolution: data.seedanceResolution ?? '720p',
           sourceType: 'canvas',
           nodeId: id,
         }),
@@ -361,7 +363,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         </>
       )}
 
-      <div className="grid grid-cols-2 gap-2 mb-3">
+      <div className={`grid gap-2 mb-3 ${isSeedance ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <div>
           <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Aspect</label>
           <NodeSelect
@@ -378,6 +380,16 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             onChange={(v) => updateData({ duration: DURATION_MAP[v] ?? 5 })}
           />
         </div>
+        {isSeedance && (
+          <div>
+            <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Resolution</label>
+            <NodeSelect
+              options={SEEDANCE_RESOLUTIONS}
+              value={data.seedanceResolution ?? '720p'}
+              onChange={(v) => updateData({ seedanceResolution: v as '720p' | '1080p' | '4k' })}
+            />
+          </div>
+        )}
       </div>
 
       {/* Frame reference slots */}
