@@ -438,7 +438,7 @@ export default function SettingsPage() {
           </h2>
           <div
             className="rounded-xl divide-y"
-            style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)', divideColor: 'var(--color-bg-hover)' }}
+            style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
           >
             {/* Theme toggle */}
             <div className="p-4 flex items-center justify-between">
