@@ -4,14 +4,17 @@ import type { Theme } from '@/types';
 
 interface ThemeStore {
   theme: Theme;
+  soundEnabled: boolean;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
+  toggleSound: () => void;
 }
 
 export const useThemeStore = create<ThemeStore>()(
   persist(
     (set, get) => ({
       theme: 'dark',
+      soundEnabled: true,
       setTheme: (theme) => {
         set({ theme });
         if (typeof document !== 'undefined') {
@@ -25,6 +28,7 @@ export const useThemeStore = create<ThemeStore>()(
           document.documentElement.setAttribute('data-theme', next);
         }
       },
+      toggleSound: () => set((s) => ({ soundEnabled: !s.soundEnabled })),
     }),
     {
       name: 'flowcanvas-theme',

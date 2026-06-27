@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useThemeStore } from '@/lib/stores/themeStore';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import { Sun, Moon, LogOut, Copy, Check, RefreshCw, Trash2, ImagePlus, X, Save } from 'lucide-react';
+import { Sun, Moon, LogOut, Copy, Check, RefreshCw, Trash2, ImagePlus, X, Save, Volume2, VolumeX } from 'lucide-react';
 
 function FigmaIcon({ size = 16 }: { size?: number }) {
   return (
@@ -363,7 +363,7 @@ function LoginBackgroundSection() {
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { theme, toggleTheme } = useThemeStore();
+  const { theme, toggleTheme, soundEnabled, toggleSound } = useThemeStore();
   const router = useRouter();
 
   const [email,         setEmail]         = useState('');
@@ -431,41 +431,72 @@ export default function SettingsPage() {
           Settings
         </h1>
 
-        {/* Appearance */}
+        {/* Appearance and UI */}
         <section className="mb-8">
           <h2 className="text-sm font-semibold uppercase tracking-wider mb-4" style={{ color: 'var(--color-white-muted)' }}>
-            Appearance
+            Appearance and UI
           </h2>
           <div
-            className="p-4 rounded-xl flex items-center justify-between"
-            style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
+            className="rounded-xl divide-y"
+            style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)', divideColor: 'var(--color-bg-hover)' }}
           >
-            <div className="flex items-center gap-3">
-              {theme === 'dark' ? (
-                <Moon size={18} style={{ color: 'var(--color-white)' }} />
-              ) : (
-                <Sun size={18} style={{ color: 'var(--color-white)' }} />
-              )}
-              <div>
-                <p className="text-sm font-medium" style={{ color: 'var(--color-white)' }}>
-                  {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-white-muted)' }}>
-                  {theme === 'dark' ? 'Using dark theme' : 'Using light theme'}
-                </p>
+            {/* Theme toggle */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {theme === 'dark' ? (
+                  <Moon size={18} style={{ color: 'var(--color-white)' }} />
+                ) : (
+                  <Sun size={18} style={{ color: 'var(--color-white)' }} />
+                )}
+                <div>
+                  <p className="text-sm font-medium" style={{ color: 'var(--color-white)' }}>
+                    {theme === 'dark' ? 'Dark Mode' : 'Light Mode'}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-white-muted)' }}>
+                    {theme === 'dark' ? 'Using dark theme' : 'Using light theme'}
+                  </p>
+                </div>
               </div>
+              <button
+                onClick={toggleTheme}
+                className="relative w-12 h-6 rounded-full transition-colors duration-200"
+                style={{ background: theme === 'dark' ? 'var(--color-accent)' : 'var(--color-bg-hover)' }}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm"
+                  style={{ transform: theme === 'dark' ? 'translateX(24px)' : 'translateX(0)' }}
+                />
+              </button>
             </div>
 
-            <button
-              onClick={toggleTheme}
-              className="relative w-12 h-6 rounded-full transition-colors duration-200"
-              style={{ background: theme === 'dark' ? 'var(--color-accent)' : 'var(--color-bg-hover)' }}
-            >
-              <span
-                className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm"
-                style={{ transform: theme === 'dark' ? 'translateX(24px)' : 'translateX(0)' }}
-              />
-            </button>
+            {/* Sound notifications toggle */}
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {soundEnabled ? (
+                  <Volume2 size={18} style={{ color: 'var(--color-white)' }} />
+                ) : (
+                  <VolumeX size={18} style={{ color: 'var(--color-white-muted)' }} />
+                )}
+                <div>
+                  <p className="text-sm font-medium" style={{ color: 'var(--color-white)' }}>
+                    Sound Notifications
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-white-muted)' }}>
+                    {soundEnabled ? 'Play a sound when a generation completes' : 'Sound notifications are off'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={toggleSound}
+                className="relative w-12 h-6 rounded-full transition-colors duration-200"
+                style={{ background: soundEnabled ? 'var(--color-accent)' : 'var(--color-bg-hover)' }}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm"
+                  style={{ transform: soundEnabled ? 'translateX(24px)' : 'translateX(0)' }}
+                />
+              </button>
+            </div>
           </div>
         </section>
 
