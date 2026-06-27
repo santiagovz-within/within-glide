@@ -4,6 +4,7 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { Aperture, Play, Download, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { playSuccessSound } from '@/lib/utils/sound';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -140,6 +141,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       if (result.mediaUrls?.length) {
         const newHistory = [...(data.generationHistory ?? []), result.mediaUrls as string[]];
         updateData({ generatedImages: result.mediaUrls, generationHistory: newHistory, status: 'completed' });
+        playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));

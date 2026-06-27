@@ -3,6 +3,7 @@
 import { Position, type NodeProps } from '@xyflow/react';
 import { Film, Play, AlertTriangle, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -163,6 +164,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       if (result.mediaUrls?.[0]) {
         const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
         updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
+        playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:video-propagate', {
           detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
         }));
@@ -194,6 +196,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           clearInterval(interval);
           const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
           updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
+          playSuccessSound();
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
           }));

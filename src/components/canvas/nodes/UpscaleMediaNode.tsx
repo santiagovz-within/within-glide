@@ -3,6 +3,7 @@
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play, Maximize2, Download } from 'lucide-react';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -212,6 +213,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       const result = await res.json();
       if (result.mediaUrls?.[0]) {
         dispatchUpdate({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
@@ -247,6 +249,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       const result = await res.json();
       if (result.mediaUrls?.[0]) {
         dispatchUpdate({ outputVideoUrl: result.mediaUrls[0], status: 'completed' });
+        playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:video-propagate', {
           detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
         }));
@@ -279,6 +282,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         if (result.status === 'completed' && result.mediaUrls?.[0]) {
           clearInterval(interval);
           dispatchUpdate({ outputVideoUrl: result.mediaUrls[0], status: 'completed' });
+          playSuccessSound();
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
           }));

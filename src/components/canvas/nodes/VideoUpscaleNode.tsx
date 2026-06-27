@@ -3,6 +3,7 @@
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play, Download } from 'lucide-react';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { playSuccessSound } from '@/lib/utils/sound';
 import { useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -56,6 +57,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
 
       if (result.mediaUrls?.[0]) {
         updateData({ videoUrl: result.mediaUrls[0], status: 'completed' });
+        playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:video-propagate', {
           detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
         }));
@@ -88,6 +90,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
         if (result.status === 'completed' && result.mediaUrls?.[0]) {
           clearInterval(interval);
           updateData({ videoUrl: result.mediaUrls[0], status: 'completed' });
+          playSuccessSound();
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
           }));

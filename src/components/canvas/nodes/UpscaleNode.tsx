@@ -3,6 +3,7 @@
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play, Maximize2, Download } from 'lucide-react';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -160,6 +161,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
 
       if (result.mediaUrls?.[0]) {
         updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));

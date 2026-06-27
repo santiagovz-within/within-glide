@@ -19,6 +19,7 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoToGifNodeData } from '@/types';
 import { downloadFromUrl } from '@/lib/utils/download';
+import { playSuccessSound } from '@/lib/utils/sound';
 import type { FFmpeg } from '@ffmpeg/ffmpeg';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
@@ -306,6 +307,7 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       const url  = URL.createObjectURL(blob);
 
       setGifUrl(url);
+      playSuccessSound();
       setGifSize(blob.size);
       setGifGcsRef(null);
       setProgress(100);
