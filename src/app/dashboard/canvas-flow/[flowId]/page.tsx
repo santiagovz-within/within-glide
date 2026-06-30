@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useCallback, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ReactFlowProvider, type Node } from '@xyflow/react';
 import { FlowCanvas } from '@/components/canvas/FlowCanvas';
 import { TopBar } from '@/components/layout/TopBar';
@@ -33,19 +33,49 @@ function extractThumbnail(nodes: Node<NodeData>[]): string | null {
 export default function FlowEditorPage() {
   const params = useParams<{ flowId: string }>();
   const { flowId } = params;
+  const router = useRouter();
   const {
     setCurrentFlow, nodes, edges,
     isDirty, setDirty, setSaving, setLastSaved, currentFlow,
   } = useFlowStore();
   const supabase = createClient();
   const [isTestUser, setIsTestUser] = useState(false);
+  const [isOwner, setIsOwner] = useState(true);
+  const [isShared, setIsShared] = useState(false);
+  const [isForking, setIsForking] = useState(false);
 
   const loadFlow = useCallback(async () => {
     const res = await fetch(`/api/flows/${flowId}`);
     if (!res.ok) return;
-    const { data } = await res.json();
-    if (data) setCurrentFlow(data);
+    const { data, isOwner: owner } = await res.json();
+    if (data) {
+      setCurrentFlow(data);
+      setIsOwner(owner ?? true);
+      setIsShared(data.is_shared ?? false);
+    }
   }, [flowId, setCurrentFlow]);
+
+  async function handleToggleShare() {
+    const next = !isShared;
+    setIsShared(next);
+    await fetch(`/api/flows/${flowId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_shared: next }),
+    });
+  }
+
+  async function handleFork() {
+    setIsForking(true);
+    try {
+      const res = await fetch(`/api/flows/${flowId}/fork`, { method: 'POST' });
+      if (!res.ok) return;
+      const { flowId: forkedId } = await res.json();
+      router.push(`/dashboard/canvas-flow/${forkedId}`);
+    } finally {
+      setIsForking(false);
+    }
+  }
 
   useEffect(() => {
     async function checkTestUser() {
@@ -68,7 +98,7 @@ export default function FlowEditorPage() {
 
   // Auto-save debounced — also extracts and saves thumbnail
   useEffect(() => {
-    if (!isDirty || !currentFlow) return;
+    if (!isDirty || !currentFlow || !isOwner) return;
     const timer = setTimeout(async () => {
       setSaving(true);
       try {
@@ -131,8 +161,39 @@ export default function FlowEditorPage() {
   return (
     <ReactFlowProvider>
       <div className="relative w-full h-full">
-        <TopBar flowId={flowId} />
-        <FlowCanvas isTestUser={isTestUser} />
+        <TopBar
+          flowId={flowId}
+          isOwner={isOwner}
+          isShared={isShared}
+          onToggleShare={handleToggleShare}
+        />
+
+        {/* Banner shown to non-owners viewing a shared flow */}
+        {!isOwner && (
+          <div
+            className="absolute top-20 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm pointer-events-auto"
+            style={{
+              background: 'var(--color-bg-elevated)',
+              border: 'var(--border-default)',
+              boxShadow: 'var(--shadow-node)',
+            }}
+          >
+            <span style={{ color: 'var(--color-white-muted)' }}>
+              Viewing <span style={{ color: 'var(--color-white)' }}>{currentFlow?.title ?? 'this flow'}</span>
+            </span>
+            <div className="w-px h-4" style={{ background: 'var(--color-white-subtle)' }} />
+            <button
+              onClick={handleFork}
+              disabled={isForking}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+              style={{ background: 'var(--color-accent)', color: '#fff' }}
+            >
+              {isForking ? 'Forking...' : 'Fork to my workspace'}
+            </button>
+          </div>
+        )}
+
+        <FlowCanvas isTestUser={isTestUser} readOnly={!isOwner} />
       </div>
     </ReactFlowProvider>
   );

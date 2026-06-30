@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, Cloud, UploadCloud, RotateCcw, RotateCw, Share2, BookOpen } from 'lucide-react';
+import { ChevronRight, Cloud, UploadCloud, RotateCcw, RotateCw, Share2, Check, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
@@ -44,15 +44,19 @@ function extractThumbnail(nodes: Node<NodeData>[]): string | null {
 
 interface TopBarProps {
   flowId: string;
+  isOwner?: boolean;
+  isShared?: boolean;
+  onToggleShare?: () => void;
 }
 
-export function TopBar({ flowId }: TopBarProps) {
+export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare }: TopBarProps) {
   const { currentFlow, isDirty, isSaving, nodes, edges, setDirty, setSaving, setLastSaved } = useFlowStore();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [savingBase, setSavingBase] = useState(false);
   const [isBaseFlow, setIsBaseFlow] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const supabase = createClient();
 
@@ -154,6 +158,13 @@ export function TopBar({ flowId }: TopBarProps) {
     }
   }
 
+  function handleShare() {
+    if (!isShared && onToggleShare) onToggleShare();
+    navigator.clipboard.writeText(window.location.href).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
     <div
       className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between px-4 py-2.5 rounded-xl pointer-events-none"
@@ -213,54 +224,63 @@ export function TopBar({ flowId }: TopBarProps) {
 
       {/* Right: actions */}
       <div className="flex items-center gap-2 pointer-events-auto">
-        <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Undo" disabled>
-          <RotateCcw size={14} style={{ color: 'var(--color-white-muted)' }} />
-        </button>
-        <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Redo" disabled>
-          <RotateCw size={14} style={{ color: 'var(--color-white-muted)' }} />
-        </button>
+        {isOwner && (
+          <>
+            <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Undo" disabled>
+              <RotateCcw size={14} style={{ color: 'var(--color-white-muted)' }} />
+            </button>
+            <button className="p-1.5 rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40" title="Redo" disabled>
+              <RotateCw size={14} style={{ color: 'var(--color-white-muted)' }} />
+            </button>
 
-        <div className="w-px h-4" style={{ background: 'var(--color-white-subtle)' }} />
+            <div className="w-px h-4" style={{ background: 'var(--color-white-subtle)' }} />
 
-        {/* Admin: Save as Base Flow toggle */}
-        {isAdmin && (
-          <button
-            onClick={handleSaveAsBaseFlow}
-            disabled={savingBase}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
-            style={{
-              background: isBaseFlow ? 'rgba(59,158,255,0.2)' : 'transparent',
-              color: isBaseFlow ? 'var(--color-accent)' : 'var(--color-white-muted)',
-              border: 'var(--border-default)',
-            }}
-            title={isBaseFlow ? 'Remove from Base Flows' : 'Save as Base Flow (visible to all users)'}
-          >
-            <BookOpen size={12} />
-            {isBaseFlow ? 'Base Flow ✓' : 'Make Base Flow'}
-          </button>
+            {/* Admin: Save as Base Flow toggle */}
+            {isAdmin && (
+              <button
+                onClick={handleSaveAsBaseFlow}
+                disabled={savingBase}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+                style={{
+                  background: isBaseFlow ? 'rgba(59,158,255,0.2)' : 'transparent',
+                  color: isBaseFlow ? 'var(--color-accent)' : 'var(--color-white-muted)',
+                  border: 'var(--border-default)',
+                }}
+                title={isBaseFlow ? 'Remove from Base Flows' : 'Save as Base Flow (visible to all users)'}
+              >
+                <BookOpen size={12} />
+                {isBaseFlow ? 'Base Flow ✓' : 'Make Base Flow'}
+              </button>
+            )}
+
+            <button
+              onClick={handleSave}
+              disabled={!isDirty || isSaving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+              style={{
+                background: isDirty ? '#fff' : 'transparent',
+                color: isDirty ? '#000' : 'var(--color-white-muted)',
+                border: isDirty ? 'none' : 'var(--border-default)',
+              }}
+            >
+              {isSaving ? <Cloud size={12} className="animate-pulse" /> : <UploadCloud size={12} />}
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </>
         )}
 
         <button
-          onClick={handleSave}
-          disabled={!isDirty || isSaving}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
+          onClick={handleShare}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
           style={{
-            background: isDirty ? '#fff' : 'transparent',
-            color: isDirty ? '#000' : 'var(--color-white-muted)',
-            border: isDirty ? 'none' : 'var(--border-default)',
+            background: (isShared || copied) ? 'rgba(59,158,255,0.15)' : 'transparent',
+            color: (isShared || copied) ? 'var(--color-accent)' : 'var(--color-white-muted)',
+            border: 'var(--border-default)',
           }}
+          title={isShared ? 'Link copied to clipboard' : 'Share this flow'}
         >
-          {isSaving ? <Cloud size={12} className="animate-pulse" /> : <UploadCloud size={12} />}
-          {isSaving ? 'Saving...' : 'Save'}
-        </button>
-
-        <button
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium opacity-40"
-          style={{ border: 'var(--border-default)', color: 'var(--color-white-muted)' }}
-          title="Share (coming soon)"
-        >
-          <Share2 size={12} />
-          Share
+          {copied ? <Check size={12} /> : <Share2 size={12} />}
+          {copied ? 'Copied!' : isShared ? 'Shared' : 'Share'}
         </button>
       </div>
     </div>

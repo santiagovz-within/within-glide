@@ -135,9 +135,10 @@ function InvalidConnectionToast({ visible }: { visible: boolean }) {
 
 interface FlowCanvasProps {
   isTestUser?: boolean;
+  readOnly?: boolean;
 }
 
-export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
+export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasProps) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, setNodes, setEdges } = useFlowStore();
   const theme = useThemeStore((s) => s.theme);
   const allowedTypes = isTestUser ? (['mediaInputNode', 'videoToGifNode'] as import('@/types').NodeType[]) : undefined;
@@ -910,11 +911,11 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChangeHandler}
-        onConnect={onConnectHandler}
-        onConnectStart={onConnectStart}
-        onConnectEnd={onConnectEnd}
+        onNodesChange={readOnly ? undefined : onNodesChange}
+        onEdgesChange={readOnly ? undefined : onEdgesChangeHandler}
+        onConnect={readOnly ? undefined : onConnectHandler}
+        onConnectStart={readOnly ? undefined : onConnectStart}
+        onConnectEnd={readOnly ? undefined : onConnectEnd}
         isValidConnection={isValidConnection}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -924,7 +925,10 @@ export function FlowCanvas({ isTestUser = false }: FlowCanvasProps) {
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
         maxZoom={2}
-        deleteKeyCode="Delete"
+        nodesDraggable={!readOnly}
+        nodesConnectable={!readOnly}
+        elementsSelectable={!readOnly}
+        deleteKeyCode={readOnly ? null : 'Delete'}
         multiSelectionKeyCode="Shift"
         selectionKeyCode="Shift"
         style={{ background: 'var(--color-bg-darkest)' }}

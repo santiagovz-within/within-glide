@@ -21,6 +21,7 @@ export interface Flow {
   thumbnail_url: string | null;
   flow_data: FlowData;
   is_template: boolean;
+  is_shared: boolean;
   created_at: string;
   updated_at: string;
 }
