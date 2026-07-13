@@ -3,23 +3,32 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 
-// Figma's createImage API rejects images above ~4096px on either dimension.
-// This compresses+resizes in the browser before upload.
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = src;
+  });
+}
+
+// Compress + resize for Figma: max 4096px on longest side; PNG stays PNG
+// (preserves transparency); everything else → JPEG at 0.85 quality.
+// Dimensions are verified from the output blob so they match exactly what
+// the Figma plugin reads via figma.createImage().
 async function compressForFigma(rawBlob: Blob): Promise<{
   blob: Blob; width: number; height: number; contentType: string;
 }> {
   const MAX_DIM = 4096;
-  const blobUrl = URL.createObjectURL(rawBlob);
+  const inputUrl = URL.createObjectURL(rawBlob);
+  let outputUrl: string | null = null;
   try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = reject;
-      el.src = blobUrl;
-    });
+    const img = await loadImage(inputUrl);
 
     let w = img.naturalWidth;
     let h = img.naturalHeight;
+    if (w <= 0 || h <= 0) throw new Error('Could not read image dimensions');
+
     if (w > MAX_DIM || h > MAX_DIM) {
       const ratio = Math.min(MAX_DIM / w, MAX_DIM / h);
       w = Math.round(w * ratio);
@@ -31,8 +40,6 @@ async function compressForFigma(rawBlob: Blob): Promise<{
     canvas.height = h;
     canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
 
-    // PNG → PNG (preserves transparency, e.g. RemoveBg output).
-    // Everything else → JPEG at 0.85 quality for smaller file size.
     const isPng = rawBlob.type === 'image/png';
     const outputType = isPng ? 'image/png' : 'image/jpeg';
     const blob = await new Promise<Blob>((resolve, reject) =>
@@ -42,9 +49,15 @@ async function compressForFigma(rawBlob: Blob): Promise<{
         isPng ? undefined : 0.85,
       ),
     );
-    return { blob, width: w, height: h, contentType: outputType };
+
+    // Reload the output blob to get the authoritative pixel dimensions —
+    // this is exactly what the Figma plugin reads from the downloaded file.
+    outputUrl = URL.createObjectURL(blob);
+    const out = await loadImage(outputUrl);
+    return { blob, width: out.naturalWidth, height: out.naturalHeight, contentType: outputType };
   } finally {
-    URL.revokeObjectURL(blobUrl);
+    URL.revokeObjectURL(inputUrl);
+    if (outputUrl) URL.revokeObjectURL(outputUrl);
   }
 }
 
