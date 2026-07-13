@@ -108,12 +108,21 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
 
 // ── Item status dot ───────────────────────────────────────────────────────────
 
-function StatusDot({ status }: { status: BulkItemResult['status'] }) {
+function StatusDot({ status, mediaType }: { status: BulkItemResult['status']; mediaType: 'image' | 'video' }) {
   if (status === 'queued') return null;
+
+  if (status === 'processing') {
+    const color = PORT_COLORS[mediaType];
+    return (
+      <div className="absolute bottom-1 right-1 flex items-center justify-center">
+        <RefreshCw size={12} className="animate-spin" style={{ color }} />
+      </div>
+    );
+  }
+
   const styles: Record<string, { bg: string; content: React.ReactNode }> = {
-    processing: { bg: 'var(--color-accent)',    content: <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> },
-    completed:  { bg: 'var(--color-success)',   content: <Check size={8} color="#fff" /> },
-    failed:     { bg: 'var(--color-error)',     content: <AlertCircle size={8} color="#fff" /> },
+    completed: { bg: 'var(--color-success)', content: <Check size={8} color="#fff" /> },
+    failed:    { bg: 'var(--color-error)',   content: <AlertCircle size={8} color="#fff" /> },
   };
   const s = styles[status];
   if (!s) return null;
@@ -140,7 +149,7 @@ function ImageThumb({ url, result }: { url: string | undefined; result: BulkItem
           <Zap size={14} style={{ opacity: 0.4 }} />
         </div>
       )}
-      {result && <StatusDot status={result.status} />}
+      {result && <StatusDot status={result.status} mediaType="image" />}
     </div>
   );
 }
@@ -172,7 +181,7 @@ function VideoThumb({
       >
         <Film size={14} color="rgba(255,255,255,0.85)" />
       </div>
-      {result && <StatusDot status={result.status} />}
+      {result && <StatusDot status={result.status} mediaType="video" />}
     </div>
   );
 }
