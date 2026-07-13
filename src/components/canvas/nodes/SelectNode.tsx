@@ -2,6 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Pointer, Download, Film } from 'lucide-react';
+import { SendToFigmaButton } from './SendToFigmaButton';
 import { useEffect } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
@@ -84,15 +85,20 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
         )}
       </div>
 
-      {/* Download button */}
-      <button
-        onClick={() => downloadFromUrl(currentUrl)}
-        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
-        style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-      >
-        <Download size={12} />
-        Download
-      </button>
+      {/* Download + Send to Figma (images only) */}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          onClick={() => downloadFromUrl(currentUrl)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+        >
+          <Download size={12} />
+          Download
+        </button>
+        {mediaType === 'image' && (
+          <SendToFigmaButton imageUrl={currentUrl} style={{ flex: 1, minWidth: 0 }} />
+        )}
+      </div>
     </div>
   ) : undefined;
 

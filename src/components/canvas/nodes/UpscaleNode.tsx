@@ -189,16 +189,18 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       </button>
 
       {data.outputImageUrl && (
-        <button
-          onClick={() => downloadFromUrl(data.outputImageUrl!)}
-          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => downloadFromUrl(data.outputImageUrl!)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+            style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+          >
+            <Download size={12} />
+            Download
+          </button>
+          <SendToFigmaButton imageUrl={data.outputImageUrl} style={{ flex: 1, minWidth: 0 }} />
+        </div>
       )}
-      <SendToFigmaButton imageUrl={data.outputImageUrl} />
     </>
   );
 

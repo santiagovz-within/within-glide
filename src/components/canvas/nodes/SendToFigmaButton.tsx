@@ -77,9 +77,10 @@ function FigmaIcon({ size = 12 }: { size?: number }) {
 
 interface SendToFigmaButtonProps {
   imageUrl: string | undefined;
+  style?: React.CSSProperties;
 }
 
-export function SendToFigmaButton({ imageUrl }: SendToFigmaButtonProps) {
+export function SendToFigmaButton({ imageUrl, style }: SendToFigmaButtonProps) {
   const [status, setStatus] = useState<FigmaStatus>('idle');
   const [error,  setError]  = useState<string | null>(null);
 
@@ -143,11 +144,11 @@ export function SendToFigmaButton({ imageUrl }: SendToFigmaButtonProps) {
   }
 
   return (
-    <>
+    <div style={style}>
       <button
         onClick={handleSend}
         disabled={status === 'sending'}
-        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium mt-1.5 nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
         style={{
           borderRadius: 11,
           background: status === 'sent'
@@ -218,6 +219,6 @@ export function SendToFigmaButton({ imageUrl }: SendToFigmaButtonProps) {
           Make sure the Figma plugin is open in your target file.
         </p>
       )}
-    </>
+    </div>
   );
 }

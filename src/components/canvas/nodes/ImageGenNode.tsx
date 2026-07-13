@@ -173,16 +173,18 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
       {displayImages.length > 0 && (
-        <button
-          onClick={() => downloadFromUrl(displayImages[0])}
-          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
-          style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
-        >
-          <Download size={12} />
-          Download
-        </button>
+        <div key={displayImages[0]} style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => downloadFromUrl(displayImages[0])}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+            style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
+          >
+            <Download size={12} />
+            Download
+          </button>
+          <SendToFigmaButton imageUrl={displayImages[0]} style={{ flex: 1, minWidth: 0 }} />
+        </div>
       )}
-      <SendToFigmaButton key={displayImages[0]} imageUrl={displayImages[0]} />
     </div>
   );
 
