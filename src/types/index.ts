@@ -158,6 +158,7 @@ export interface ImageGenNodeData extends Record<string, unknown> {
   generatedImages?: string[];
   generationHistory?: string[][];
   status: NodeStatus;
+  errorMessage?: string;
   label?: string;
 }
 
@@ -175,6 +176,9 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   videoUrl?: string;
   videoHistory?: string[];
   status: NodeStatus;
+  errorMessage?: string;
+  pendingRequestId?: string;
+  pendingEndpoint?: string;
   label?: string;
 }
 
@@ -184,6 +188,7 @@ export interface UpscaleNodeData extends Record<string, unknown> {
   inputImageUrl?: string;
   outputImageUrl?: string;
   status: NodeStatus;
+  errorMessage?: string;
   label?: string;
 }
 
@@ -220,6 +225,7 @@ export interface RemoveBgNodeData extends Record<string, unknown> {
   inputImageUrl?: string;
   outputImageUrl?: string;
   status: NodeStatus;
+  errorMessage?: string;
   label?: string;
 }
 
@@ -245,6 +251,7 @@ export interface ModifyNodeData extends Record<string, unknown> {
   aspectRatio?: string;
   resolution?: string;
   status: NodeStatus;
+  errorMessage?: string;
   label?: string;
   expandTop?: number;
   expandRight?: number;
@@ -258,6 +265,7 @@ export interface ModifyNodeData extends Record<string, unknown> {
   outpaintPrompt?: string;
   outpaintNegativePrompt?: string;
   outputVideoUrl?: string;
+  pendingRequestId?: string;
 }
 
 export interface VideoInputNodeData extends Record<string, unknown> {
@@ -277,6 +285,7 @@ export interface UpscaleMediaNodeData extends Record<string, unknown> {
   outputImageUrl?: string;
   outputVideoUrl?: string;
   status: NodeStatus;
+  errorMessage?: string;
   label?: string;
 }
 
@@ -296,6 +305,7 @@ export interface VideoUpscaleNodeData extends Record<string, unknown> {
   videoUrl?: string;
   upscaleFactor?: number;
   status: NodeStatus;
+  errorMessage?: string;
   label?: string;
 }
 

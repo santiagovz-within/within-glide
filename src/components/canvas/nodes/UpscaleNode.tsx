@@ -160,16 +160,16 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       const result = await res.json();
 
       if (result.mediaUrls?.[0]) {
-        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Upscale failed — no output returned.' });
       }
-    } catch {
-      updateData({ status: 'error' });
+    } catch (err) {
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
     } finally {
       setIsUpscaling(false);
     }
@@ -205,6 +205,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       title="Upscale"
       icon={<Zap size={14} />}
       status={data.status}
+      errorMessage={data.errorMessage}
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.image}

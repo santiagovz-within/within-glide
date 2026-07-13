@@ -56,7 +56,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
       const result = await res.json();
 
       if (result.mediaUrls?.[0]) {
-        updateData({ videoUrl: result.mediaUrls[0], status: 'completed' });
+        updateData({ videoUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:video-propagate', {
           detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
@@ -65,11 +65,11 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
       } else if (result.requestId) {
         pollForResult(result.requestId);
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Video upscale failed — no output returned.' });
         setIsProcessing(false);
       }
-    } catch {
-      updateData({ status: 'error' });
+    } catch (err) {
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
       setIsProcessing(false);
     }
   }
@@ -80,7 +80,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
       attempts++;
       if (attempts > 120) {
         clearInterval(interval);
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: 'Video upscale timed out. The job may still be running — try restarting.' });
         setIsProcessing(false);
         return;
       }
@@ -89,7 +89,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
         const result = await res.json();
         if (result.status === 'completed' && result.mediaUrls?.[0]) {
           clearInterval(interval);
-          updateData({ videoUrl: result.mediaUrls[0], status: 'completed' });
+          updateData({ videoUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
           playSuccessSound();
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
@@ -97,7 +97,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
           setIsProcessing(false);
         } else if (result.status === 'failed') {
           clearInterval(interval);
-          updateData({ status: 'error' });
+          updateData({ status: 'error', errorMessage: result.error ?? 'Video upscale failed on the server.' });
           setIsProcessing(false);
         }
       } catch { /* keep polling */ }
@@ -134,6 +134,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
       title="Video Upscale"
       icon={<Zap size={14} />}
       status={data.status}
+      errorMessage={data.errorMessage}
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.video}

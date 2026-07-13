@@ -8,7 +8,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { VideoGenNodeData, ImageInputNodeData, ImageGenNodeData } from '@/types';
-import { VIDEO_MODELS } from '@/lib/api/models';
+import { VIDEO_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
@@ -137,10 +137,22 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     }
   }
 
+  // Derive the FAL endpoint for the current model/mode so the status poller uses the right one.
+  function getFalEndpoint(): string {
+    const modelConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
+    if (!modelConfig) return 'fal-ai/kling-video/v3/pro/text-to-video';
+    if (hasImage && 'imageToVideoEndpoint' in modelConfig) {
+      return (modelConfig as { imageToVideoEndpoint: string }).imageToVideoEndpoint;
+    }
+    return (modelConfig as { endpoint: string }).endpoint;
+  }
+
   async function handleGenerate() {
     if (isGenerating) return;
     setIsGenerating(true);
-    updateData({ status: 'processing' });
+    updateData({ status: 'processing', errorMessage: undefined, pendingRequestId: undefined, pendingEndpoint: undefined });
+
+    const endpoint = getFalEndpoint();
 
     try {
       const res = await fetch('/api/fal/generate', {
@@ -159,43 +171,68 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           nodeId: id,
         }),
       });
-      const result = await res.json();
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string; details?: string };
+        updateData({ status: 'error', errorMessage: err.details ?? err.error ?? `Server error ${res.status}` });
+        setIsGenerating(false);
+        return;
+      }
+
+      const result = await res.json() as { mediaUrls?: string[]; requestId?: string; error?: string; details?: string };
 
       if (result.mediaUrls?.[0]) {
-        const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
+        const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0]];
         updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:video-propagate', {
           detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
         }));
       } else if (result.requestId) {
-        pollForResult(result.requestId);
+        updateData({ pendingRequestId: result.requestId, pendingEndpoint: endpoint });
+        pollForResult(result.requestId, endpoint);
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Generation failed — no request ID returned.' });
+        setIsGenerating(false);
       }
-    } catch {
-      updateData({ status: 'error' });
+    } catch (err) {
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection and try again.' });
       setIsGenerating(false);
     }
   }
 
-  async function pollForResult(requestId: string) {
+  function pollForResult(requestId: string, endpoint: string) {
     let attempts = 0;
+    const MAX_ATTEMPTS = 200; // ~16 min at 5s intervals
     const interval = setInterval(async () => {
       attempts++;
-      if (attempts > 100) {
+      if (attempts > MAX_ATTEMPTS) {
         clearInterval(interval);
-        updateData({ status: 'error' });
+        updateData({
+          status: 'error',
+          errorMessage: `Timed out after ~${Math.round(MAX_ATTEMPTS * 5 / 60)} minutes. The video may still be generating on FAL's servers — click "Check status on FAL" below to resume.`,
+          pendingRequestId: requestId,
+          pendingEndpoint: endpoint,
+        });
         setIsGenerating(false);
         return;
       }
       try {
-        const res = await fetch(`/api/fal/status/${requestId}`);
-        const result = await res.json();
+        const res = await fetch(`/api/fal/status/${requestId}?endpoint=${encodeURIComponent(endpoint)}`);
+        const result = await res.json() as { status: string; mediaUrls?: string[]; error?: string };
         if (result.status === 'completed' && result.mediaUrls?.[0]) {
           clearInterval(interval);
-          const newHistory = [...(data.videoHistory ?? []), result.mediaUrls[0] as string];
-          updateData({ videoUrl: result.mediaUrls[0], videoHistory: newHistory, status: 'completed' });
+          const currentNodes = useFlowStore.getState().nodes;
+          const currentData = currentNodes.find(n => n.id === id)?.data as VideoGenNodeData | undefined;
+          const newHistory = [...(currentData?.videoHistory ?? []), result.mediaUrls[0]];
+          updateData({
+            videoUrl: result.mediaUrls[0],
+            videoHistory: newHistory,
+            status: 'completed',
+            pendingRequestId: undefined,
+            pendingEndpoint: undefined,
+            errorMessage: undefined,
+          });
           playSuccessSound();
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
@@ -203,11 +240,24 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           setIsGenerating(false);
         } else if (result.status === 'failed') {
           clearInterval(interval);
-          updateData({ status: 'error' });
+          updateData({
+            status: 'error',
+            errorMessage: result.error ?? 'FAL reported that the generation failed. This may be due to an invalid input or a server issue.',
+            pendingRequestId: requestId,
+            pendingEndpoint: endpoint,
+          });
           setIsGenerating(false);
         }
-      } catch { /* keep polling */ }
-    }, 3000);
+        // 'pending' or transient 'error' — keep polling
+      } catch { /* keep polling on network hiccups */ }
+    }, 5000);
+  }
+
+  function resumePolling() {
+    if (!data.pendingRequestId || !data.pendingEndpoint) return;
+    setIsGenerating(true);
+    updateData({ status: 'processing', errorMessage: undefined });
+    pollForResult(data.pendingRequestId, data.pendingEndpoint);
   }
 
   const displayVideoUrl = videoHistory.length > 0 ? (videoHistory[histIdx] ?? data.videoUrl) : data.videoUrl;
@@ -239,6 +289,18 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         {isGenerating ? 'Generating…' : 'Generate'}
       </button>
 
+      {/* Recovery button — shown when polling timed out but the job may have finished on FAL */}
+      {data.status === 'error' && data.pendingRequestId && !isGenerating && (
+        <button
+          onClick={resumePolling}
+          className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium mt-1.5 nodrag"
+          style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--color-error)', borderRadius: 11, border: '1px solid var(--color-error)' }}
+        >
+          <AlertTriangle size={12} />
+          Check status on FAL
+        </button>
+      )}
+
       {displayVideoUrl && (
         <button
           onClick={() => downloadFromUrl(displayVideoUrl)}
@@ -257,6 +319,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       title="Video Generation"
       icon={<Film size={14} />}
       status={data.status}
+      errorMessage={data.errorMessage}
       selected={selected}
       minWidth={300}
       accentColor={PORT_COLORS.video}

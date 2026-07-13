@@ -698,16 +698,16 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       });
       const result = await res.json();
       if (result.mediaUrls?.[0]) {
-        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Image generation failed — no output returned.' });
       }
-    } catch {
-      updateData({ status: 'error' });
+    } catch (err) {
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
     } finally {
       setIsGenerating(false);
     }
@@ -740,16 +740,16 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       });
       const result = await res.json();
       if (result.mediaUrls?.[0]) {
-        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Image expand failed — no output returned.' });
       }
-    } catch {
-      updateData({ status: 'error' });
+    } catch (err) {
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
     } finally {
       setIsGenerating(false);
     }
@@ -793,11 +793,11 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       if (result.requestId) {
         pollVideoOutpaint(result.requestId);
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Video outpaint failed — no request ID returned.' });
         stopGenerating();
       }
-    } catch {
-      updateData({ status: 'error' });
+    } catch (err) {
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
       stopGenerating();
     }
   }
@@ -809,7 +809,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       attempts++;
       if (attempts > 120) {
         clearInterval(interval);
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: 'Video outpaint timed out. The job may still be running — try restarting.' });
         stopGenerating();
         return;
       }
@@ -818,7 +818,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         const result = await res.json();
         if (result.status === 'completed' && result.mediaUrls?.[0]) {
           clearInterval(interval);
-          updateData({ outputVideoUrl: result.mediaUrls[0], status: 'completed' });
+          updateData({ outputVideoUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
           playSuccessSound();
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
@@ -828,7 +828,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           consecutiveErrors++;
           if (result.status === 'failed' || consecutiveErrors >= 3) {
             clearInterval(interval);
-            updateData({ status: 'error' });
+            updateData({ status: 'error', errorMessage: result.error ?? 'Video outpaint failed on the server.' });
             stopGenerating();
           }
         } else {
@@ -838,7 +838,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         consecutiveErrors++;
         if (consecutiveErrors >= 3) {
           clearInterval(interval);
-          updateData({ status: 'error' });
+          updateData({ status: 'error', errorMessage: 'Lost connection while waiting for video outpaint. Check FAL dashboard.' });
           stopGenerating();
         }
       }
@@ -928,6 +928,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       title={nodeTitle}
       icon={<Sliders size={14} />}
       status={data.status}
+      errorMessage={data.errorMessage}
       selected={selected}
       minWidth={280}
       accentColor={accentColor}

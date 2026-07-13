@@ -54,16 +54,16 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
       const result = await res.json();
 
       if (result.mediaUrls?.[0]) {
-        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        updateData({ outputImageUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Background removal failed — no output returned.' });
       }
-    } catch {
-      updateData({ status: 'error' });
+    } catch (err) {
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
     } finally {
       setIsProcessing(false);
     }
@@ -74,6 +74,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
       title="Remove Background"
       icon={<Scissors size={14} />}
       status={data.status}
+      errorMessage={data.errorMessage}
       selected={selected}
       minWidth={280}
       accentColor={PORT_COLORS.image}

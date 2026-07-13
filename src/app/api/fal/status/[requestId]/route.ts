@@ -16,18 +16,23 @@ export async function GET(
 
     const { requestId } = await params;
 
-    const status = await fal.queue.status('fal-ai/kling-video/v2.1/pro/text-to-video', {
+    // The endpoint must match whatever was used to submit the job.
+    // The client passes it as a query param so we don't have to hardcode a model.
+    const endpoint = request.nextUrl.searchParams.get('endpoint')
+      ?? 'fal-ai/kling-video/v3/pro/text-to-video';
+
+    const status = await fal.queue.status(endpoint, {
       requestId,
       logs: false,
     });
 
     if (status.status === 'COMPLETED') {
-      const result = await fal.queue.result('fal-ai/kling-video/v2.1/pro/text-to-video', { requestId });
+      const result = await fal.queue.result(endpoint, { requestId });
       const falResult = result.data as { video?: { url: string } };
       const videoUrl = falResult.video?.url;
 
       if (!videoUrl) {
-        return NextResponse.json({ status: 'failed' });
+        return NextResponse.json({ status: 'failed', error: 'FAL returned no video URL in the result.' });
       }
 
       const videoRes = await fetch(videoUrl);
@@ -60,19 +65,21 @@ export async function GET(
       });
     }
 
-    const inQueue = status as { status: string; queue_position?: number };
-    if (inQueue.status === 'FAILED') {
+    const s = status as { status: string; queue_position?: number; error?: string };
+
+    if (s.status === 'FAILED') {
       await supabase
         .from('generations')
         .update({ status: 'failed' })
         .eq('fal_request_id', requestId)
         .eq('user_id', user.id);
-      return NextResponse.json({ status: 'failed' });
+      return NextResponse.json({ status: 'failed', error: s.error ?? 'FAL reported the job failed.' });
     }
 
-    return NextResponse.json({ status: 'pending', queuePosition: inQueue.queue_position ?? null });
+    return NextResponse.json({ status: 'pending', queuePosition: s.queue_position ?? null });
   } catch (err) {
     console.error('Status check error:', err);
-    return NextResponse.json({ error: 'Status check failed' }, { status: 500 });
+    const detail = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ status: 'error', error: detail }, { status: 500 });
   }
 }

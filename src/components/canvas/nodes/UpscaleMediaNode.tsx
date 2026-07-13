@@ -212,16 +212,16 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       });
       const result = await res.json();
       if (result.mediaUrls?.[0]) {
-        dispatchUpdate({ outputImageUrl: result.mediaUrls[0], status: 'completed' });
+        dispatchUpdate({ outputImageUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
       } else {
-        dispatchUpdate({ status: 'error' });
+        dispatchUpdate({ status: 'error', errorMessage: result.details ?? result.error ?? 'Upscale failed — no output returned.' });
       }
-    } catch {
-      dispatchUpdate({ status: 'error' });
+    } catch (err) {
+      dispatchUpdate({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
     } finally {
       setIsRunning(false);
     }
@@ -248,7 +248,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       });
       const result = await res.json();
       if (result.mediaUrls?.[0]) {
-        dispatchUpdate({ outputVideoUrl: result.mediaUrls[0], status: 'completed' });
+        dispatchUpdate({ outputVideoUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:video-propagate', {
           detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
@@ -257,11 +257,11 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       } else if (result.requestId) {
         pollVideo(result.requestId);
       } else {
-        dispatchUpdate({ status: 'error' });
+        dispatchUpdate({ status: 'error', errorMessage: result.details ?? result.error ?? 'Video upscale failed — no output returned.' });
         setIsRunning(false);
       }
-    } catch {
-      dispatchUpdate({ status: 'error' });
+    } catch (err) {
+      dispatchUpdate({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
       setIsRunning(false);
     }
   }
@@ -272,7 +272,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       attempts++;
       if (attempts > 120) {
         clearInterval(interval);
-        dispatchUpdate({ status: 'error' });
+        dispatchUpdate({ status: 'error', errorMessage: 'Video upscale timed out. The job may still be running — try restarting.' });
         setIsRunning(false);
         return;
       }
@@ -281,7 +281,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         const result = await res.json();
         if (result.status === 'completed' && result.mediaUrls?.[0]) {
           clearInterval(interval);
-          dispatchUpdate({ outputVideoUrl: result.mediaUrls[0], status: 'completed' });
+          dispatchUpdate({ outputVideoUrl: result.mediaUrls[0], status: 'completed', errorMessage: undefined });
           playSuccessSound();
           document.dispatchEvent(new CustomEvent('node:video-propagate', {
             detail: { sourceNodeId: id, videoUrl: result.mediaUrls[0] },
@@ -289,7 +289,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           setIsRunning(false);
         } else if (result.status === 'failed') {
           clearInterval(interval);
-          dispatchUpdate({ status: 'error' });
+          dispatchUpdate({ status: 'error', errorMessage: result.error ?? 'Video upscale failed on the server.' });
           setIsRunning(false);
         }
       } catch { /* keep polling */ }
@@ -377,6 +377,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       title="Upscale Media"
       icon={<Zap size={14} />}
       status={data.status}
+      errorMessage={data.errorMessage}
       selected={selected}
       minWidth={560}
       accentColor={accentColor}

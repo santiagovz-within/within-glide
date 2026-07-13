@@ -1,11 +1,13 @@
 import { cn } from '@/lib/utils/cn';
 import type { NodeStatus } from '@/types';
-import { RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { RefreshCw, Check, AlertCircle, Copy } from 'lucide-react';
+import { useState } from 'react';
 
 interface NodeWrapperProps {
   title: string;
   icon: React.ReactNode;
   status?: NodeStatus;
+  errorMessage?: string;
   selected?: boolean;
   children: React.ReactNode;
   minWidth?: number;
@@ -18,7 +20,7 @@ interface NodeWrapperProps {
 }
 
 export function NodeWrapper({
-  title, icon, status, selected, children,
+  title, icon, status, errorMessage, selected, children,
   minWidth = 280, width, accentColor,
   titlePosition = 'inside', footer,
 }: NodeWrapperProps) {
@@ -43,7 +45,7 @@ export function NodeWrapper({
           <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-white-muted)' }}>
             {title}
           </span>
-          {status && status !== 'idle' && <StatusBadge status={status} />}
+          {status && status !== 'idle' && <StatusBadge status={status} errorMessage={errorMessage} />}
         </div>
 
         {/* Card (no inner title bar) */}
@@ -85,7 +87,10 @@ export function NodeWrapper({
   );
 }
 
-function StatusBadge({ status }: { status: NodeStatus }) {
+function StatusBadge({ status, errorMessage }: { status: NodeStatus; errorMessage?: string }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
   if (status === 'processing') {
     return <RefreshCw size={14} className="animate-spin" style={{ color: 'var(--color-processing)' }} />;
   }
@@ -93,7 +98,55 @@ function StatusBadge({ status }: { status: NodeStatus }) {
     return <Check size={14} style={{ color: 'var(--color-success)' }} />;
   }
   if (status === 'error') {
-    return <AlertCircle size={14} style={{ color: 'var(--color-error)' }} />;
+    return (
+      <div className="relative nodrag">
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center justify-center"
+          title="Click to see error details"
+        >
+          <AlertCircle size={14} style={{ color: 'var(--color-error)' }} />
+        </button>
+        {open && (
+          <div
+            className="absolute right-0 top-6 z-50 w-72 p-3 rounded-xl"
+            style={{
+              background: 'var(--color-bg-surface)',
+              border: '1px solid var(--color-error)',
+              boxShadow: 'var(--shadow-node)',
+            }}
+          >
+            <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--color-error)' }}>
+              Generation failed
+            </p>
+            <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--color-white-muted)' }}>
+              {errorMessage ?? 'An unexpected error occurred. Try regenerating.'}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(errorMessage ?? 'Unknown error').catch(() => {});
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors"
+                style={{ background: 'var(--color-bg-hover)', color: 'var(--color-white-muted)' }}
+              >
+                <Copy size={10} />
+                {copied ? 'Copied!' : 'Copy for bug report'}
+              </button>
+              <button
+                onClick={() => setOpen(false)}
+                className="px-2.5 py-1 rounded-lg text-xs"
+                style={{ color: 'var(--color-white-subtle)' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
   return null;
 }

@@ -140,17 +140,17 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       if (result.mediaUrls?.length) {
         const newHistory = [...(data.generationHistory ?? []), result.mediaUrls as string[]];
-        updateData({ generatedImages: result.mediaUrls, generationHistory: newHistory, status: 'completed' });
+        updateData({ generatedImages: result.mediaUrls, generationHistory: newHistory, status: 'completed', errorMessage: undefined });
         playSuccessSound();
         document.dispatchEvent(new CustomEvent('node:image-propagate', {
           detail: { sourceNodeId: id, imageUrl: result.mediaUrls[0] },
         }));
       } else {
-        updateData({ status: 'error' });
+        updateData({ status: 'error', errorMessage: result.details ?? result.error ?? 'Image generation failed — no output returned.' });
       }
     } catch (err) {
       console.error('[ImageGenNode] fetch error', err);
-      updateData({ status: 'error' });
+      updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
     } finally {
       setIsGenerating(false);
     }
@@ -189,6 +189,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       title="Image Generation"
       icon={<Aperture size={14} />}
       status={data.status}
+      errorMessage={data.errorMessage}
       selected={selected}
       minWidth={300}
       accentColor={PORT_COLORS.image}
