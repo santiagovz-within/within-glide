@@ -108,18 +108,8 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
 
 // ── Item status dot ───────────────────────────────────────────────────────────
 
-function StatusDot({ status, mediaType }: { status: BulkItemResult['status']; mediaType: 'image' | 'video' }) {
-  if (status === 'queued') return null;
-
-  if (status === 'processing') {
-    const color = PORT_COLORS[mediaType];
-    return (
-      <div className="absolute bottom-1 right-1 flex items-center justify-center">
-        <RefreshCw size={12} className="animate-spin" style={{ color }} />
-      </div>
-    );
-  }
-
+function StatusDot({ status }: { status: BulkItemResult['status'] }) {
+  if (status !== 'completed' && status !== 'failed') return null;
   const styles: Record<string, { bg: string; content: React.ReactNode }> = {
     completed: { bg: 'var(--color-success)', content: <Check size={8} color="#fff" /> },
     failed:    { bg: 'var(--color-error)',   content: <AlertCircle size={8} color="#fff" /> },
@@ -149,7 +139,7 @@ function ImageThumb({ url, result }: { url: string | undefined; result: BulkItem
           <Zap size={14} style={{ opacity: 0.4 }} />
         </div>
       )}
-      {result && <StatusDot status={result.status} mediaType="image" />}
+      {result && <StatusDot status={result.status} />}
     </div>
   );
 }
@@ -181,7 +171,7 @@ function VideoThumb({
       >
         <Film size={14} color="rgba(255,255,255,0.85)" />
       </div>
-      {result && <StatusDot status={result.status} mediaType="video" />}
+      {result && <StatusDot status={result.status} />}
     </div>
   );
 }
@@ -220,7 +210,7 @@ function ImageResultCard({ result, onRetry }: { result: BulkItemResult; onRetry:
         </div>
       ) : (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--color-accent)' }} />
+          <RefreshCw size={16} className="animate-spin" style={{ color: PORT_COLORS.image }} />
         </div>
       )}
     </div>
@@ -271,7 +261,7 @@ function VideoResultCard({
         </div>
       ) : (
         <div className="w-full h-full flex items-center justify-center">
-          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--color-accent)' }} />
+          <RefreshCw size={16} className="animate-spin" style={{ color: PORT_COLORS.video }} />
         </div>
       )}
     </div>
