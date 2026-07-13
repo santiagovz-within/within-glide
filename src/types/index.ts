@@ -276,6 +276,13 @@ export interface VideoInputNodeData extends Record<string, unknown> {
   uploadError?: string;
 }
 
+export interface BulkItemResult {
+  inputUrl: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  outputUrl?: string;
+  errorMessage?: string;
+}
+
 export interface UpscaleMediaNodeData extends Record<string, unknown> {
   model: string;
   scaleFactor: number;
@@ -287,6 +294,7 @@ export interface UpscaleMediaNodeData extends Record<string, unknown> {
   status: NodeStatus;
   errorMessage?: string;
   label?: string;
+  bulkResults?: BulkItemResult[];
 }
 
 export interface MediaInputNodeData extends Record<string, unknown> {

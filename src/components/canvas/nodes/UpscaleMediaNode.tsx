@@ -1,14 +1,14 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Zap, Play, Maximize2, Download } from 'lucide-react';
+import { Zap, Play, Maximize2, Download, Film, X, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type {
-  UpscaleMediaNodeData,
+  UpscaleMediaNodeData, BulkItemResult,
   ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, SelectNodeData,
   RemoveBgNodeData, ModifyNodeData, MediaInputNodeData,
   VideoGenNodeData, VideoInputNodeData, VideoUpscaleNodeData,
@@ -27,7 +27,16 @@ const VIDEO_FPS_OPTIONS: Array<{ label: string; value: number | null }> = [
   { label: '60', value: 60 },
 ];
 
-// ── Comparison slider (image before/after) ────────────────────────────────────
+const IMAGE_CONCURRENCY = 6;
+const VIDEO_CONCURRENCY = 2;
+const IMAGE_CAP = 30;
+const VIDEO_CAP = 10;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Comparison slider ─────────────────────────────────────────────────────────
 
 function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl: string }) {
   const [pct, setPct] = useState(50);
@@ -63,25 +72,18 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
         style={{ cursor: 'col-resize' }}
         onMouseDown={(e) => { dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
       >
-        {/* After image — sets container height */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={afterUrl}
-          alt="After"
-          className="w-full block"
-          style={{ height: 'auto' }}
+          src={afterUrl} alt="After" className="w-full block" style={{ height: 'auto' }}
           onLoad={(e) => { const img = e.currentTarget; setAfterDims({ w: img.naturalWidth, h: img.naturalHeight }); }}
         />
-        {/* Before image — clipped overlay */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={beforeUrl}
-          alt="Before"
+          src={beforeUrl} alt="Before"
           className="absolute inset-0 w-full h-full block"
           style={{ objectFit: 'cover', clipPath: `inset(0 ${100 - pct}% 0 0)` }}
           onLoad={(e) => { const img = e.currentTarget; setBeforeDims({ w: img.naturalWidth, h: img.naturalHeight }); }}
         />
-        {/* Divider */}
         <div
           className="absolute top-0 bottom-0 w-0.5"
           style={{ left: `${pct}%`, background: 'rgba(255,255,255,0.9)', transform: 'translateX(-50%)', pointerEvents: 'none' }}
@@ -104,77 +106,252 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
   );
 }
 
+// ── Item status dot ───────────────────────────────────────────────────────────
+
+function StatusDot({ status }: { status: BulkItemResult['status'] }) {
+  if (status === 'queued') return null;
+  const styles: Record<string, { bg: string; content: React.ReactNode }> = {
+    processing: { bg: 'var(--color-accent)',    content: <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> },
+    completed:  { bg: 'var(--color-success)',   content: <Check size={8} color="#fff" /> },
+    failed:     { bg: 'var(--color-error)',     content: <AlertCircle size={8} color="#fff" /> },
+  };
+  const s = styles[status];
+  if (!s) return null;
+  return (
+    <div
+      className="absolute bottom-1 right-1 rounded-full flex items-center justify-center"
+      style={{ width: 14, height: 14, background: s.bg }}
+    >
+      {s.content}
+    </div>
+  );
+}
+
+// ── Thumbnail (input item) ────────────────────────────────────────────────────
+
+function ImageThumb({ url, result }: { url: string | undefined; result: BulkItemResult | undefined }) {
+  return (
+    <div className="relative flex-shrink-0 rounded overflow-hidden nodrag" style={{ width: 56, height: 56 }}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center" style={{ background: 'var(--color-bg-surface)' }}>
+          <Zap size={14} style={{ opacity: 0.4 }} />
+        </div>
+      )}
+      {result && <StatusDot status={result.status} />}
+    </div>
+  );
+}
+
+function VideoThumb({
+  url, result, onClick,
+}: { url: string | undefined; result: BulkItemResult | undefined; onClick: () => void }) {
+  return (
+    <div
+      className="relative flex-shrink-0 rounded overflow-hidden nodrag cursor-pointer"
+      style={{ width: 56, height: 56 }}
+      onClick={onClick}
+    >
+      {url ? (
+        <video
+          src={url}
+          muted
+          preload="metadata"
+          className="w-full h-full"
+          style={{ objectFit: 'cover', pointerEvents: 'none' }}
+        />
+      ) : (
+        <div className="w-full h-full" style={{ background: 'var(--color-bg-surface)' }} />
+      )}
+      {/* Film icon overlay */}
+      <div
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ background: 'rgba(0,0,0,0.35)' }}
+      >
+        <Film size={14} color="rgba(255,255,255,0.85)" />
+      </div>
+      {result && <StatusDot status={result.status} />}
+    </div>
+  );
+}
+
+// ── Result card ───────────────────────────────────────────────────────────────
+
+function ImageResultCard({ result, onRetry }: { result: BulkItemResult; onRetry: () => void }) {
+  return (
+    <div className="relative rounded overflow-hidden" style={{ aspectRatio: '1', background: 'var(--color-bg-surface)' }}>
+      {result.status === 'completed' && result.outputUrl ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={result.outputUrl} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+          <button
+            onClick={() => downloadFromUrl(result.outputUrl!)}
+            className="absolute bottom-1 right-1 nodrag"
+            style={{
+              width: 20, height: 20, borderRadius: 6,
+              background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Download size={10} color="#fff" />
+          </button>
+        </>
+      ) : result.status === 'failed' ? (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+          <AlertCircle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+          <button
+            onClick={onRetry}
+            className="nodrag flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded"
+            style={{ background: 'var(--color-bg-surface-elevated)', color: 'var(--color-white-muted)' }}
+          >
+            <RefreshCw size={8} />
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--color-accent)' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VideoResultCard({
+  result, onRetry, onExpand,
+}: { result: BulkItemResult; onRetry: () => void; onExpand: () => void }) {
+  return (
+    <div className="relative rounded overflow-hidden" style={{ aspectRatio: '1', background: 'var(--color-bg-surface)' }}>
+      {result.status === 'completed' && result.outputUrl ? (
+        <>
+          <div className="w-full h-full cursor-pointer" onClick={onExpand}>
+            <video
+              src={result.outputUrl}
+              muted
+              preload="metadata"
+              className="w-full h-full"
+              style={{ objectFit: 'cover', pointerEvents: 'none' }}
+            />
+            <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
+              <Film size={14} color="rgba(255,255,255,0.85)" />
+            </div>
+          </div>
+          <button
+            onClick={() => downloadFromUrl(result.outputUrl!)}
+            className="absolute bottom-1 right-1 nodrag"
+            style={{
+              width: 20, height: 20, borderRadius: 6,
+              background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Download size={10} color="#fff" />
+          </button>
+        </>
+      ) : result.status === 'failed' ? (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+          <AlertCircle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+          <button
+            onClick={onRetry}
+            className="nodrag flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded"
+            style={{ background: 'var(--color-bg-surface-elevated)', color: 'var(--color-white-muted)' }}
+          >
+            <RefreshCw size={8} />
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--color-accent)' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: UpscaleMediaNodeData }) {
-  const [isRunning, setIsRunning] = useState(false);
+  const [isRunning,     setIsRunning]     = useState(false);
+  const [doneCount,     setDoneCount]     = useState(0);
+  const [expandedUrl,   setExpandedUrl]   = useState<string | null>(null);
+
+  const bulkResultsRef = useRef<BulkItemResult[]>(data.bulkResults ?? []);
+
   const storeEdges = useFlowStore((state) => state.edges);
   const storeNodes = useFlowStore((state) => state.nodes);
 
-  // ── Derive input from connected source ──────────────────────────────────────
+  // ── Derive all inputs from connected edges ──────────────────────────────────
 
-  const incomingEdge  = storeEdges.find((e) => e.target === id && e.targetHandle === 'media');
-  const sourceNode    = incomingEdge ? storeNodes.find((n) => n.id === incomingEdge.source) : undefined;
-  const sourceHandle  = incomingEdge?.sourceHandle ?? null; // 'image' | 'video' | null
+  const incomingEdges = storeEdges.filter((e) => e.target === id && e.targetHandle === 'media');
 
-  // Treat the edge's source handle as the ground truth for media type — avoids
-  // needing to enumerate every possible source node type.
-  const inputMediaType: 'image' | 'video' | null = sourceHandle === 'video' ? 'video' : sourceHandle === 'image' ? 'image' : null;
+  const inputMediaType: 'image' | 'video' | null =
+    incomingEdges[0]?.sourceHandle === 'video' ? 'video'
+    : incomingEdges[0]?.sourceHandle === 'image' ? 'image'
+    : null;
 
-  // Resolve the actual URL from the source node's data.
-  let inputImageUrl: string | undefined;
-  let inputVideoUrl: string | undefined;
-
-  if (sourceNode && inputMediaType === 'image') {
-    switch (sourceNode.type) {
-      case 'imageInputNode':   inputImageUrl = (sourceNode.data as ImageInputNodeData).imageUrl; break;
-      case 'mediaInputNode':   inputImageUrl = (sourceNode.data as MediaInputNodeData).imageUrl; break;
-      case 'imageGenNode':     inputImageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0]; break;
-      case 'upscaleNode':      inputImageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl; break;
-      case 'upscaleMediaNode': inputImageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl; break;
-      case 'modifyNode':       inputImageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl; break;
-      case 'selectNode':       inputImageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl; break;
-      case 'removeBgNode':     inputImageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl; break;
+  const inputItems = incomingEdges.map((edge) => {
+    const sourceNode = storeNodes.find((n) => n.id === edge.source);
+    let url: string | undefined;
+    if (sourceNode && inputMediaType === 'image') {
+      switch (sourceNode.type) {
+        case 'imageInputNode':   url = (sourceNode.data as ImageInputNodeData).imageUrl; break;
+        case 'mediaInputNode':   url = (sourceNode.data as MediaInputNodeData).imageUrl; break;
+        case 'imageGenNode':     url = (sourceNode.data as ImageGenNodeData).generatedImages?.[0]; break;
+        case 'upscaleNode':      url = (sourceNode.data as UpscaleNodeData).outputImageUrl; break;
+        case 'upscaleMediaNode': url = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl; break;
+        case 'modifyNode':       url = (sourceNode.data as ModifyNodeData).outputImageUrl; break;
+        case 'selectNode':       url = (sourceNode.data as SelectNodeData).selectedImageUrl; break;
+        case 'removeBgNode':     url = (sourceNode.data as RemoveBgNodeData).outputImageUrl; break;
+      }
+    } else if (sourceNode && inputMediaType === 'video') {
+      switch (sourceNode.type) {
+        case 'videoGenNode':     url = (sourceNode.data as VideoGenNodeData).videoUrl; break;
+        case 'videoInputNode':   url = (sourceNode.data as VideoInputNodeData).videoUrl; break;
+        case 'mediaInputNode':   url = (sourceNode.data as MediaInputNodeData).videoUrl; break;
+        case 'videoUpscaleNode': url = (sourceNode.data as VideoUpscaleNodeData).videoUrl; break;
+        case 'upscaleMediaNode': url = (sourceNode.data as UpscaleMediaNodeData).outputVideoUrl; break;
+        case 'modifyNode':       url = (sourceNode.data as ModifyNodeData).outputVideoUrl; break;
+      }
     }
-  } else if (sourceNode && inputMediaType === 'video') {
-    switch (sourceNode.type) {
-      case 'videoGenNode':     inputVideoUrl = (sourceNode.data as VideoGenNodeData).videoUrl; break;
-      case 'videoInputNode':   inputVideoUrl = (sourceNode.data as VideoInputNodeData).videoUrl; break;
-      case 'mediaInputNode':   inputVideoUrl = (sourceNode.data as MediaInputNodeData).videoUrl; break;
-      case 'videoUpscaleNode': inputVideoUrl = (sourceNode.data as VideoUpscaleNodeData).videoUrl; break;
-      case 'upscaleMediaNode': inputVideoUrl = (sourceNode.data as UpscaleMediaNodeData).outputVideoUrl; break;
-      case 'modifyNode':       inputVideoUrl = (sourceNode.data as ModifyNodeData).outputVideoUrl; break;
-    }
-  }
+    return { url, sourceNodeId: edge.source };
+  });
 
-  // ── Clear stale output data and downstream edges when media type switches ───
+  // Single-item paths use the first item's URL directly.
+  const isBulk     = incomingEdges.length > 1;
+  const itemCount  = incomingEdges.length;
+  const cap        = inputMediaType === 'video' ? VIDEO_CAP : IMAGE_CAP;
+
+  const inputImageUrl = !isBulk && inputMediaType === 'image' ? inputItems[0]?.url : undefined;
+  const inputVideoUrl = !isBulk && inputMediaType === 'video' ? inputItems[0]?.url : undefined;
+
+  // ── Clear stale output when media type switches ─────────────────────────────
 
   const prevInputMediaTypeRef = useRef<'image' | 'video' | null>(null);
 
   useEffect(() => {
     const prev = prevInputMediaTypeRef.current;
     if (prev !== null && prev !== inputMediaType) {
-      // Remove downstream edges from the old output handle.
       const oldHandle = prev === 'image' ? 'image' : 'video';
       document.dispatchEvent(new CustomEvent('node:remove-source-edges', {
         detail: { nodeId: id, handleId: oldHandle },
       }));
-      // Clear stale output from node data.
       document.dispatchEvent(new CustomEvent('node:update', {
         detail: {
           nodeId: id,
           data: prev === 'image'
-            ? { outputImageUrl: undefined, status: 'idle' }
-            : { outputVideoUrl: undefined, status: 'idle' },
+            ? { outputImageUrl: undefined, status: 'idle', bulkResults: undefined }
+            : { outputVideoUrl: undefined, status: 'idle', bulkResults: undefined },
         },
       }));
+      bulkResultsRef.current = [];
     }
     prevInputMediaTypeRef.current = inputMediaType;
   }, [inputMediaType, id]);
 
   // ── Image upscale settings ──────────────────────────────────────────────────
 
-  const falModelConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS] as unknown as { scaleOptions?: number[] } | undefined;
+  const falModelConfig  = FAL_MODELS[data.model as keyof typeof FAL_MODELS] as unknown as { scaleOptions?: number[] } | undefined;
   const scaleOptions: number[] = falModelConfig?.scaleOptions ?? [2, 4];
   const validScaleFactor = scaleOptions.includes(data.scaleFactor) ? data.scaleFactor : scaleOptions[scaleOptions.length - 1];
 
@@ -185,13 +362,20 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
   }
 
   function handleModelChange(model: string) {
-    const cfg = FAL_MODELS[model as keyof typeof FAL_MODELS] as unknown as { scaleOptions?: number[] } | undefined;
+    const cfg  = FAL_MODELS[model as keyof typeof FAL_MODELS] as unknown as { scaleOptions?: number[] } | undefined;
     const opts: number[] = cfg?.scaleOptions ?? [2, 4];
     const clampedScale = opts.includes(data.scaleFactor) ? data.scaleFactor : opts[opts.length - 1];
     dispatchUpdate({ model, scaleFactor: clampedScale });
   }
 
-  // ── Image upscale ───────────────────────────────────────────────────────────
+  function updateBulkItem(index: number, patch: Partial<BulkItemResult>) {
+    bulkResultsRef.current = bulkResultsRef.current.map((r, i) =>
+      i === index ? { ...r, ...patch } : r
+    );
+    dispatchUpdate({ bulkResults: [...bulkResultsRef.current] });
+  }
+
+  // ── Single-item image upscale (unchanged from before) ──────────────────────
 
   async function handleUpscaleImage() {
     if (!inputImageUrl || isRunning) return;
@@ -227,7 +411,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
     }
   }
 
-  // ── Video upscale ───────────────────────────────────────────────────────────
+  // ── Single-item video upscale (unchanged from before) ──────────────────────
 
   async function handleUpscaleVideo() {
     if (!inputVideoUrl || isRunning) return;
@@ -296,6 +480,160 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
     }, 5000);
   }
 
+  // ── Bulk: shared helpers ────────────────────────────────────────────────────
+
+  async function processImageItem(url: string, index: number): Promise<void> {
+    updateBulkItem(index, { status: 'processing' });
+    try {
+      const res = await fetch('/api/fal/upscale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: data.model,
+          imageUrl: url,
+          scaleFactor: validScaleFactor,
+          sourceType: 'canvas',
+          nodeId: id,
+        }),
+      });
+      const result = await res.json();
+      if (result.mediaUrls?.[0]) {
+        updateBulkItem(index, { status: 'completed', outputUrl: result.mediaUrls[0] });
+      } else {
+        updateBulkItem(index, { status: 'failed', errorMessage: result.details ?? result.error ?? 'Upscale failed.' });
+      }
+    } catch (err) {
+      updateBulkItem(index, { status: 'failed', errorMessage: err instanceof Error ? err.message : 'Network error.' });
+    }
+  }
+
+  async function processVideoItem(url: string, index: number): Promise<void> {
+    updateBulkItem(index, { status: 'processing' });
+    try {
+      const submitRes = await fetch('/api/fal/video-upscale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: url,
+          upscaleFactor: data.upscaleFactor ?? 2,
+          targetFps: data.targetFps ?? null,
+          h264Output: data.h264Output ?? false,
+          nodeId: id,
+        }),
+      });
+      const submitResult = await submitRes.json();
+
+      if (submitResult.mediaUrls?.[0]) {
+        // Synchronous result (unlikely for video but handle it)
+        updateBulkItem(index, { status: 'completed', outputUrl: submitResult.mediaUrls[0] });
+        return;
+      }
+
+      if (!submitResult.requestId) {
+        updateBulkItem(index, { status: 'failed', errorMessage: submitResult.details ?? submitResult.error ?? 'Submit failed.' });
+        return;
+      }
+
+      const requestId = submitResult.requestId as string;
+
+      // Poll until done or timed out
+      for (let attempt = 0; attempt < 120; attempt++) {
+        await delay(5000);
+        try {
+          const statusRes = await fetch(`/api/fal/video-upscale/status/${requestId}`);
+          const statusResult = await statusRes.json();
+          if (statusResult.status === 'completed' && statusResult.mediaUrls?.[0]) {
+            updateBulkItem(index, { status: 'completed', outputUrl: statusResult.mediaUrls[0] });
+            return;
+          }
+          if (statusResult.status === 'failed') {
+            updateBulkItem(index, { status: 'failed', errorMessage: statusResult.error ?? 'Video upscale failed.' });
+            return;
+          }
+        } catch { /* keep polling */ }
+      }
+
+      updateBulkItem(index, { status: 'failed', errorMessage: 'Video upscale timed out.' });
+    } catch (err) {
+      updateBulkItem(index, { status: 'failed', errorMessage: err instanceof Error ? err.message : 'Network error.' });
+    }
+  }
+
+  // ── Bulk: run batch ─────────────────────────────────────────────────────────
+
+  async function handleBulkUpscale() {
+    if (isRunning) return;
+    const items = inputItems.filter((item) => item.url);
+    if (items.length === 0) return;
+
+    const n = items.length;
+
+    // Initialise per-item state and reset results from previous batch
+    const initialResults: BulkItemResult[] = items.map((item) => ({
+      inputUrl: item.url!,
+      status: 'queued',
+    }));
+    bulkResultsRef.current = initialResults;
+    dispatchUpdate({ bulkResults: [...initialResults], status: 'processing', errorMessage: undefined });
+    setIsRunning(true);
+    setDoneCount(0);
+
+    const concurrency = inputMediaType === 'video' ? VIDEO_CONCURRENCY : IMAGE_CONCURRENCY;
+    let nextIndex = 0;
+
+    async function runWorker() {
+      while (nextIndex < n) {
+        const i = nextIndex++;
+        const url = items[i].url!;
+        if (inputMediaType === 'image') {
+          await processImageItem(url, i);
+        } else {
+          await processVideoItem(url, i);
+        }
+        setDoneCount((c) => c + 1);
+      }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, runWorker));
+
+    // Determine overall status
+    const results = bulkResultsRef.current;
+    const anyCompleted = results.some((r) => r.status === 'completed');
+    dispatchUpdate({ status: anyCompleted ? 'completed' : 'error' });
+
+    if (anyCompleted) playSuccessSound();
+    setIsRunning(false);
+    setDoneCount(0);
+  }
+
+  // ── Bulk: retry individual failed item ──────────────────────────────────────
+
+  async function retryItem(index: number) {
+    if (isRunning) return;
+    const result = data.bulkResults?.[index];
+    if (!result || result.status !== 'failed') return;
+
+    // Re-sync the ref from persisted data before making changes
+    bulkResultsRef.current = [...(data.bulkResults ?? [])];
+
+    setIsRunning(true);
+    const url = result.inputUrl;
+    if (inputMediaType === 'image') {
+      await processImageItem(url, index);
+    } else {
+      await processVideoItem(url, index);
+    }
+
+    // Re-evaluate overall status
+    const anyCompleted = bulkResultsRef.current.some((r) => r.status === 'completed');
+    const allDone = bulkResultsRef.current.every((r) => r.status === 'completed' || r.status === 'failed');
+    if (allDone) {
+      dispatchUpdate({ status: anyCompleted ? 'completed' : 'error' });
+      if (anyCompleted) playSuccessSound();
+    }
+    setIsRunning(false);
+  }
+
   // ── Derived display values ──────────────────────────────────────────────────
 
   const inputPortType  = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' ? 'image' : 'neutral';
@@ -303,15 +641,19 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
   const outputHandleId = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' ? 'image' : 'media';
   const accentColor    = inputMediaType === 'video' ? PORT_COLORS.video : inputMediaType === 'image' ? PORT_COLORS.image : PORT_COLORS.neutral;
 
-  const upscaleFactor = data.upscaleFactor ?? 2;
-  const hasImageOutput = inputMediaType === 'image' && !!data.outputImageUrl;
-  const hasVideoOutput = inputMediaType === 'video' && !!data.outputVideoUrl;
+  const upscaleFactor  = data.upscaleFactor ?? 2;
+  const hasImageOutput = !isBulk && inputMediaType === 'image' && !!data.outputImageUrl;
+  const hasVideoOutput = !isBulk && inputMediaType === 'video' && !!data.outputVideoUrl;
+
+  // Progress label while bulk running
+  const bulkDoneCount = isRunning ? doneCount : (data.bulkResults?.filter((r) => r.status === 'completed' || r.status === 'failed').length ?? 0);
 
   // ── Footer ──────────────────────────────────────────────────────────────────
 
   const footer = (
     <div className="flex flex-col gap-1.5">
-      {inputMediaType === 'image' && (
+      {/* ── Single image ── */}
+      {!isBulk && inputMediaType === 'image' && (
         <>
           <button
             onClick={handleUpscaleImage}
@@ -334,7 +676,9 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           )}
         </>
       )}
-      {inputMediaType === 'video' && (
+
+      {/* ── Single video ── */}
+      {!isBulk && inputMediaType === 'video' && (
         <>
           <button
             onClick={handleUpscaleVideo}
@@ -357,6 +701,23 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           )}
         </>
       )}
+
+      {/* ── Bulk run ── */}
+      {isBulk && inputMediaType !== null && (
+        <button
+          onClick={handleBulkUpscale}
+          disabled={isRunning || inputItems.every((i) => !i.url)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
+          style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
+        >
+          <Play size={12} />
+          {isRunning
+            ? `Upscaling ${bulkDoneCount + 1} of ${itemCount}…`
+            : `Upscale all ${itemCount}`}
+        </button>
+      )}
+
+      {/* ── No input ── */}
       {inputMediaType === null && (
         <button
           disabled
@@ -369,6 +730,38 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       )}
     </div>
   );
+
+  // ── Results grid (bulk) ─────────────────────────────────────────────────────
+
+  const bulkResults = data.bulkResults;
+  const hasBulkResults = isBulk && bulkResults && bulkResults.length > 0 &&
+    bulkResults.some((r) => r.status === 'completed' || r.status === 'failed' || r.status === 'processing');
+
+  const resultsGrid = hasBulkResults ? (
+    <div className="mt-3">
+      <p className="text-[10px] mb-2 font-medium" style={{ color: 'var(--color-white-muted)' }}>
+        Results — {bulkResults!.filter((r) => r.status === 'completed').length} of {bulkResults!.length} done
+      </p>
+      <div className="grid gap-1.5 nodrag" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))' }}>
+        {bulkResults!.map((result, i) =>
+          inputMediaType === 'image' ? (
+            <ImageResultCard
+              key={i}
+              result={result}
+              onRetry={() => retryItem(i)}
+            />
+          ) : (
+            <VideoResultCard
+              key={i}
+              result={result}
+              onRetry={() => retryItem(i)}
+              onExpand={() => result.outputUrl && setExpandedUrl(result.outputUrl)}
+            />
+          )
+        )}
+      </div>
+    </div>
+  ) : null;
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -389,10 +782,10 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         position={Position.Left}
         id="media"
         portType={inputPortType}
-        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'media')}
+        connected={incomingEdges.length > 0}
       />
 
-      {/* ── No input connected ── */}
+      {/* ── No input ── */}
       {inputMediaType === null && (
         <div
           className="flex items-center justify-center rounded-lg mb-3"
@@ -402,7 +795,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         </div>
       )}
 
-      {/* ── Image mode: model + scale + preview ── */}
+      {/* ── Image settings ── */}
       {inputMediaType === 'image' && (
         <>
           <div className="mb-2">
@@ -429,21 +822,10 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
               ))}
             </div>
           </div>
-
-          {inputImageUrl && data.outputImageUrl ? (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-              <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
-            </div>
-          ) : inputImageUrl ? (
-            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
-            </div>
-          ) : null}
         </>
       )}
 
-      {/* ── Video mode: scale factor + previews ── */}
+      {/* ── Video settings ── */}
       {inputMediaType === 'video' && (
         <>
           <div className="mb-3">
@@ -495,46 +877,108 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
               onClick={() => dispatchUpdate({ h264Output: !(data.h264Output ?? false) })}
               className="nodrag transition-colors"
               style={{
-                width: 36,
-                height: 20,
-                borderRadius: 10,
+                width: 36, height: 20, borderRadius: 10,
                 background: data.h264Output ? '#fff' : 'var(--color-bg-surface)',
                 border: 'var(--border-default)',
-                position: 'relative',
-                flexShrink: 0,
-                padding: 0,
+                position: 'relative', flexShrink: 0, padding: 0,
               }}
             >
               <span
                 style={{
-                  position: 'absolute',
-                  top: 2,
+                  position: 'absolute', top: 2,
                   left: data.h264Output ? 18 : 2,
-                  width: 16,
-                  height: 16,
-                  borderRadius: '50%',
+                  width: 16, height: 16, borderRadius: '50%',
                   background: data.h264Output ? '#000' : 'var(--color-white-muted)',
                   transition: 'left 0.15s',
                 }}
               />
             </button>
           </div>
+        </>
+      )}
 
-          <div className="flex flex-col gap-3">
-            {inputVideoUrl && (
-              <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                <video src={inputVideoUrl} controls className="w-full block nodrag" style={{ height: 'auto' }} />
-                <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Input</p>
-              </div>
-            )}
-            {hasVideoOutput && (
-              <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                <video src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
-                <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Output ({upscaleFactor}x)</p>
-              </div>
-            )}
+      {/* ── Bulk: count + note + thumbnail strip ── */}
+      {isBulk && inputMediaType !== null && (
+        <>
+          {/* Count + note */}
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-medium" style={{ color: 'var(--color-white-muted)' }}>
+              {itemCount} / {cap} {inputMediaType === 'video' ? 'videos' : 'images'}
+            </span>
+            <span className="text-[10px]" style={{ color: 'var(--color-white-muted)', opacity: 0.6 }}>
+              Settings apply to all
+            </span>
+          </div>
+
+          {/* Thumbnail strip */}
+          <div
+            className="flex gap-1.5 mb-3 nodrag"
+            style={{ overflowX: 'auto', paddingBottom: 2 }}
+          >
+            {inputItems.map((item, i) => {
+              const result = data.bulkResults?.[i];
+              return inputMediaType === 'image' ? (
+                <ImageThumb key={i} url={item.url} result={result} />
+              ) : (
+                <VideoThumb
+                  key={i}
+                  url={item.url}
+                  result={result}
+                  onClick={() => item.url && setExpandedUrl(item.url)}
+                />
+              );
+            })}
           </div>
         </>
+      )}
+
+      {/* ── Single image: preview ── */}
+      {!isBulk && inputMediaType === 'image' && (
+        inputImageUrl && data.outputImageUrl ? (
+          <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+            <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
+          </div>
+        ) : inputImageUrl ? (
+          <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
+          </div>
+        ) : null
+      )}
+
+      {/* ── Single video: previews ── */}
+      {!isBulk && inputMediaType === 'video' && (
+        <div className="flex flex-col gap-3">
+          {inputVideoUrl && (
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+              <video src={inputVideoUrl} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+              <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Input</p>
+            </div>
+          )}
+          {hasVideoOutput && (
+            <div style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+              <video src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+              <p className="px-3 pt-1 text-center" style={{ fontSize: 9, color: 'var(--color-white-muted)' }}>Output ({upscaleFactor}x)</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Bulk results grid ── */}
+      {resultsGrid}
+
+      {/* ── Expanded video overlay ── */}
+      {expandedUrl && (
+        <div className="mt-3 relative" style={{ borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+          <button
+            onClick={() => setExpandedUrl(null)}
+            className="absolute top-1.5 right-1.5 z-10 nodrag flex items-center justify-center rounded-full"
+            style={{ width: 22, height: 22, background: 'rgba(0,0,0,0.6)', flexShrink: 0 }}
+          >
+            <X size={12} color="#fff" />
+          </button>
+          <video src={expandedUrl} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+        </div>
       )}
 
       <TypedHandle
@@ -542,7 +986,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
         position={Position.Right}
         id={outputHandleId}
         portType={outputPortType}
-        connected={storeEdges.some(e => e.source === id && e.sourceHandle === outputHandleId)}
+        connected={storeEdges.some((e) => e.source === id && e.sourceHandle === outputHandleId)}
       />
     </NodeWrapper>
   );

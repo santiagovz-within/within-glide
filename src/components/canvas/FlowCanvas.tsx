@@ -508,13 +508,41 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
       const srcType = PORT_TYPE_MAP[srcKey];
       const tgtType = PORT_TYPE_MAP[tgtKey];
 
-      // upscaleMediaNode's single input accepts image or video
+      // upscaleMediaNode accepts multiple image or video connections (mode-locked, capped)
       if (targetNode.type === 'upscaleMediaNode' && conn.targetHandle === 'media') {
-        if (srcType === 'image' || srcType === 'video') return true;
-        if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
-        setInvalidToast(true);
-        invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
-        return false;
+        if (srcType !== 'image' && srcType !== 'video') {
+          if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
+          setInvalidToast(true);
+          invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
+          return false;
+        }
+        const liveEdges = useFlowStore.getState().edges;
+        const mediaEdges = liveEdges.filter(
+          (e) => e.target === targetNode.id && e.targetHandle === 'media'
+        );
+        if (mediaEdges.length > 0) {
+          // Reject duplicate source
+          if (mediaEdges.some((e) => e.source === conn.source && e.sourceHandle === conn.sourceHandle)) {
+            return false;
+          }
+          // Mode-lock: all inputs must share the same type
+          const lockedType = mediaEdges[0].sourceHandle === 'video' ? 'video' : 'image';
+          if (lockedType !== srcType) {
+            if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
+            setInvalidToast(true);
+            invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
+            return false;
+          }
+          // Cap: 30 images, 10 videos
+          const cap = lockedType === 'video' ? 10 : 30;
+          if (mediaEdges.length >= cap) {
+            if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
+            setInvalidToast(true);
+            invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
+            return false;
+          }
+        }
+        return true;
       }
 
       // modifyNode's image input accepts image or video (video triggers outpaint mode)
@@ -687,7 +715,8 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
       const freshEdges = useFlowStore.getState().edges;
       const targetNode = freshNodes.find((n) => n.id === connection.target);
 
-      if (targetNode?.type !== 'galleryOutputNode') {
+      // galleryOutputNode and upscaleMediaNode both accept multiple incoming edges.
+      if (targetNode?.type !== 'galleryOutputNode' && targetNode?.type !== 'upscaleMediaNode') {
         const existing = freshEdges.filter(
           (e) => e.target === connection.target && e.targetHandle === connection.targetHandle
         );
