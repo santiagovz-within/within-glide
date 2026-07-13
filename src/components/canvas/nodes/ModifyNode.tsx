@@ -2,6 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Sliders, Play, Download } from 'lucide-react';
+import { SendToFigmaButton } from './SendToFigmaButton';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -918,6 +919,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
               Download
             </button>
           )}
+          <SendToFigmaButton imageUrl={data.outputImageUrl} />
         </>
       )}
     </div>

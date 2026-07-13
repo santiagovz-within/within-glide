@@ -25,12 +25,17 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
-    const { sizeBytes, width, height, existingGcsRef } = body as {
+    const { sizeBytes, width, height, existingGcsRef, contentType: rawContentType } = body as {
       sizeBytes?: number;
       width?: number;
       height?: number;
       existingGcsRef?: string;
+      contentType?: string;
     };
+
+    const contentType = rawContentType ?? 'image/gif';
+    // Derive a safe file extension from the MIME type (e.g. 'image/png' → 'png').
+    const ext = contentType.split('/')[1]?.replace(/\+.*$/, '') ?? 'gif';
 
     if (typeof sizeBytes === 'number' && sizeBytes > MAX_GIF_BYTES) {
       return NextResponse.json(
@@ -69,9 +74,9 @@ export async function POST(request: NextRequest) {
     }
 
     // New upload: generate a GCS path and a signed write URL.
-    const gcsPath   = `figma-transfers/${user.id}/${transferId}.gif`;
+    const gcsPath   = `figma-transfers/${user.id}/${transferId}.${ext}`;
     const gcsRef    = `gcs:${gcsPath}`;
-    const uploadUrl = await getSignedUploadUrl(gcsPath, 'image/gif');
+    const uploadUrl = await getSignedUploadUrl(gcsPath, contentType);
 
     const { error: insertError } = await admin
       .from('figma_transfers')

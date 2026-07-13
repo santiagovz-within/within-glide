@@ -2,6 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Aperture, Play, Download, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react';
+import { SendToFigmaButton } from './SendToFigmaButton';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
@@ -181,6 +182,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           Download
         </button>
       )}
+      <SendToFigmaButton key={displayImages[0]} imageUrl={displayImages[0]} />
     </div>
   );
 

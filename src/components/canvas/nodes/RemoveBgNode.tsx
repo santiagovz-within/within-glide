@@ -2,6 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Scissors, Play, Download } from 'lucide-react';
+import { SendToFigmaButton } from './SendToFigmaButton';
 import { useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
@@ -101,6 +102,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
               Download PNG
             </button>
           )}
+          <SendToFigmaButton imageUrl={data.outputImageUrl} />
         </>
       }
     >

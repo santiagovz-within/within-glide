@@ -7,6 +7,7 @@ import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import { SendToFigmaButton } from './SendToFigmaButton';
 import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData, SelectNodeData } from '@/types';
 import { UPSCALE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
@@ -197,6 +198,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
           Download
         </button>
       )}
+      <SendToFigmaButton imageUrl={data.outputImageUrl} />
     </>
   );
 

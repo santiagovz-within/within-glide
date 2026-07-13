@@ -2,6 +2,7 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play, Maximize2, Download, Film, X, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { SendToFigmaButton } from './SendToFigmaButton';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useRef, useState } from 'react';
@@ -673,6 +674,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
               Download
             </button>
           )}
+          <SendToFigmaButton imageUrl={data.outputImageUrl} />
         </>
       )}
 
