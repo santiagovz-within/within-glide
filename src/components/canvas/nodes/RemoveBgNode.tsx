@@ -93,7 +93,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
           </button>
 
           {data.outputImageUrl && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'flex-start' }}>
               <button
                 onClick={() => downloadFromUrl(data.outputImageUrl!)}
                 className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
