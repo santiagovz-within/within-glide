@@ -3,6 +3,51 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 
+// Figma's createImage API rejects images above ~4096px on either dimension.
+// This compresses+resizes in the browser before upload.
+async function compressForFigma(rawBlob: Blob): Promise<{
+  blob: Blob; width: number; height: number; contentType: string;
+}> {
+  const MAX_DIM = 4096;
+  const blobUrl = URL.createObjectURL(rawBlob);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = blobUrl;
+    });
+
+    let w = img.naturalWidth;
+    let h = img.naturalHeight;
+    if (w > MAX_DIM || h > MAX_DIM) {
+      const ratio = Math.min(MAX_DIM / w, MAX_DIM / h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+
+    // PNG → PNG (preserves transparency, e.g. RemoveBg output).
+    // Everything else → JPEG at 0.85 quality for smaller file size.
+    const isPng = rawBlob.type === 'image/png';
+    const outputType = isPng ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        b => (b ? resolve(b) : reject(new Error('Canvas compression failed'))),
+        outputType,
+        isPng ? undefined : 0.85,
+      ),
+    );
+    return { blob, width: w, height: h, contentType: outputType };
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
 type FigmaStatus = 'idle' | 'sending' | 'sent' | 'no_token' | 'error';
 
 function FigmaIcon({ size = 12 }: { size?: number }) {
@@ -45,18 +90,10 @@ export function SendToFigmaButton({ imageUrl }: SendToFigmaButtonProps) {
       // 2. Fetch the image blob — the response Content-Type tells us the format.
       const imgRes = await fetch(imageUrl);
       if (!imgRes.ok) throw new Error('Could not fetch image');
-      const blob = await imgRes.blob();
-      const contentType = blob.type || 'image/png';
+      const rawBlob = await imgRes.blob();
 
-      // 3. Read pixel dimensions.
-      const { width, height } = await new Promise<{ width: number; height: number }>(
-        (resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-          img.onerror = reject;
-          img.src = imageUrl;
-        },
-      );
+      // 3. Compress + resize to fit Figma's limits (max 4096px, JPEG 0.85 or PNG).
+      const { blob, width, height, contentType } = await compressForFigma(rawBlob);
 
       // 4. Stage — backend returns a signed GCS PUT URL.
       const stageRes = await fetch('/api/figma/stage', {
