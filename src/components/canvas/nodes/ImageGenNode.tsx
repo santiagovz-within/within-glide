@@ -165,6 +165,9 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     setIsDownloading(true);
     try {
       await downloadAllFromUrls(displayImages, `image-generation-v${histIdx + 1}`);
+    } catch (error) {
+      console.error('[ImageGenNode] Batch download failed', error);
+      window.alert('Could not download this image batch. Please try again.');
     } finally {
       setIsDownloading(false);
     }
