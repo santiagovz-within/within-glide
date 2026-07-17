@@ -1,64 +1,31 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChevronRight, Cloud, UploadCloud, RotateCcw, RotateCw, Share2, Check, BookOpen } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
-import type { Node } from '@xyflow/react';
-import type { NodeData, ImageGenNodeData, UpscaleNodeData, ImageInputNodeData } from '@/types';
-import { compressToThumbnailDataUrl } from '@/lib/utils/imageProcessing';
-
-async function uploadThumbnailToGCS(dataUrl: string, flowId: string): Promise<string | null> {
-  try {
-    const res = await fetch('/api/thumbnails/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataUrl, flowId }),
-    });
-    if (!res.ok) return null;
-    const { ref } = await res.json();
-    return ref ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function extractThumbnail(nodes: Node<NodeData>[]): string | null {
-  for (const node of nodes) {
-    if (node.type === 'imageGenNode') {
-      const url = (node.data as ImageGenNodeData).generatedImages?.[0];
-      if (url) return url;
-    }
-    if (node.type === 'upscaleNode') {
-      const url = (node.data as UpscaleNodeData).outputImageUrl;
-      if (url) return url;
-    }
-    if (node.type === 'imageInputNode') {
-      const url = (node.data as ImageInputNodeData).imageUrl;
-      if (url) return url;
-    }
-  }
-  return null;
-}
 
 interface TopBarProps {
   flowId: string;
   isOwner?: boolean;
   isShared?: boolean;
   onToggleShare?: () => void;
+  onSave: () => Promise<boolean>;
 }
 
-export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare }: TopBarProps) {
-  const { currentFlow, isDirty, isSaving, nodes, edges, setDirty, setSaving, setLastSaved } = useFlowStore();
+export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare, onSave }: TopBarProps) {
+  const router = useRouter();
+  const { currentFlow, isDirty, isSaving } = useFlowStore();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [savingBase, setSavingBase] = useState(false);
-  const [isBaseFlow, setIsBaseFlow] = useState(false);
   const [copied, setCopied] = useState(false);
+  const isBaseFlow = currentFlow?.is_template ?? false;
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     async function checkAdmin() {
@@ -72,12 +39,7 @@ export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare
       setIsAdmin(profile?.is_admin ?? false);
     }
     checkAdmin();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    setIsBaseFlow(currentFlow?.is_template ?? false);
-  }, [currentFlow]);
+  }, [supabase]);
 
   function startEditTitle() {
     setTitleValue(currentFlow?.title ?? '');
@@ -99,31 +61,7 @@ export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare
 
   async function handleSave() {
     if (!currentFlow || isSaving) return;
-    setSaving(true);
-    try {
-      const rawThumb = extractThumbnail(nodes);
-      let thumbnail: string | null = null;
-      if (rawThumb) {
-        const dataUrl = await compressToThumbnailDataUrl(rawThumb);
-        if (dataUrl) thumbnail = await uploadThumbnailToGCS(dataUrl, flowId);
-      }
-      await supabase
-        .from('flows')
-        .update({
-          flow_data: {
-            nodes: nodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data, parentId: n.parentId, style: n.style })),
-            edges,
-            viewport: { x: 0, y: 0, zoom: 1 },
-          },
-          ...(thumbnail ? { thumbnail_url: thumbnail } : {}),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', flowId);
-      setDirty(false);
-      setLastSaved(new Date());
-    } finally {
-      setSaving(false);
-    }
+    await onSave();
   }
 
   async function handleSaveAsBaseFlow() {
@@ -134,28 +72,42 @@ export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare
     if (!confirm(confirmMsg)) return;
     setSavingBase(true);
     try {
-      const rawThumb = extractThumbnail(nodes);
-      let thumbnail: string | null = null;
-      if (rawThumb) {
-        const dataUrl = await compressToThumbnailDataUrl(rawThumb);
-        if (dataUrl) thumbnail = await uploadThumbnailToGCS(dataUrl, flowId);
-      }
+      if (isDirty && !(await onSave())) return;
       await supabase.from('flows').update({
         is_template: !isBaseFlow,
-        flow_data: {
-          nodes: nodes.map(n => ({ id: n.id, type: n.type, position: n.position, data: n.data, parentId: n.parentId, style: n.style })),
-          edges,
-          viewport: { x: 0, y: 0, zoom: 1 },
-        },
-        ...(thumbnail ? { thumbnail_url: thumbnail } : {}),
         updated_at: new Date().toISOString(),
       }).eq('id', flowId);
-      setIsBaseFlow(!isBaseFlow);
-      setDirty(false);
-      setLastSaved(new Date());
+      useFlowStore.setState((state) => ({
+        currentFlow: state.currentFlow
+          ? { ...state.currentFlow, is_template: !isBaseFlow }
+          : null,
+      }));
     } finally {
       setSavingBase(false);
     }
+  }
+
+  async function handleFlowsNavigation(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (!isDirty && !isSaving) return;
+    event.preventDefault();
+    if (useFlowStore.getState().isSaving) {
+      await new Promise<void>((resolve) => {
+        let unsubscribe = () => {};
+        const timeoutId = window.setTimeout(() => {
+          unsubscribe();
+          resolve();
+        }, 30_000);
+        unsubscribe = useFlowStore.subscribe((state) => {
+          if (state.isSaving) return;
+          window.clearTimeout(timeoutId);
+          unsubscribe();
+          resolve();
+        });
+      });
+    }
+
+    if (useFlowStore.getState().isDirty && !(await onSave())) return;
+    if (!useFlowStore.getState().isDirty) router.push('/dashboard/canvas-flow');
   }
 
   function handleShare() {
@@ -179,6 +131,7 @@ export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare
       <div className="flex items-center gap-2 pointer-events-auto">
         <Link
           href="/dashboard/canvas-flow"
+          onClick={handleFlowsNavigation}
           className="flex items-center gap-1 text-sm transition-opacity hover:opacity-80"
           style={{ color: 'var(--color-white-muted)' }}
         >
@@ -239,7 +192,7 @@ export function TopBar({ flowId, isOwner = true, isShared = false, onToggleShare
             {isAdmin && (
               <button
                 onClick={handleSaveAsBaseFlow}
-                disabled={savingBase}
+                disabled={savingBase || isSaving}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40"
                 style={{
                   background: isBaseFlow ? 'rgba(59,158,255,0.2)' : 'transparent',
