@@ -1,34 +1,14 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ReactFlowProvider, type Node } from '@xyflow/react';
+import { ReactFlowProvider } from '@xyflow/react';
 import { FlowCanvas } from '@/components/canvas/FlowCanvas';
 import { TopBar } from '@/components/layout/TopBar';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
 import { AUTOSAVE_DEBOUNCE_MS } from '@/lib/utils/constants';
-import type { NodeData, ImageGenNodeData, UpscaleNodeData, ImageInputNodeData } from '@/types';
-import { compressToThumbnailDataUrl } from '@/lib/utils/imageProcessing';
-
-/** Returns the first available generated/uploaded image URL from the canvas nodes */
-function extractThumbnail(nodes: Node<NodeData>[]): string | null {
-  for (const node of nodes) {
-    if (node.type === 'imageGenNode') {
-      const url = (node.data as ImageGenNodeData).generatedImages?.[0];
-      if (url) return url;
-    }
-    if (node.type === 'upscaleNode') {
-      const url = (node.data as UpscaleNodeData).outputImageUrl;
-      if (url) return url;
-    }
-    if (node.type === 'imageInputNode') {
-      const url = (node.data as ImageInputNodeData).imageUrl;
-      if (url) return url;
-    }
-  }
-  return null;
-}
+import { createFlowThumbnail, extractFlowThumbnailSource } from '@/lib/utils/flowThumbnail';
 
 export default function FlowEditorPage() {
   const params = useParams<{ flowId: string }>();
@@ -36,9 +16,11 @@ export default function FlowEditorPage() {
   const router = useRouter();
   const {
     setCurrentFlow, nodes, edges,
-    isDirty, setDirty, setSaving, setLastSaved, currentFlow,
+    isDirty, isSaving, setDirty, setSaving, setLastSaved, currentFlow,
   } = useFlowStore();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const thumbnailAttempts = useRef({ sourceUrl: null as string | null, failures: 0 });
+  const previousThumbnailSource = useRef<string | null | undefined>(undefined);
   const [isTestUser, setIsTestUser] = useState(false);
   const [isOwner, setIsOwner] = useState(true);
   const [isShared, setIsShared] = useState(false);
@@ -52,6 +34,10 @@ export default function FlowEditorPage() {
       setCurrentFlow(data);
       setIsOwner(owner ?? true);
       setIsShared(data.is_shared ?? false);
+      const loadedNodes = data.flow_data?.nodes ?? [];
+      if ((owner ?? true) && !data.thumbnail_url && extractFlowThumbnailSource(loadedNodes)) {
+        useFlowStore.getState().setDirty(true);
+      }
     }
   }, [flowId, setCurrentFlow]);
 
@@ -92,71 +78,122 @@ export default function FlowEditorPage() {
   }, [supabase]);
 
   useEffect(() => {
-    loadFlow();
-    return () => setCurrentFlow(null);
+    const timeoutId = window.setTimeout(() => { void loadFlow(); }, 0);
+    return () => {
+      window.clearTimeout(timeoutId);
+      setCurrentFlow(null);
+    };
   }, [loadFlow, setCurrentFlow]);
 
-  // Auto-save debounced — also extracts and saves thumbnail
-  useEffect(() => {
-    if (!isDirty || !currentFlow || !isOwner) return;
-    const timer = setTimeout(async () => {
-      setSaving(true);
-      try {
-        const rawThumb = extractThumbnail(nodes);
-        let thumbnail: string | null = null;
-        if (rawThumb) {
-          const dataUrl = await compressToThumbnailDataUrl(rawThumb);
-          if (dataUrl) {
-            const res = await fetch('/api/thumbnails/upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ dataUrl, flowId }),
-            });
-            if (res.ok) {
-              const { ref } = await res.json();
-              thumbnail = ref ?? null;
-            }
-          }
+  const saveFlow = useCallback(async (): Promise<boolean> => {
+    const snapshot = useFlowStore.getState();
+    if (!snapshot.currentFlow || !snapshot.isDirty || snapshot.isSaving || !isOwner) return false;
+
+    const snapshotNodes = snapshot.nodes;
+    const snapshotEdges = snapshot.edges;
+    const thumbnailSource = extractFlowThumbnailSource(snapshotNodes);
+    if (thumbnailAttempts.current.sourceUrl !== thumbnailSource) {
+      thumbnailAttempts.current = { sourceUrl: thumbnailSource, failures: 0 };
+    }
+
+    setSaving(true);
+    let thumbnailRef: string | null = null;
+    try {
+      if (thumbnailSource) {
+        try {
+          thumbnailRef = await createFlowThumbnail(snapshotNodes, flowId);
+          thumbnailAttempts.current.failures = 0;
+        } catch (error) {
+          thumbnailAttempts.current.failures += 1;
+          console.error('[CanvasFlow] Thumbnail generation failed:', error);
         }
-        await supabase
-          .from('flows')
-          .update({
-            flow_data: {
-              nodes: nodes.map((n) => ({
-                id: n.id,
-                type: n.type,
-                position: n.position,
-                data: n.data,
-                parentId: n.parentId,
-                style: n.style,
-              })),
-              edges,
-              viewport: { x: 0, y: 0, zoom: 1 },
-            },
-            ...(thumbnail ? { thumbnail_url: thumbnail } : {}),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', flowId);
-        setDirty(false);
-        setLastSaved(new Date());
-      } finally {
-        setSaving(false);
       }
-    }, AUTOSAVE_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [isDirty, nodes, edges, flowId, currentFlow, supabase, setDirty, setSaving, setLastSaved]);
+
+      const { error } = await supabase
+        .from('flows')
+        .update({
+          flow_data: {
+            nodes: snapshotNodes.map((node) => ({
+              id: node.id,
+              type: node.type,
+              position: node.position,
+              data: node.data,
+              parentId: node.parentId,
+              style: node.style,
+            })),
+            edges: snapshotEdges,
+            viewport: { x: 0, y: 0, zoom: 1 },
+          },
+          ...(!thumbnailSource
+            ? { thumbnail_url: null }
+            : thumbnailRef
+              ? { thumbnail_url: thumbnailRef }
+              : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', flowId);
+      if (error) throw error;
+
+      if (thumbnailRef || !thumbnailSource) {
+        useFlowStore.setState((state) => ({
+          currentFlow: state.currentFlow
+            ? { ...state.currentFlow, thumbnail_url: thumbnailRef ?? null }
+            : null,
+        }));
+      }
+
+      const latest = useFlowStore.getState();
+      const snapshotIsCurrent = latest.nodes === snapshotNodes && latest.edges === snapshotEdges;
+      const shouldRetryThumbnail = !!thumbnailSource
+        && !thumbnailRef
+        && thumbnailAttempts.current.failures < 3;
+      if (snapshotIsCurrent && !shouldRetryThumbnail) setDirty(false);
+      setLastSaved(new Date());
+      return snapshotIsCurrent && !shouldRetryThumbnail;
+    } catch (error) {
+      console.error('[CanvasFlow] Save failed:', error);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [flowId, isOwner, setDirty, setLastSaved, setSaving, supabase]);
+
+  const thumbnailSource = extractFlowThumbnailSource(nodes);
+
+  // Persist new image outputs immediately so route changes cannot cancel the debounce.
+  useEffect(() => {
+    if (!currentFlow) return;
+    const sourceChanged = previousThumbnailSource.current !== undefined
+      && previousThumbnailSource.current !== thumbnailSource;
+    const needsRepair = !currentFlow.thumbnail_url && !!thumbnailSource;
+
+    // Keep the previous source while a save is active so a newer output is
+    // detected and persisted as soon as that older save finishes.
+    if (isSaving) return;
+    previousThumbnailSource.current = thumbnailSource;
+    if (!isDirty || (!sourceChanged && !needsRepair)) return;
+    const timer = window.setTimeout(() => { void saveFlow(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentFlow, isDirty, isSaving, saveFlow, thumbnailSource]);
+
+  // Auto-save debounced — also extracts and saves thumbnail.
+  useEffect(() => {
+    if (!isDirty || !currentFlow || !isOwner || isSaving) return;
+    const timer = window.setTimeout(() => { void saveFlow(); }, AUTOSAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [currentFlow, edges, isDirty, isOwner, isSaving, nodes, saveFlow]);
 
   // Ctrl+S
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        if (isDirty) setDirty(true);
+        if (isDirty) void saveFlow();
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isDirty, setDirty]);
+  }, [isDirty, saveFlow]);
 
   return (
     <ReactFlowProvider>
@@ -166,6 +203,7 @@ export default function FlowEditorPage() {
           isOwner={isOwner}
           isShared={isShared}
           onToggleShare={handleToggleShare}
+          onSave={saveFlow}
         />
 
         {/* Banner shown to non-owners viewing a shared flow */}
