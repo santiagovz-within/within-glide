@@ -1,5 +1,25 @@
 // Shared media helpers — safe to import in both server and client modules.
 
+const resolvedRefCache = new Map<string, string>();
+
+function isFreshSignedUrl(url: string): boolean {
+  const signedAtMatch = url.match(/[?&]X-Goog-Date=(\d{8}T\d{6}Z)/);
+  const expiresMatch = url.match(/[?&]X-Goog-Expires=(\d+)/);
+  if (!signedAtMatch || !expiresMatch) return true;
+
+  const signedAt = signedAtMatch[1];
+  const signedAtMs = Date.UTC(
+    Number(signedAt.slice(0, 4)),
+    Number(signedAt.slice(4, 6)) - 1,
+    Number(signedAt.slice(6, 8)),
+    Number(signedAt.slice(9, 11)),
+    Number(signedAt.slice(11, 13)),
+    Number(signedAt.slice(13, 15)),
+  );
+  const expiresAtMs = signedAtMs + Number(expiresMatch[1]) * 1000;
+  return expiresAtMs > Date.now() + 5 * 60 * 1000;
+}
+
 /** Returns true when `url` is a GCS canonical reference (`gcs:<objectPath>`). */
 export function isGcsRef(url: string | null | undefined): url is string {
   return typeof url === 'string' && url.startsWith('gcs:');
@@ -48,17 +68,31 @@ export function extractGcsPathFromSignedUrl(url: string): string | null {
 export async function resolveGcsRefs(
   refs: (string | null | undefined)[],
 ): Promise<Map<string, string>> {
-  const toSign = refs.filter(r => isGcsRef(r) || isSignedGcsUrl(r)) as string[];
-  if (toSign.length === 0) return new Map();
+  const result = new Map<string, string>();
+  const uniqueSignable = [...new Set(
+    refs.filter(r => isGcsRef(r) || isSignedGcsUrl(r)) as string[],
+  )];
+  const toSign = uniqueSignable.filter((ref) => {
+    const cached = resolvedRefCache.get(ref);
+    if (!cached || !isFreshSignedUrl(cached)) return true;
+    result.set(ref, cached);
+    return false;
+  });
+
+  if (toSign.length === 0) return result;
 
   const res = await fetch('/api/media/sign', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ paths: toSign }),
   });
-  if (!res.ok) return new Map();
+  if (!res.ok) return result;
   const { urls } = await res.json() as { urls: Record<string, string> };
-  return new Map(Object.entries(urls));
+  for (const [ref, url] of Object.entries(urls)) {
+    resolvedRefCache.set(ref, url);
+    result.set(ref, url);
+  }
+  return result;
 }
 
 /**

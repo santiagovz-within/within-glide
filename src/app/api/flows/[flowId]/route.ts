@@ -45,7 +45,7 @@ async function resignValue(value: unknown): Promise<unknown> {
 }
 
 // GET /api/flows/[flowId]
-// Accessible to the owner, or any authenticated user when is_shared = true.
+// Accessible to the owner, or any authenticated user when shared or a base template.
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ flowId: string }> },
@@ -69,7 +69,7 @@ export async function GET(
     if (error || !flow) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const isOwner = flow.user_id === user.id;
-    if (!isOwner && !flow.is_shared) {
+    if (!isOwner && !flow.is_shared && !flow.is_template) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 

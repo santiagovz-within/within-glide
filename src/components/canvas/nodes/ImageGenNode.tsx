@@ -1,10 +1,10 @@
 'use client';
 
 import { Position, type NodeProps } from '@xyflow/react';
-import { Aperture, Play, Download, ChevronLeft, ChevronRight, Image as ImageIcon } from 'lucide-react';
+import { Aperture, Play, Download, ChevronLeft, ChevronRight, Image as ImageIcon, RefreshCw } from 'lucide-react';
 import { SendToFigmaButton } from './SendToFigmaButton';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { downloadFromUrl } from '@/lib/utils/download';
+import { downloadAllFromUrls } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 import { NodeWrapper } from './NodeWrapper';
@@ -28,6 +28,7 @@ function autoResize(el: HTMLTextAreaElement) {
 
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const isOutputConnected = useFlowStore((s) => s.edges.some((e) => e.source === id && e.sourceHandle === 'image'));
   const genHistory = data.generationHistory ?? [];
   const [histIdx, setHistIdx] = useState(() => Math.max(0, genHistory.length - 1));
@@ -159,6 +160,16 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   const displayImages = genHistory.length > 0 ? (genHistory[histIdx] ?? []) : (data.generatedImages ?? []);
 
+  async function handleDownload() {
+    if (isDownloading || displayImages.length === 0) return;
+    setIsDownloading(true);
+    try {
+      await downloadAllFromUrls(displayImages, `image-generation-v${histIdx + 1}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   const sliderPct = ((data.numImages - 1) / 3) * 100;
 
   const footer = (
@@ -175,12 +186,13 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {displayImages.length > 0 && (
         <div key={displayImages[0]} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
           <button
-            onClick={() => downloadFromUrl(displayImages[0])}
-            className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
             style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white-muted)', borderRadius: 11 }}
           >
-            <Download size={12} />
-            Download
+            {isDownloading ? <RefreshCw size={12} className="animate-spin" /> : <Download size={12} />}
+            {isDownloading ? 'Downloading…' : displayImages.length > 1 ? `Download All (${displayImages.length})` : 'Download'}
           </button>
           <SendToFigmaButton imageUrl={displayImages[0]} style={{ flex: 1, minWidth: 0 }} />
         </div>

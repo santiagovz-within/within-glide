@@ -7,7 +7,7 @@ export async function GET() {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('flows')
-      .select('id, title, description, thumbnail_url, flow_data, created_at, updated_at')
+      .select('id, title, description, thumbnail_url, created_at, updated_at')
       .eq('is_template', true)
       .order('created_at', { ascending: true });
 

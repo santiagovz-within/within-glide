@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Search, MoreHorizontal, Clock, Workflow,
@@ -9,7 +9,13 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import type { Flow } from '@/types';
 import { formatDistanceToNow } from '@/lib/utils/date';
-import { resolveGcsRefs } from '@/lib/utils/mediaUtils';
+import { isGcsRef, isSignedGcsUrl, resolveGcsRefs } from '@/lib/utils/mediaUtils';
+import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
+
+type FlowCardSummary = Pick<
+  Flow,
+  'id' | 'title' | 'description' | 'thumbnail_url' | 'created_at' | 'updated_at'
+>;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -28,18 +34,21 @@ function parseDescription(raw: string | null): { icon: string | null; text: stri
 function CardShell({
   children,
   onClick,
+  revealIndex = 0,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
+  revealIndex?: number;
 }) {
   return (
     <div
-      className="relative group rounded-xl cursor-pointer transition-all duration-150 hover:scale-[1.02]"
+      className="flow-card-enter relative group rounded-xl cursor-pointer transition-all duration-150 hover:scale-[1.02]"
       style={{
         border: 'var(--border-default)',
         background: 'var(--color-bg-elevated)',
         // keep shadow inside the transform but NOT overflow:hidden — that causes the clipping
         boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+        animationDelay: `${Math.min(revealIndex, 10) * 40}ms`,
       }}
       onClick={onClick}
     >
@@ -51,8 +60,8 @@ function CardShell({
 // ── Inline edit overlay for base flow cards (admins only) ────────────────────
 
 interface EditOverlayProps {
-  flow: Flow;
-  onSave: (updates: { title: string; description: string; thumbnail_url: string | null }) => Promise<void>;
+  flow: FlowCardSummary;
+  onSave: (updates: { title: string; description: string | null; thumbnail_url: string | null }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -65,8 +74,6 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const supabase = createClient();
 
   async function handleUpload(file: File) {
     setUploading(true);
@@ -93,7 +100,7 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
     const combinedDescription = [icon.trim(), description.trim()].filter(Boolean).join(' ');
     await onSave({
       title: title.trim() || flow.title,
-      description: combinedDescription || null as unknown as string,
+      description: combinedDescription || null,
       thumbnail_url: thumbnailUrl.trim() || null,
     });
     setSaving(false);
@@ -189,39 +196,56 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
 
 export default function CanvasFlowPage() {
   const router = useRouter();
-  const [flows, setFlows]         = useState<Flow[]>([]);
-  const [baseFlows, setBaseFlows] = useState<Flow[]>([]);
+  const [flows, setFlows]         = useState<FlowCardSummary[]>([]);
+  const [baseFlows, setBaseFlows] = useState<FlowCardSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading]     = useState(true);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editingBaseId, setEditingBaseId] = useState<string | null>(null);
+  const [openingBaseId, setOpeningBaseId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin]     = useState(false);
   const [resolvedThumbs, setResolvedThumbs] = useState<Map<string, string>>(new Map());
 
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const loadFlows = useCallback(async () => {
+    const baseFlowsPromise = fetch('/api/flows/base')
+      .then((r) => r.json())
+      .catch(() => ({ baseFlows: [] }));
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
-    const [userFlowsResult, baseFlowsResult, profileResult] = await Promise.all([
-      supabase
-        .from('flows')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_template', false)
-        .order('updated_at', { ascending: false }),
-      fetch('/api/flows/base').then((r) => r.json()).catch(() => ({ baseFlows: [] })),
-      supabase.from('profiles').select('is_admin').eq('id', user.id).single(),
+    const userFlowsPromise = supabase
+      .from('flows')
+      .select('id, title, description, thumbnail_url, created_at, updated_at')
+      .eq('user_id', user.id)
+      .eq('is_template', false)
+      .order('updated_at', { ascending: false });
+    const profilePromise = supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single();
+    const [userFlowsResult, baseFlowsResult] = await Promise.all([
+      userFlowsPromise,
+      baseFlowsPromise,
     ]);
 
     setFlows(userFlowsResult.data ?? []);
     setBaseFlows(baseFlowsResult.baseFlows ?? []);
-    setIsAdmin(profileResult.data?.is_admin ?? false);
     setLoading(false);
+
+    const profileResult = await profilePromise;
+    setIsAdmin(profileResult.data?.is_admin ?? false);
   }, [supabase]);
 
-  useEffect(() => { loadFlows(); }, [loadFlows]);
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => { void loadFlows(); }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadFlows]);
 
   // Batch-resolve all thumbnail URLs (both gcs: refs and old stored signed URLs).
   useEffect(() => {
@@ -229,7 +253,13 @@ export default function CanvasFlowPage() {
       .map(f => f.thumbnail_url)
       .filter(Boolean) as string[];
     if (allUrls.length === 0) return;
-    resolveGcsRefs(allUrls).then(setResolvedThumbs);
+    let cancelled = false;
+    resolveGcsRefs(allUrls).then((resolved) => {
+      if (!cancelled) setResolvedThumbs(resolved);
+    }).catch((error) => {
+      console.error('[CanvasFlow] Failed to resolve thumbnails:', error);
+    });
+    return () => { cancelled = true; };
   }, [flows, baseFlows]);
 
   async function createNewFlow(
@@ -246,6 +276,23 @@ export default function CanvasFlowPage() {
     if (!error && data) router.push(`/dashboard/canvas-flow/${data.id}`);
   }
 
+  async function createFlowFromBase(flow: FlowCardSummary) {
+    if (openingBaseId) return;
+    setOpeningBaseId(flow.id);
+    try {
+      const response = await fetch(`/api/flows/${flow.id}`);
+      if (!response.ok) throw new Error('Unable to load this base flow');
+      const result = await response.json() as { data?: { flow_data?: Record<string, unknown> } };
+      if (!result.data?.flow_data) throw new Error('This base flow has no flow data');
+      await createNewFlow(flow.title, result.data.flow_data);
+    } catch (error) {
+      console.error('[CanvasFlow] Failed to open base flow:', error);
+      alert('Could not open this base flow. Please try again.');
+    } finally {
+      setOpeningBaseId(null);
+    }
+  }
+
   async function renameFlow(id: string, newTitle: string) {
     await supabase.from('flows').update({ title: newTitle, updated_at: new Date().toISOString() }).eq('id', id);
     setFlows(flows.map((f) => (f.id === id ? { ...f, title: newTitle } : f)));
@@ -258,7 +305,7 @@ export default function CanvasFlowPage() {
 
   async function saveBaseFlowEdits(
     id: string,
-    updates: { title: string; description: string; thumbnail_url: string | null }
+    updates: { title: string; description: string | null; thumbnail_url: string | null }
   ) {
     await supabase.from('flows').update({
       title: updates.title,
@@ -299,7 +346,9 @@ export default function CanvasFlowPage() {
           BASE FLOWS
         </h2>
 
-        {baseFlows.length === 0 ? (
+        {loading ? (
+          <FlowCardSkeletonGrid count={5} />
+        ) : baseFlows.length === 0 ? (
           <div
             className="flex items-center gap-3 px-4 py-5 rounded-xl"
             style={{ border: '1.5px dashed rgba(255,255,255,0.1)' }}
@@ -312,17 +361,19 @@ export default function CanvasFlowPage() {
         ) : (
           // Same grid as recent flows — no horizontal scroll, no overflow:hidden parent to clip hovers
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {baseFlows.map((bf) => {
+            {baseFlows.map((bf, index) => {
               const { icon, text } = parseDescription(bf.description);
               const isEditing = editingBaseId === bf.id;
               const menuOpen  = menuOpenId === bf.id;
+              const isOpening = openingBaseId === bf.id;
 
               return (
                 <CardShell
                   key={bf.id}
+                  revealIndex={index}
                   onClick={() => {
-                    if (isEditing || menuOpen) return;
-                    createNewFlow(bf.title, bf.flow_data as unknown as Record<string, unknown>);
+                    if (isEditing || menuOpen || isOpening) return;
+                    createFlowFromBase(bf);
                   }}
                 >
                   {/* Thumbnail area */}
@@ -330,14 +381,11 @@ export default function CanvasFlowPage() {
                     className="aspect-video flex items-center justify-center rounded-t-xl overflow-hidden"
                     style={{ background: 'var(--color-bg-surface)' }}
                   >
-                    {bf.thumbnail_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={resolvedThumbs.get(bf.thumbnail_url) ?? bf.thumbnail_url} alt={bf.title} className="w-full h-full object-cover" />
-                    ) : icon ? (
-                      <span style={{ fontSize: 36 }}>{icon}</span>
-                    ) : (
-                      <Workflow size={32} className="opacity-20" style={{ color: 'var(--color-white)' }} />
-                    )}
+                    <FlowThumbnail
+                      flow={bf}
+                      resolvedThumbnailUrl={bf.thumbnail_url ? resolvedThumbs.get(bf.thumbnail_url) : undefined}
+                      fallbackIcon={icon}
+                    />
                   </div>
 
                   {/* Footer */}
@@ -422,6 +470,15 @@ export default function CanvasFlowPage() {
                       onClose={() => setEditingBaseId(null)}
                     />
                   )}
+
+                  {isOpening && (
+                    <div
+                      className="absolute inset-0 z-20 flex items-center justify-center rounded-xl"
+                      style={{ background: 'rgba(15,15,16,0.72)', backdropFilter: 'blur(3px)' }}
+                    >
+                      <RefreshCw size={18} className="animate-spin" style={{ color: 'var(--color-white)' }} />
+                    </div>
+                  )}
                 </CardShell>
               );
             })}
@@ -468,11 +525,7 @@ export default function CanvasFlowPage() {
 
         {/* Grid */}
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-44 rounded-xl animate-pulse" style={{ background: 'var(--color-bg-elevated)' }} />
-            ))}
-          </div>
+          <FlowCardSkeletonGrid count={5} />
         ) : filteredFlows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Workflow size={48} className="mb-4 opacity-20" style={{ color: 'var(--color-white)' }} />
@@ -495,10 +548,11 @@ export default function CanvasFlowPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {filteredFlows.map((flow) => (
+            {filteredFlows.map((flow, index) => (
               <FlowCard
                 key={flow.id}
                 flow={flow}
+                revealIndex={index}
                 resolvedThumbnailUrl={flow.thumbnail_url ? resolvedThumbs.get(flow.thumbnail_url) : undefined}
                 menuOpen={menuOpenId === flow.id}
                 onMenuToggle={(e) => {
@@ -525,8 +579,71 @@ export default function CanvasFlowPage() {
 
 // ── Recent flow card ──────────────────────────────────────────────────────────
 
+function FlowCardSkeletonGrid({ count }: { count: number }) {
+  return (
+    <div
+      className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+      aria-hidden="true"
+    >
+      {Array.from({ length: count }).map((_, index) => (
+        <div
+          key={index}
+          className="overflow-hidden rounded-xl animate-pulse"
+          style={{ border: 'var(--border-default)', background: 'var(--color-bg-elevated)' }}
+        >
+          <div className="aspect-video" style={{ background: 'var(--color-bg-surface)' }} />
+          <div className="p-3">
+            <div className="h-3 w-2/3 rounded" style={{ background: 'var(--color-bg-surface)' }} />
+            <div className="h-2 w-1/3 rounded mt-2" style={{ background: 'var(--color-bg-surface)' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlowThumbnail({
+  flow,
+  resolvedThumbnailUrl,
+  fallbackIcon,
+}: {
+  flow: FlowCardSummary;
+  resolvedThumbnailUrl?: string;
+  fallbackIcon?: string | null;
+}) {
+  const storedThumbnail = flow.thumbnail_url;
+  const needsResolution = isGcsRef(storedThumbnail) || isSignedGcsUrl(storedThumbnail);
+  const src = resolvedThumbnailUrl ?? (needsResolution ? undefined : storedThumbnail ?? undefined);
+
+  if (src) {
+    return (
+      <ProgressiveImage
+        src={src}
+        alt={flow.title}
+        fill
+        className="block h-full w-full object-cover"
+        loading="lazy"
+        decoding="async"
+      />
+    );
+  }
+
+  if (storedThumbnail) {
+    return (
+      <div className="h-full w-full animate-pulse" style={{ background: 'var(--color-bg-elevated)' }} />
+    );
+  }
+
+  return fallbackIcon ? (
+    <span style={{ fontSize: 36 }}>{fallbackIcon}</span>
+  ) : (
+    <Workflow size={32} className="opacity-20" style={{ color: 'var(--color-white)' }} />
+  );
+}
+
 function FlowCard({
   flow,
+  revealIndex,
   resolvedThumbnailUrl,
   menuOpen,
   onMenuToggle,
@@ -534,7 +651,8 @@ function FlowCard({
   onRename,
   onDelete,
 }: {
-  flow: Flow;
+  flow: FlowCardSummary;
+  revealIndex: number;
   resolvedThumbnailUrl?: string;
   menuOpen: boolean;
   onMenuToggle: (e: React.MouseEvent) => void;
@@ -542,20 +660,14 @@ function FlowCard({
   onRename: () => void;
   onDelete: () => void;
 }) {
-  const thumb = resolvedThumbnailUrl ?? flow.thumbnail_url;
   return (
-    <CardShell onClick={onOpen}>
+    <CardShell onClick={onOpen} revealIndex={revealIndex}>
       {/* Thumbnail */}
       <div
         className="aspect-video flex items-center justify-center rounded-t-xl overflow-hidden"
         style={{ background: 'var(--color-bg-surface)' }}
       >
-        {thumb ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumb} alt={flow.title} className="w-full h-full object-cover" />
-        ) : (
-          <Workflow size={32} className="opacity-20" style={{ color: 'var(--color-white)' }} />
-        )}
+        <FlowThumbnail flow={flow} resolvedThumbnailUrl={resolvedThumbnailUrl} />
       </div>
 
       {/* Footer */}
