@@ -40,8 +40,13 @@ import { GroupNode } from './nodes/GroupNode';
 import { CustomEdge } from './edges/CustomEdge';
 import { NodeToolbar } from './NodeToolbar';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
-import type { NodeType, NodeData, ImageGenNodeData, UpscaleNodeData, ModifyNodeData, SelectNodeData, ImageInputNodeData, ImageToPromptNodeData, VideoGenNodeData, VideoInputNodeData, RemoveBgNodeData, MediaInputNodeData, UpscaleMediaNodeData } from '@/types';
-import { MODELS } from '@/lib/api/models';
+import {
+  getActiveMediaSourceHandle,
+  getNodeMediaUrls,
+  getSourceMediaType,
+} from './mediaOutputs';
+import type { NodeType, NodeData, ImageGenNodeData, ImageToPromptNodeData, MediaInputNodeData } from '@/types';
+import { getImageReferenceLimit } from '@/lib/api/models';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 import { uploadImageToStorage } from '@/lib/utils/uploadImage';
 import { setPendingFile } from '@/lib/utils/pendingFiles';
@@ -91,6 +96,17 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
 };
 
 interface ContextMenu { x: number; y: number; canvasX: number; canvasY: number; }
+interface ConnectionToastState {
+  message: string;
+  tone: 'error' | 'success' | 'partial';
+}
+
+interface PendingConnection {
+  nodeId: string;
+  handleId: string | null;
+  handleType: string | null;
+  selectedNodeIds: string[];
+}
 
 // Fields that are derived from edges or represent generation output — must be
 // stripped when pasting so a duplicated node starts in a blank state.
@@ -121,14 +137,17 @@ function pasteCleanData(nodeType: string | undefined, data: NodeData): NodeData 
   return d as NodeData;
 }
 
-function InvalidConnectionToast({ visible }: { visible: boolean }) {
-  if (!visible) return null;
+function ConnectionToast({ toast }: { toast: ConnectionToastState | null }) {
+  if (!toast) return null;
+  const background = toast.tone === 'error'
+    ? 'var(--color-error)'
+    : toast.tone === 'success' ? 'var(--color-success)' : '#b45309';
   return (
     <div
       className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-xs font-medium pointer-events-none"
-      style={{ background: 'var(--color-error)', color: '#fff', boxShadow: 'var(--shadow-node)' }}
+      style={{ background, color: '#fff', boxShadow: 'var(--shadow-node)' }}
     >
-      Incompatible port types — check the connector icons
+      {toast.message}
     </div>
   );
 }
@@ -144,16 +163,26 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
   const allowedTypes = isTestUser ? (['mediaInputNode', 'videoToGifNode'] as import('@/types').NodeType[]) : undefined;
   const { screenToFlowPosition } = useReactFlow();
   const [contextMenu, setContextMenu]   = useState<ContextMenu | null>(null);
-  const [invalidToast, setInvalidToast] = useState(false);
+  const [connectionToast, setConnectionToast] = useState<ConnectionToastState | null>(null);
   const [isDragOver, setIsDragOver]     = useState(false);
   const reactFlowWrapper                = useRef<HTMLDivElement>(null);
-  const invalidToastTimer               = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectionToastTimer            = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clipboardRef                    = useRef<{ nodes: Node<NodeData>[]; edges: Edge[]; incomingEdges: Edge[] } | null>(null);
   const undoStack                       = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] }[]>([]);
   const MAX_UNDO                        = 30;
   const nodesRef                        = useRef(nodes);
   const edgesRef                        = useRef(edges);
-  const pendingConnectionRef            = useRef<{ nodeId: string; handleId: string | null; handleType: string | null } | null>(null);
+  const pendingConnectionRef            = useRef<PendingConnection | null>(null);
+
+  const showConnectionToast = useCallback((toast: ConnectionToastState) => {
+    if (connectionToastTimer.current) clearTimeout(connectionToastTimer.current);
+    setConnectionToast(toast);
+    connectionToastTimer.current = setTimeout(() => setConnectionToast(null), 3200);
+  }, []);
+
+  useEffect(() => () => {
+    if (connectionToastTimer.current) clearTimeout(connectionToastTimer.current);
+  }, []);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
@@ -269,11 +298,12 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
           for (const edge of edgesToRemove) {
             if (allToRemove.has(edge.target)) continue; // target being deleted too
             const targetNode = freshNodeMap.get(edge.target);
+            const sourceNode = freshNodeMap.get(edge.source);
             if (!targetNode) continue;
             const acc = nodeUpdates.get(edge.target) ?? {};
             const handle = edge.targetHandle ?? '';
 
-            if (edge.sourceHandle === 'image') {
+            if (getSourceMediaType(sourceNode, edge.sourceHandle) === 'image') {
               const t = targetNode.type ?? '';
               if (t === 'upscaleNode' || t === 'modifyNode' || t === 'removeBgNode' || t === 'imageToPromptNode') {
                 nodeUpdates.set(edge.target, { ...acc, inputImageUrl: undefined });
@@ -282,15 +312,27 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
                 else if (handle === 'end_frame') nodeUpdates.set(edge.target, { ...acc, endFrameUrl: undefined });
               } else if (t === 'imageGenNode') {
                 const currentData = targetNode.data as ImageGenNodeData;
-                const urls = [...(currentData.inputImageUrls ?? [])];
+                const urls = [...((acc.inputImageUrls as string[] | undefined) ?? currentData.inputImageUrls ?? [])];
                 const idx = handle.startsWith('ref_') ? parseInt(handle.split('_')[1]) : 0;
                 urls[idx] = '';
-                const filled = urls.filter(Boolean).length;
-                const maxRefs = MODELS[currentData.model as keyof typeof MODELS]?.maxReferenceImages ?? 14;
-                nodeUpdates.set(edge.target, { ...acc, inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) });
+                const maxRefs = getImageReferenceLimit(currentData.model);
+                const remainingIndexes = edgesRef.current
+                  .filter((candidate) =>
+                    !removedEdgeIds.has(candidate.id) &&
+                    candidate.target === edge.target &&
+                    candidate.targetHandle?.startsWith('ref_')
+                  )
+                  .map((candidate) => Number(candidate.targetHandle?.slice(4)))
+                  .filter(Number.isInteger);
+                const highestOccupied = remainingIndexes.length > 0 ? Math.max(...remainingIndexes) : -1;
+                nodeUpdates.set(edge.target, {
+                  ...acc,
+                  inputImageUrls: urls,
+                  imagePortCount: Math.min(Math.max(highestOccupied + 2, 1), maxRefs),
+                });
               }
             }
-            if (edge.sourceHandle === 'video' && (handle === 'video' || handle === 'video_in')) {
+            if (getSourceMediaType(sourceNode, edge.sourceHandle) === 'video' && (handle === 'video' || handle === 'video_in')) {
               nodeUpdates.set(edge.target, { ...acc, videoUrl: undefined });
             }
             if (edge.sourceHandle === 'prompt') {
@@ -420,15 +462,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
 
           // ── start_frame / end_frame → videoGenNode ─────────────────────
           if (edge.targetHandle === 'start_frame' || edge.targetHandle === 'end_frame') {
-            let imageUrl: string | undefined;
-            if (sourceNode.type === 'imageInputNode')        imageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
-            else if (sourceNode.type === 'mediaInputNode')   imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
-            else if (sourceNode.type === 'upscaleMediaNode') imageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl;
-            else if (sourceNode.type === 'imageGenNode')     imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
-            else if (sourceNode.type === 'upscaleNode')      imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
-            else if (sourceNode.type === 'modifyNode')       imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
-            else if (sourceNode.type === 'selectNode')       imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
-            else if (sourceNode.type === 'removeBgNode')     imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
+            const imageUrl = getNodeMediaUrls(sourceNode, 'image')[0];
             if (imageUrl) {
               const field = edge.targetHandle === 'start_frame' ? 'startFrameUrl' : 'endFrameUrl';
               newNodes[tgtIdx] = {
@@ -441,11 +475,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
 
           // ── video / video_in → videoUrl on target ──────────────────────
           if (edge.targetHandle === 'video' || edge.targetHandle === 'video_in') {
-            let videoUrl: string | undefined;
-            if (sourceNode.type === 'videoGenNode')        videoUrl = (sourceNode.data as VideoGenNodeData).videoUrl;
-            else if (sourceNode.type === 'videoInputNode') videoUrl = (sourceNode.data as VideoInputNodeData).videoUrl;
-            else if (sourceNode.type === 'mediaInputNode') videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
-            else if (sourceNode.type === 'modifyNode')     videoUrl = (sourceNode.data as ModifyNodeData).outputVideoUrl;
+            const videoUrl = getNodeMediaUrls(sourceNode, 'video')[0];
             if (videoUrl) {
               newNodes[tgtIdx] = {
                 ...newNodes[tgtIdx],
@@ -458,15 +488,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
           // ── Multi-image ref_ connections (imageGenNode) ─────────────────
           if (!edge.targetHandle?.startsWith('ref_')) continue;
 
-          let imageUrl: string | undefined;
-          if (sourceNode.type === 'imageInputNode')        imageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
-          else if (sourceNode.type === 'mediaInputNode')   imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
-          else if (sourceNode.type === 'upscaleMediaNode') imageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl;
-          else if (sourceNode.type === 'imageGenNode')     imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
-          else if (sourceNode.type === 'upscaleNode')      imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
-          else if (sourceNode.type === 'modifyNode')       imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
-          else if (sourceNode.type === 'selectNode')       imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
-          else if (sourceNode.type === 'removeBgNode')     imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
+          const imageUrl = getNodeMediaUrls(sourceNode, 'image')[0];
           if (!imageUrl) continue;
 
           const tgtData = newNodes[tgtIdx].data as ImageGenNodeData;
@@ -474,7 +496,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
           const refIdx = parseInt(edge.targetHandle.split('_')[1]);
           urls[refIdx] = imageUrl;
           const filled = urls.filter(Boolean).length;
-          const maxRefs = MODELS[tgtData.model as keyof typeof MODELS]?.maxReferenceImages ?? 14;
+          const maxRefs = getImageReferenceLimit(tgtData.model);
           newNodes[tgtIdx] = {
             ...newNodes[tgtIdx],
             data: { ...newNodes[tgtIdx].data, inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) } as NodeData,
@@ -500,71 +522,74 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
       const targetNode = nodes.find((n) => n.id === conn.target);
       if (!sourceNode || !targetNode) return false;
 
-      // galleryOutputNode accepts any connection
-      if (targetNode.type === 'galleryOutputNode') return true;
-
       const srcKey = `${sourceNode.type}:${conn.sourceHandle ?? ''}:source`;
       const tgtKey = `${targetNode.type}:${conn.targetHandle ?? ''}:target`;
       const srcType = PORT_TYPE_MAP[srcKey];
       const tgtType = PORT_TYPE_MAP[tgtKey];
+      const reject = (message: string) => {
+        showConnectionToast({ message, tone: 'error' });
+        return false;
+      };
+
+      if (targetNode.type === 'galleryOutputNode' && conn.targetHandle === 'input') {
+        return srcType === 'image' || srcType === 'video'
+          ? true
+          : reject('Output Gallery accepts image or video outputs');
+      }
 
       // upscaleMediaNode accepts multiple image or video connections (mode-locked, capped)
       if (targetNode.type === 'upscaleMediaNode' && conn.targetHandle === 'media') {
         if (srcType !== 'image' && srcType !== 'video') {
-          if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
-          setInvalidToast(true);
-          invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
-          return false;
+          return reject('Upscale Media accepts image or video outputs');
         }
         const liveEdges = useFlowStore.getState().edges;
+        const liveNodes = useFlowStore.getState().nodes;
         const mediaEdges = liveEdges.filter(
           (e) => e.target === targetNode.id && e.targetHandle === 'media'
         );
         if (mediaEdges.length > 0) {
           // Reject duplicate source
           if (mediaEdges.some((e) => e.source === conn.source && e.sourceHandle === conn.sourceHandle)) {
-            return false;
+            return reject('This output is already connected');
           }
           // Mode-lock: all inputs must share the same type
-          const lockedType = mediaEdges[0].sourceHandle === 'video' ? 'video' : 'image';
+          const firstEdge = mediaEdges[0];
+          const lockedSource = liveNodes.find((node) => node.id === firstEdge.source);
+          const lockedType = getSourceMediaType(lockedSource, firstEdge.sourceHandle);
           if (lockedType !== srcType) {
-            if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
-            setInvalidToast(true);
-            invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
-            return false;
+            return reject(`Upscale Media is currently locked to ${lockedType ?? 'another media type'} inputs`);
           }
           // Cap: 30 images, 10 videos
           const cap = lockedType === 'video' ? 10 : 30;
           if (mediaEdges.length >= cap) {
-            if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
-            setInvalidToast(true);
-            invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
-            return false;
+            return reject(`Upscale Media has reached its ${cap}-${lockedType} limit`);
           }
         }
         return true;
       }
 
+      if (targetNode.type === 'imageGenNode' && conn.targetHandle?.startsWith('ref_')) {
+        const referenceIndex = Number(conn.targetHandle.slice(4));
+        const limit = getImageReferenceLimit((targetNode.data as ImageGenNodeData).model);
+        if (!Number.isInteger(referenceIndex) || referenceIndex >= limit) {
+          return reject(`This model accepts up to ${limit} reference images`);
+        }
+      }
+
       // modifyNode's image input accepts image or video (video triggers outpaint mode)
       if (targetNode.type === 'modifyNode' && conn.targetHandle === 'image') {
         if (srcType === 'image' || srcType === 'video') return true;
-        if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
-        setInvalidToast(true);
-        invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
-        return false;
+        return reject('Modify accepts image or video outputs');
       }
 
       if (!srcType || !tgtType) return true;
 
       if (srcType !== tgtType) {
-        if (invalidToastTimer.current) clearTimeout(invalidToastTimer.current);
-        setInvalidToast(true);
-        invalidToastTimer.current = setTimeout(() => setInvalidToast(false), 2500);
-        return false;
+        return reject('Incompatible port types — check the connector icons');
       }
       return true;
     },
-    [nodes]
+    [nodes, showConnectionToast]
   );
 
   const onContextMenu = useCallback(
@@ -623,6 +648,8 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
           target:       nodeId,
           targetHandle,
         };
+        // Drag-to-empty node creation remains a single-source action.
+        pendingConnectionRef.current = null;
         onConnectHandler(connection);
       }
     }
@@ -653,9 +680,20 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
         } else {
           urls[0] = imageUrl ?? '';
         }
-        const filled = urls.filter(Boolean).length;
-        const maxRefs = MODELS[currentData.model as keyof typeof MODELS]?.maxReferenceImages ?? 14;
-        updateNodeData(targetEdge.target, { inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) });
+        const maxRefs = getImageReferenceLimit(currentData.model);
+        const referenceIndexes = useFlowStore.getState().edges
+          .filter((edge) =>
+            edge.id !== targetEdge.id &&
+            edge.target === targetEdge.target &&
+            edge.targetHandle?.startsWith('ref_')
+          )
+          .map((edge) => Number(edge.targetHandle?.slice(4)))
+          .filter(Number.isInteger);
+        const highestOccupied = referenceIndexes.length > 0 ? Math.max(...referenceIndexes) : -1;
+        updateNodeData(targetEdge.target, {
+          inputImageUrls: urls,
+          imagePortCount: Math.min(Math.max(highestOccupied + 2, 1), maxRefs),
+        });
       }
     },
     [updateNodeData]
@@ -664,14 +702,17 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
   useEffect(() => {
     function handleImagePropagate(e: Event) {
       const { sourceNodeId, imageUrl } = (e as CustomEvent).detail as { sourceNodeId: string; imageUrl: string | null };
-      const connectedEdges = edges.filter((edge) => edge.source === sourceNodeId && edge.sourceHandle === 'image');
+      const sourceNode = nodes.find((node) => node.id === sourceNodeId);
+      const connectedEdges = edges.filter(
+        (edge) => edge.source === sourceNodeId && getSourceMediaType(sourceNode, edge.sourceHandle) === 'image'
+      );
       for (const edge of connectedEdges) {
         propagateImageToTarget(sourceNodeId, edge, imageUrl);
       }
     }
     document.addEventListener('node:image-propagate', handleImagePropagate);
     return () => document.removeEventListener('node:image-propagate', handleImagePropagate);
-  }, [edges, propagateImageToTarget]);
+  }, [edges, nodes, propagateImageToTarget]);
 
   useEffect(() => {
     function handleVideoPropagate(e: Event) {
@@ -707,7 +748,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
     return () => document.removeEventListener('node:remove-source-edges', handleRemoveSourceEdges);
   }, [propagateImageToTarget, updateNodeData]);
 
-  const onConnectHandler = useCallback(
+  const connectSingle = useCallback(
     (connection: Connection) => {
       // ── Single-connection enforcement ────────────────────────────────
       // All target handles accept at most one incoming edge, except galleryOutputNode.
@@ -722,7 +763,10 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
         );
         if (existing.length > 0) {
           for (const edge of existing) {
-            if (edge.sourceHandle === 'image') propagateImageToTarget(edge.source, edge, null);
+            const edgeSource = freshNodes.find((node) => node.id === edge.source);
+            if (getSourceMediaType(edgeSource, edge.sourceHandle) === 'image') {
+              propagateImageToTarget(edge.source, edge, null);
+            }
             if (edge.sourceHandle === 'prompt') updateNodeData(edge.target, { promptConnected: false });
           }
           const removedIds = new Set(existing.map((e) => e.id));
@@ -735,7 +779,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
 
       // ── Post-connect propagation ─────────────────────────────────────
       if (connection.sourceHandle === 'prompt') {
-        const sourceNode = nodes.find((n) => n.id === connection.source);
+        const sourceNode = useFlowStore.getState().nodes.find((n) => n.id === connection.source);
         if (sourceNode?.type === 'promptNode') {
           const { prompt } = sourceNode.data as { prompt?: string };
           updateNodeData(connection.target, { prompt: prompt ?? '', promptConnected: true });
@@ -745,19 +789,12 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
         }
       }
 
-      if (connection.sourceHandle === 'image') {
-        // Use fresh store data — React closure may lag behind Zustand after a recent generation
-        const latestNodes = useFlowStore.getState().nodes;
-        const sourceNode = latestNodes.find((n) => n.id === connection.source);
-        let imageUrl: string | undefined;
-        if (sourceNode?.type === 'imageInputNode') imageUrl = (sourceNode.data as { imageUrl?: string }).imageUrl;
-        else if (sourceNode?.type === 'mediaInputNode')   imageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
-        else if (sourceNode?.type === 'upscaleMediaNode') imageUrl = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl;
-        else if (sourceNode?.type === 'imageGenNode') imageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
-        else if (sourceNode?.type === 'upscaleNode')  imageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
-        else if (sourceNode?.type === 'modifyNode')   imageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
-        else if (sourceNode?.type === 'selectNode')   imageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
-        else if (sourceNode?.type === 'removeBgNode') imageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
+      const latestNodes = useFlowStore.getState().nodes;
+      const sourceNode = latestNodes.find((n) => n.id === connection.source);
+      const sourceMediaType = getSourceMediaType(sourceNode, connection.sourceHandle);
+
+      if (sourceNode && sourceMediaType === 'image') {
+        const imageUrl = getNodeMediaUrls(sourceNode, 'image')[0];
         if (imageUrl) {
           propagateImageToTarget(connection.source, {
             id: '', source: connection.source, target: connection.target,
@@ -766,20 +803,168 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
         }
       }
 
-      if (connection.sourceHandle === 'video' && (connection.targetHandle === 'video' || connection.targetHandle === 'video_in')) {
-        const latestNodes = useFlowStore.getState().nodes;
-        const sourceNode = latestNodes.find((n) => n.id === connection.source);
-        let videoUrl: string | undefined;
-        if (sourceNode?.type === 'videoGenNode') videoUrl = (sourceNode.data as VideoGenNodeData).videoUrl;
-        else if (sourceNode?.type === 'videoInputNode') videoUrl = (sourceNode.data as { videoUrl?: string }).videoUrl;
-        else if (sourceNode?.type === 'mediaInputNode')   videoUrl = (sourceNode.data as MediaInputNodeData).videoUrl;
-        else if (sourceNode?.type === 'upscaleMediaNode') videoUrl = (sourceNode.data as UpscaleMediaNodeData).outputVideoUrl;
-        else if (sourceNode?.type === 'videoUpscaleNode') videoUrl = (sourceNode.data as { videoUrl?: string }).videoUrl;
-        else if (sourceNode?.type === 'modifyNode')       videoUrl = (sourceNode.data as ModifyNodeData).outputVideoUrl;
+      if (sourceNode && sourceMediaType === 'video' && (connection.targetHandle === 'video' || connection.targetHandle === 'video_in')) {
+        const videoUrl = getNodeMediaUrls(sourceNode, 'video')[0];
         if (videoUrl) updateNodeData(connection.target, { videoUrl });
       }
     },
-    [onConnect, nodes, updateNodeData, propagateImageToTarget]  // keep `nodes` for prompt propagation
+    [onConnect, updateNodeData, propagateImageToTarget]
+  );
+
+  const onConnectHandler = useCallback(
+    (connection: Connection) => {
+      const pending = pendingConnectionRef.current;
+      const selectedNodeIds = pending?.nodeId === connection.source
+        ? pending.selectedNodeIds
+        : [];
+      if (selectedNodeIds.length <= 1) {
+        connectSingle(connection);
+        return;
+      }
+
+      const freshNodes = useFlowStore.getState().nodes;
+      const freshEdges = useFlowStore.getState().edges;
+      const sourceNode = freshNodes.find((node) => node.id === connection.source);
+      const targetNode = freshNodes.find((node) => node.id === connection.target);
+      const draggedMediaType = getSourceMediaType(sourceNode, connection.sourceHandle);
+      const isGallery = targetNode?.type === 'galleryOutputNode' && connection.targetHandle === 'input';
+      const isUpscaleMedia = targetNode?.type === 'upscaleMediaNode' && connection.targetHandle === 'media';
+      const isImageGeneration = targetNode?.type === 'imageGenNode' && connection.targetHandle?.startsWith('ref_');
+
+      if (!sourceNode || !targetNode || !draggedMediaType || (!isGallery && !isUpscaleMedia && !isImageGeneration)) {
+        connectSingle(connection);
+        return;
+      }
+
+      const orderedNodes = [
+        sourceNode,
+        ...selectedNodeIds
+          .filter((nodeId) => nodeId !== sourceNode.id)
+          .map((nodeId) => freshNodes.find((node) => node.id === nodeId))
+          .filter((node): node is Node<NodeData> => !!node),
+      ];
+      const skipped = { incompatible: 0, duplicate: 0, limit: 0 };
+      const sources: Array<{ node: Node<NodeData>; handle: string }> = [];
+
+      for (const node of orderedNodes) {
+        if (node.id === targetNode.id && node.id !== sourceNode.id) {
+          skipped.incompatible += 1;
+          continue;
+        }
+        const handle = node.id === sourceNode.id
+          ? connection.sourceHandle
+          : getActiveMediaSourceHandle(node, draggedMediaType, freshNodes, freshEdges);
+        if (!handle || getSourceMediaType(node, handle) !== draggedMediaType) {
+          skipped.incompatible += 1;
+          continue;
+        }
+        sources.push({ node, handle });
+      }
+
+      const plannedConnections: Connection[] = [];
+
+      if (isGallery || isUpscaleMedia) {
+        const targetHandle = connection.targetHandle;
+        const existingTargetEdges = freshEdges.filter(
+          (edge) => edge.target === targetNode.id && edge.targetHandle === targetHandle
+        );
+        const existingSourceKeys = new Set(
+          existingTargetEdges.map((edge) => `${edge.source}:${edge.sourceHandle ?? ''}`)
+        );
+        const plannedSourceKeys = new Set<string>();
+        const capacity = isUpscaleMedia
+          ? (draggedMediaType === 'video' ? 10 : 30) - existingTargetEdges.length
+          : Number.POSITIVE_INFINITY;
+
+        for (const source of sources) {
+          const key = `${source.node.id}:${source.handle}`;
+          if (existingSourceKeys.has(key) || plannedSourceKeys.has(key)) {
+            skipped.duplicate += 1;
+            continue;
+          }
+          if (plannedConnections.length >= capacity) {
+            skipped.limit += 1;
+            continue;
+          }
+          plannedSourceKeys.add(key);
+          plannedConnections.push({
+            source: source.node.id,
+            sourceHandle: source.handle,
+            target: targetNode.id,
+            targetHandle,
+          });
+        }
+      } else {
+        const targetData = targetNode.data as ImageGenNodeData;
+        const limit = getImageReferenceLimit(targetData.model);
+        const primaryHandle = connection.targetHandle as string;
+        const existingRefEdges = freshEdges.filter(
+          (edge) => edge.target === targetNode.id && edge.targetHandle?.startsWith('ref_')
+        );
+        const occupiedHandles = new Set(
+          existingRefEdges
+            .map((edge) => edge.targetHandle as string)
+            .filter((handle) => handle !== primaryHandle)
+        );
+        const existingSources = new Set(
+          existingRefEdges
+            .filter((edge) => edge.targetHandle !== primaryHandle)
+            .map((edge) => `${edge.source}:${edge.sourceHandle ?? ''}`)
+        );
+        const freeHandles = Array.from({ length: limit }, (_, index) => `ref_${index}`)
+          .filter((handle) => handle !== primaryHandle && !occupiedHandles.has(handle));
+
+        sources.forEach((source, index) => {
+          const sourceKey = `${source.node.id}:${source.handle}`;
+          if (index > 0 && existingSources.has(sourceKey)) {
+            skipped.duplicate += 1;
+            return;
+          }
+          const targetHandle = index === 0 ? primaryHandle : freeHandles.shift();
+          if (!targetHandle) {
+            skipped.limit += 1;
+            return;
+          }
+          existingSources.add(sourceKey);
+          plannedConnections.push({
+            source: source.node.id,
+            sourceHandle: source.handle,
+            target: targetNode.id,
+            targetHandle,
+          });
+        });
+      }
+
+      for (const plannedConnection of plannedConnections) {
+        connectSingle(plannedConnection);
+      }
+
+      if (isImageGeneration) {
+        const finalRefIndexes = useFlowStore.getState().edges
+          .filter((edge) => edge.target === targetNode.id && edge.targetHandle?.startsWith('ref_'))
+          .map((edge) => Number(edge.targetHandle?.slice(4)))
+          .filter(Number.isInteger);
+        const limit = getImageReferenceLimit((targetNode.data as ImageGenNodeData).model);
+        const highestOccupied = finalRefIndexes.length > 0 ? Math.max(...finalRefIndexes) : -1;
+        updateNodeData(targetNode.id, {
+          imagePortCount: Math.min(Math.max(highestOccupied + 2, 1), limit),
+        });
+      }
+
+      const skippedTotal = skipped.incompatible + skipped.duplicate + skipped.limit;
+      const reasons = [
+        skipped.incompatible > 0 ? `${skipped.incompatible} incompatible` : null,
+        skipped.duplicate > 0 ? `${skipped.duplicate} already connected` : null,
+        skipped.limit > 0 ? `${skipped.limit} over limit` : null,
+      ].filter(Boolean).join(', ');
+      showConnectionToast({
+        message: skippedTotal > 0
+          ? `Connected ${plannedConnections.length} node${plannedConnections.length === 1 ? '' : 's'} · Skipped ${skippedTotal} (${reasons})`
+          : `Connected ${plannedConnections.length} nodes`,
+        tone: skippedTotal > 0 ? 'partial' : 'success',
+      });
+    },
+    [connectSingle, showConnectionToast, updateNodeData]
   );
 
   const onEdgesChangeHandler = useCallback(
@@ -788,10 +973,12 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
         if (change.type !== 'remove') continue;
         const edge = edges.find((e) => e.id === change.id);
         if (!edge) continue;
-        if (edge.sourceHandle === 'image') {
+        const sourceNode = nodes.find((node) => node.id === edge.source);
+        const sourceMediaType = getSourceMediaType(sourceNode, edge.sourceHandle);
+        if (sourceMediaType === 'image') {
           propagateImageToTarget(edge.source, edge, null);
         }
-        if (edge.sourceHandle === 'video' && (edge.targetHandle === 'video' || edge.targetHandle === 'video_in')) {
+        if (sourceMediaType === 'video' && (edge.targetHandle === 'video' || edge.targetHandle === 'video_in')) {
           updateNodeData(edge.target, { videoUrl: undefined });
         }
         if (edge.sourceHandle === 'prompt') {
@@ -804,20 +991,32 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
       }
       onEdgesChange(changes);
     },
-    [edges, onEdgesChange, propagateImageToTarget, updateNodeData]
+    [edges, nodes, onEdgesChange, propagateImageToTarget, updateNodeData]
   );
 
   const onConnectStart: OnConnectStart = useCallback((_, params) => {
+    const nodeId = params.nodeId ?? '';
+    const selectedNodes = nodesRef.current.filter(
+      (node) => node.selected && node.type !== 'groupNode'
+    );
+    const selectedNodeIds = selectedNodes.some((node) => node.id === nodeId)
+      ? selectedNodes.map((node) => node.id)
+      : [nodeId];
     pendingConnectionRef.current = {
-      nodeId:     params.nodeId     ?? '',
+      nodeId,
       handleId:   params.handleId   ?? null,
       handleType: params.handleType ?? null,
+      selectedNodeIds,
     };
   }, []);
 
   const onConnectEnd = useCallback((event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
     // Only open menu when the drag ends without connecting to a valid target
     if (connectionState.isValid === true) {
+      pendingConnectionRef.current = null;
+      return;
+    }
+    if (connectionState.toHandle) {
       pendingConnectionRef.current = null;
       return;
     }
@@ -976,7 +1175,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false }: FlowCanvasP
         </Panel>
       </ReactFlow>
 
-      <InvalidConnectionToast visible={invalidToast} />
+      <ConnectionToast toast={connectionToast} />
 
       {contextMenu && (
         <NodeToolbar

@@ -1,59 +1,26 @@
 'use client';
 
-import { Position, type NodeProps } from '@xyflow/react';
+import { Position, type Node, type NodeProps } from '@xyflow/react';
 import { Handle } from '@xyflow/react';
 import { Grid, Download, Film, Image } from 'lucide-react';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { NodeWrapper } from './NodeWrapper';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
-import type {
-  GalleryOutputNodeData,
-  ImageInputNodeData,
-  ImageGenNodeData,
-  UpscaleNodeData,
-  VideoGenNodeData,
-} from '@/types';
+import { getNodeMediaUrls, getSourceMediaType } from '../mediaOutputs';
+import type { GalleryOutputNodeData, NodeData } from '@/types';
 
 interface MediaItem {
   url: string;
   type: 'image' | 'video';
+  extension: 'jpg' | 'mp4' | 'gif';
   sourceNodeId: string;
-}
-
-function getMediaFromNode(node: { type?: string; data: Record<string, unknown> }): MediaItem[] {
-  if (node.type === 'imageInputNode') {
-    const url = (node.data as ImageInputNodeData).imageUrl;
-    return url ? [{ url, type: 'image', sourceNodeId: '' }] : [];
-  }
-  if (node.type === 'imageGenNode') {
-    const imgs = (node.data as ImageGenNodeData).generatedImages ?? [];
-    return imgs.map((url) => ({ url, type: 'image' as const, sourceNodeId: '' }));
-  }
-  if (node.type === 'upscaleNode') {
-    const url = (node.data as UpscaleNodeData).outputImageUrl;
-    return url ? [{ url, type: 'image', sourceNodeId: '' }] : [];
-  }
-  if (node.type === 'videoGenNode') {
-    const url = (node.data as VideoGenNodeData).videoUrl;
-    return url ? [{ url, type: 'video', sourceNodeId: '' }] : [];
-  }
-  if (node.type === 'modifyNode') {
-    const url = (node.data as { outputImageUrl?: string }).outputImageUrl;
-    return url ? [{ url, type: 'image', sourceNodeId: '' }] : [];
-  }
-  if (node.type === 'selectNode') {
-    const url = (node.data as { selectedImageUrl?: string }).selectedImageUrl;
-    return url ? [{ url, type: 'image', sourceNodeId: '' }] : [];
-  }
-  return [];
 }
 
 async function downloadAll(items: MediaItem[]) {
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const ext = item.type === 'video' ? 'mp4' : 'jpg';
-    await downloadFromUrl(item.url, `gallery-${i + 1}.${ext}`);
+    await downloadFromUrl(item.url, `gallery-${i + 1}.${item.extension}`);
     // small delay to avoid browser blocking multiple downloads
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -67,8 +34,15 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
   const mediaItems: MediaItem[] = incomingEdges.flatMap((edge) => {
     const sourceNode = storeNodes.find((n) => n.id === edge.source);
     if (!sourceNode) return [];
-    return getMediaFromNode(sourceNode as { type?: string; data: Record<string, unknown> }).map((item) => ({
-      ...item,
+    const mediaType = getSourceMediaType(sourceNode, edge.sourceHandle);
+    if (!mediaType) return [];
+    const extension = sourceNode.type === 'videoToGifNode'
+      ? 'gif'
+      : mediaType === 'video' ? 'mp4' : 'jpg';
+    return getNodeMediaUrls(sourceNode as Node<NodeData>, mediaType).map((url) => ({
+      url,
+      type: mediaType,
+      extension,
       sourceNodeId: edge.source,
     }));
   });
@@ -141,7 +115,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
                 key={`${item.sourceNodeId}-${i}`}
                 className="relative rounded overflow-hidden cursor-pointer group"
                 style={{ aspectRatio: '1 / 1', background: 'var(--color-bg-surface)' }}
-                onClick={() => downloadFromUrl(item.url, `gallery-${i + 1}.${item.type === 'video' ? 'mp4' : 'jpg'}`)}
+                onClick={() => downloadFromUrl(item.url, `gallery-${i + 1}.${item.extension}`)}
                 title="Click to download"
               >
                 {item.type === 'video' ? (

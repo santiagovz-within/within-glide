@@ -10,14 +10,18 @@ import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
-import { IMAGE_MODELS, FAL_MODELS } from '@/lib/api/models';
+import {
+  IMAGE_MODELS,
+  FAL_MODELS,
+  getImageReferenceLimit,
+  supportsMultipleImageReferences,
+} from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 import { useFlowStore } from '@/lib/stores/flowStore';
 
 const RESOLUTIONS = ['1K', '2K', '4K'];
-const DEFAULT_MAX_REF_IMAGES = 14;
 const REF_ROW_HEIGHT = 36;
 const ROW_GAP = 25;
 
@@ -29,7 +33,8 @@ function autoResize(el: HTMLTextAreaElement) {
 export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGenNodeData }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const isOutputConnected = useFlowStore((s) => s.edges.some((e) => e.source === id && e.sourceHandle === 'image'));
+  const storeEdges = useFlowStore((state) => state.edges);
+  const isOutputConnected = storeEdges.some((edge) => edge.source === id && edge.sourceHandle === 'image');
   const genHistory = data.generationHistory ?? [];
   const [histIdx, setHistIdx] = useState(() => Math.max(0, genHistory.length - 1));
   const prevHistLen = useRef(genHistory.length);
@@ -56,14 +61,17 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
   const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
-
-  const isMultiImageModel =
-    modelConfig?.provider === 'google' ||
-    (!!falConfig && 'editImageParam' in falConfig &&
-      (falConfig as { editImageParam: string }).editImageParam === 'image_urls');
-
-  const portCount = isMultiImageModel ? Math.max(data.imagePortCount ?? 1, 1) : 0;
-  const connectedCount = (data.inputImageUrls ?? []).filter(Boolean).length;
+  const isMultiImageModel = supportsMultipleImageReferences(data.model);
+  const maxReferenceImages = getImageReferenceLimit(data.model);
+  const portCount = isMultiImageModel
+    ? Math.min(Math.max(data.imagePortCount ?? 1, 1), maxReferenceImages)
+    : 0;
+  const connectedReferenceHandles = new Set(
+    storeEdges
+      .filter((edge) => edge.target === id && edge.targetHandle?.startsWith('ref_'))
+      .map((edge) => edge.targetHandle)
+  );
+  const connectedCount = connectedReferenceHandles.size;
 
   const hasEditVariant = !!falConfig && 'editEndpoint' in falConfig;
   const hasImageInput = (data.inputImageUrls ?? []).some(Boolean);
@@ -98,17 +106,36 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   }
 
   function handleModelChange(newModel: string) {
-    const newFalConfig = FAL_MODELS[newModel as keyof typeof FAL_MODELS];
-    const newConfig = IMAGE_MODELS.find((m) => m.id === newModel);
-    const nowMulti =
-      newConfig?.provider === 'google' ||
-      (!!newFalConfig && 'editImageParam' in newFalConfig &&
-        (newFalConfig as { editImageParam: string }).editImageParam === 'image_urls');
-    if (isMultiImageModel !== nowMulti) {
-      updateData({ model: newModel, inputImageUrls: [], imagePortCount: nowMulti ? 1 : 0 });
-    } else {
-      updateData({ model: newModel });
+    const nowMulti = supportsMultipleImageReferences(newModel);
+    const newLimit = getImageReferenceLimit(newModel);
+    const freshEdges = useFlowStore.getState().edges;
+    const keptEdges = freshEdges.filter((edge) => {
+      if (edge.target !== id) return true;
+      if (edge.targetHandle === 'reference_image') return !nowMulti;
+      if (!edge.targetHandle?.startsWith('ref_')) return true;
+      const index = Number(edge.targetHandle.slice(4));
+      return nowMulti && Number.isInteger(index) && index < newLimit;
+    });
+    if (keptEdges.length !== freshEdges.length) {
+      useFlowStore.getState().setEdges(keptEdges);
     }
+
+    if (!nowMulti || isMultiImageModel !== nowMulti) {
+      updateData({ model: newModel, inputImageUrls: [], imagePortCount: nowMulti ? 1 : 0 });
+      return;
+    }
+
+    const urls = (data.inputImageUrls ?? []).slice(0, newLimit);
+    const occupiedIndexes = keptEdges
+      .filter((edge) => edge.target === id && edge.targetHandle?.startsWith('ref_'))
+      .map((edge) => Number(edge.targetHandle?.slice(4)))
+      .filter(Number.isInteger);
+    const highestOccupied = occupiedIndexes.length > 0 ? Math.max(...occupiedIndexes) : -1;
+    const nextPortCount = Math.min(
+      Math.max(highestOccupied + 2, urls.filter(Boolean).length + 1, 1),
+      newLimit
+    );
+    updateData({ model: newModel, inputImageUrls: urls, imagePortCount: nextPortCount });
   }
 
   async function handleGenerate() {
@@ -245,7 +272,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           portType="image"
           offset={`${rowsStartTop + REF_ROW_HEIGHT / 2 + i * (REF_ROW_HEIGHT + ROW_GAP)}px`}
           badge={i + 1}
-          connected={!!(data.inputImageUrls?.[i])}
+          connected={connectedReferenceHandles.has(`ref_${i}`) || !!(data.inputImageUrls?.[i])}
         />
       ))}
 
@@ -412,7 +439,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {isMultiImageModel && (
         <div className="mb-3">
           <label className="text-xs font-medium block mb-2" style={{ color: 'var(--color-white-muted)' }}>
-            Reference Images{connectedCount > 0 ? ` (${connectedCount} / ${modelConfig?.maxReferenceImages ?? DEFAULT_MAX_REF_IMAGES})` : ''}
+            Reference Images{connectedCount > 0 ? ` (${connectedCount} / ${maxReferenceImages})` : ''}
           </label>
           <div ref={rowsListRef} className="flex flex-col" style={{ gap: ROW_GAP }}>
             {Array.from({ length: portCount }, (_, i) => {

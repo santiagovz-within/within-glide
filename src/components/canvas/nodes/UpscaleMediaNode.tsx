@@ -10,13 +10,11 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type {
   UpscaleMediaNodeData, BulkItemResult,
-  ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, SelectNodeData,
-  RemoveBgNodeData, ModifyNodeData, MediaInputNodeData,
-  VideoGenNodeData, VideoInputNodeData, VideoUpscaleNodeData,
 } from '@/types';
 import { UPSCALE_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
+import { getNodeMediaUrls, getSourceMediaType } from '../mediaOutputs';
 
 type Dims = { w: number; h: number };
 
@@ -285,35 +283,17 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
 
   const incomingEdges = storeEdges.filter((e) => e.target === id && e.targetHandle === 'media');
 
-  const inputMediaType: 'image' | 'video' | null =
-    incomingEdges[0]?.sourceHandle === 'video' ? 'video'
-    : incomingEdges[0]?.sourceHandle === 'image' ? 'image'
-    : null;
+  const firstIncomingEdge = incomingEdges[0];
+  const firstSourceNode = firstIncomingEdge
+    ? storeNodes.find((node) => node.id === firstIncomingEdge.source)
+    : undefined;
+  const inputMediaType = getSourceMediaType(firstSourceNode, firstIncomingEdge?.sourceHandle);
 
   const inputItems = incomingEdges.map((edge) => {
     const sourceNode = storeNodes.find((n) => n.id === edge.source);
-    let url: string | undefined;
-    if (sourceNode && inputMediaType === 'image') {
-      switch (sourceNode.type) {
-        case 'imageInputNode':   url = (sourceNode.data as ImageInputNodeData).imageUrl; break;
-        case 'mediaInputNode':   url = (sourceNode.data as MediaInputNodeData).imageUrl; break;
-        case 'imageGenNode':     url = (sourceNode.data as ImageGenNodeData).generatedImages?.[0]; break;
-        case 'upscaleNode':      url = (sourceNode.data as UpscaleNodeData).outputImageUrl; break;
-        case 'upscaleMediaNode': url = (sourceNode.data as UpscaleMediaNodeData).outputImageUrl; break;
-        case 'modifyNode':       url = (sourceNode.data as ModifyNodeData).outputImageUrl; break;
-        case 'selectNode':       url = (sourceNode.data as SelectNodeData).selectedImageUrl; break;
-        case 'removeBgNode':     url = (sourceNode.data as RemoveBgNodeData).outputImageUrl; break;
-      }
-    } else if (sourceNode && inputMediaType === 'video') {
-      switch (sourceNode.type) {
-        case 'videoGenNode':     url = (sourceNode.data as VideoGenNodeData).videoUrl; break;
-        case 'videoInputNode':   url = (sourceNode.data as VideoInputNodeData).videoUrl; break;
-        case 'mediaInputNode':   url = (sourceNode.data as MediaInputNodeData).videoUrl; break;
-        case 'videoUpscaleNode': url = (sourceNode.data as VideoUpscaleNodeData).videoUrl; break;
-        case 'upscaleMediaNode': url = (sourceNode.data as UpscaleMediaNodeData).outputVideoUrl; break;
-        case 'modifyNode':       url = (sourceNode.data as ModifyNodeData).outputVideoUrl; break;
-      }
-    }
+    const url = sourceNode && inputMediaType
+      ? getNodeMediaUrls(sourceNode, inputMediaType)[0]
+      : undefined;
     return { url, sourceNodeId: edge.source };
   });
 

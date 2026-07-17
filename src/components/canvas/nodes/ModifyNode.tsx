@@ -16,6 +16,7 @@ import type {
   ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData, MediaInputNodeData,
   VideoGenNodeData, VideoInputNodeData, VideoUpscaleNodeData, UpscaleMediaNodeData,
 } from '@/types';
+import { getSourceMediaType } from '../mediaOutputs';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -493,9 +494,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const sourceNode    = incomingEdge ? storeNodes.find(n => n.id === incomingEdge.source) : undefined;
   const sourceHandle  = incomingEdge?.sourceHandle ?? null;
 
-  // Detect media type from source handle (mirrors UpscaleMediaNode)
-  const inputMediaType: 'image' | 'video' | null =
-    sourceHandle === 'video' ? 'video' : sourceHandle === 'image' ? 'image' : null;
+  const inputMediaType = getSourceMediaType(sourceNode, sourceHandle);
 
   // ── Image source resolution ────────────────────────────────────────────────
 

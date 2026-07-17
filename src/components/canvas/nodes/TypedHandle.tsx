@@ -30,9 +30,9 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
   'imageGenNode:prompt:target':            'text',
   'imageGenNode:reference_image:target':   'image',
   'imageGenNode:image:source':             'image',
-  // Dynamic multi-image reference handles (Google models, up to 14)
+  // Dynamic multi-image reference handles (up to the largest model limit)
   ...Object.fromEntries(
-    Array.from({ length: 14 }, (_, i) => [`imageGenNode:ref_${i}:target`, 'image' as PortType])
+    Array.from({ length: 16 }, (_, i) => [`imageGenNode:ref_${i}:target`, 'image' as PortType])
   ),
   'videoGenNode:prompt:target':            'text',
   'videoGenNode:start_frame:target':       'image',
@@ -61,7 +61,7 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
   'upscaleMediaNode:video:source':         'video',
   'videoUpscaleNode:video_in:target':      'video',
   'videoUpscaleNode:video:source':         'video',
-  'galleryOutputNode:video:target':        'video',
+  'galleryOutputNode:input:target':        'neutral',
 };
 
 function PortIcon({ type, size = 9 }: { type: PortType; size?: number }) {

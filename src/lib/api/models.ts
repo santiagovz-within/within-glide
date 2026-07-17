@@ -72,6 +72,7 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsImageInput: true,
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 8,
+    maxReferenceImages: 14,
   },
   'nano-banana-pro': {
     id: 'nano-banana-pro',
@@ -84,6 +85,7 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsImageInput: true,
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 12,
+    maxReferenceImages: 14,
   },
   'gpt-image-2': {
     id: 'gpt-image-2',
@@ -163,6 +165,22 @@ export const MODELS: Record<string, ModelConfig> = {
 export const IMAGE_MODELS = Object.values(MODELS).filter(m => m.type === 'image');
 export const VIDEO_MODELS = Object.values(MODELS).filter(m => m.type === 'video');
 export const UPSCALE_MODELS = Object.values(MODELS).filter(m => m.type === 'upscale');
+
+export function supportsMultipleImageReferences(modelId: string): boolean {
+  const model = MODELS[modelId];
+  const falConfig = FAL_MODELS[modelId as keyof typeof FAL_MODELS];
+
+  return model?.provider === 'google' || (
+    !!falConfig &&
+    'editImageParam' in falConfig &&
+    falConfig.editImageParam === 'image_urls'
+  );
+}
+
+export function getImageReferenceLimit(modelId: string): number {
+  if (!supportsMultipleImageReferences(modelId)) return 1;
+  return MODELS[modelId]?.maxReferenceImages ?? 14;
+}
 
 export function getModel(id: string): ModelConfig | undefined {
   return MODELS[id];
