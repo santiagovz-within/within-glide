@@ -28,8 +28,6 @@ function parseDescription(raw: string | null): { icon: string | null; text: stri
 }
 
 // ── Shared card shell that prevents hover-scale clipping ─────────────────────
-// overflow-hidden is on the thumbnail only; the card wrapper itself is overflow-visible
-// so scaled cards never clip against the grid.
 
 function CardShell({
   children,
@@ -44,9 +42,7 @@ function CardShell({
     <div
       className="flow-card-enter relative group rounded-xl cursor-pointer transition-all duration-150"
       style={{
-        border: 'var(--border-default)',
         background: 'var(--color-bg-elevated)',
-        // keep shadow inside the transform but NOT overflow:hidden — that causes the clipping
         boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
         animationDelay: `${Math.min(revealIndex, 10) * 40}ms`,
       }}
@@ -339,7 +335,7 @@ export default function CanvasFlowPage() {
       className="h-full overflow-auto p-8"
       onClick={() => { setMenuOpenId(null); setEditingBaseId(null); }}
     >
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-[1400px] mx-auto">
       {/* Base Flows */}
       <section className="mb-10">
         <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white-muted)' }}>
@@ -378,7 +374,7 @@ export default function CanvasFlowPage() {
                 >
                   {/* Thumbnail area */}
                   <div
-                    className="aspect-video flex items-center justify-center rounded-t-xl overflow-hidden"
+                    className="m-1 aspect-video flex items-center justify-center rounded-lg overflow-hidden"
                     style={{ background: 'var(--color-bg-surface)' }}
                   >
                     <FlowThumbnail
@@ -415,7 +411,7 @@ export default function CanvasFlowPage() {
                     <div className="flex items-center gap-1 mt-1">
                       <Clock size={10} style={{ color: 'var(--color-white-muted)' }} />
                       <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
-                        {formatDistanceToNow(bf.updated_at)}
+                        Last edited {formatDistanceToNow(bf.updated_at)}
                       </p>
                     </div>
                   </div>
@@ -588,10 +584,10 @@ function FlowCardSkeletonGrid({ count }: { count: number }) {
       {Array.from({ length: count }).map((_, index) => (
         <div
           key={index}
-          className="overflow-hidden rounded-xl animate-pulse"
-          style={{ border: 'var(--border-default)', background: 'var(--color-bg-elevated)' }}
+          className="rounded-xl animate-pulse"
+          style={{ background: 'var(--color-bg-elevated)' }}
         >
-          <div className="aspect-video" style={{ background: 'var(--color-bg-surface)' }} />
+          <div className="m-1 aspect-video rounded-lg" style={{ background: 'var(--color-bg-surface)' }} />
           <div className="p-3">
             <div className="h-3 w-2/3 rounded" style={{ background: 'var(--color-bg-surface)' }} />
             <div className="h-2 w-1/3 rounded mt-2" style={{ background: 'var(--color-bg-surface)' }} />
@@ -664,7 +660,7 @@ function FlowCard({
     <CardShell onClick={onOpen} revealIndex={revealIndex}>
       {/* Thumbnail */}
       <div
-        className="aspect-video flex items-center justify-center rounded-t-xl overflow-hidden"
+        className="m-1 aspect-video flex items-center justify-center rounded-lg overflow-hidden"
         style={{ background: 'var(--color-bg-surface)' }}
       >
         <FlowThumbnail flow={flow} resolvedThumbnailUrl={resolvedThumbnailUrl} />
@@ -686,7 +682,7 @@ function FlowCard({
         <div className="flex items-center gap-1 mt-1">
           <Clock size={10} style={{ color: 'var(--color-white-muted)' }} />
           <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
-            {formatDistanceToNow(flow.updated_at)}
+            Last edited {formatDistanceToNow(flow.updated_at)}
           </p>
         </div>
       </div>
