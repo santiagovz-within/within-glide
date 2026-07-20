@@ -212,7 +212,7 @@ function GalleryThumbnail({ generation, onClick }: { generation: Generation; onC
   const isVideo = generation.media_type === 'video';
   return (
     <div
-      className="relative group rounded-xl overflow-hidden cursor-pointer transition-all duration-150 hover:scale-[1.03] hover:shadow-lg"
+      className="relative group rounded-xl overflow-hidden cursor-pointer"
       style={{ aspectRatio: '1', border: 'var(--border-default)' }}
       onClick={onClick}
     >
@@ -278,15 +278,6 @@ function GenerationModal({
       style={{ background: '#000' }}
       onClick={onClose}
     >
-      {/* Close — top-left overlay */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        className="absolute top-4 left-4 z-10 p-1.5 rounded-lg transition-opacity hover:opacity-70"
-        style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: 'none', cursor: 'pointer' }}
-      >
-        <X size={15} />
-      </button>
-
       {/* Left: media */}
       <div
         className="flex-1 flex items-center justify-center min-w-0 p-10"
@@ -327,12 +318,12 @@ function GenerationModal({
             {generation.media_type}
           </span>
           <button
-            onClick={(e) => { e.stopPropagation(); onDelete(generation); }}
+            onClick={(e) => { e.stopPropagation(); onClose(); }}
             className="p-1.5 rounded-lg transition-opacity hover:opacity-70"
-            style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', cursor: 'pointer' }}
-            title="Delete"
+            style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', border: 'none', cursor: 'pointer' }}
+            title="Close"
           >
-            <Trash2 size={13} />
+            <X size={15} />
           </button>
         </div>
 
@@ -401,6 +392,22 @@ function GenerationModal({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Panel bottom bar — delete */}
+        <div
+          className="px-5 py-4"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(generation); }}
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-full text-sm font-semibold transition-opacity hover:opacity-85"
+            style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', cursor: 'pointer' }}
+            title="Delete"
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
         </div>
       </div>
     </div>
