@@ -42,7 +42,7 @@ function CardShell({
 }) {
   return (
     <div
-      className="flow-card-enter relative group rounded-xl cursor-pointer transition-all duration-150 hover:scale-[1.02]"
+      className="flow-card-enter relative group rounded-xl cursor-pointer transition-all duration-150"
       style={{
         border: 'var(--border-default)',
         background: 'var(--color-bg-elevated)',
