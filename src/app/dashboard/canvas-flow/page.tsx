@@ -510,10 +510,10 @@ export default function CanvasFlowPage() {
             placeholder="Search flows..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-xs pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
+            className="w-full max-w-xs pl-9 pr-3 py-2 rounded-full text-sm outline-none"
             style={{
               background: 'var(--color-bg-elevated)',
-              border: 'var(--border-default)',
+              border: '4px solid rgba(255, 255, 255, 0.12)',
               color: 'var(--color-white)',
             }}
           />
