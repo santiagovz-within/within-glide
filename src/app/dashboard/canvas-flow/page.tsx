@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Plus, Search, MoreHorizontal, Clock, Workflow,
   Edit2, Check, X, Upload, RefreshCw, ArrowUpRight,
+  GripVertical, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { Flow } from '@/types';
@@ -19,6 +20,7 @@ type FlowCardSummary = Pick<
   Flow,
   'id' | 'title' | 'description' | 'thumbnail_url' | 'created_at' | 'updated_at'
 > & {
+  base_flow_order?: number | null;
   author_username?: string | null;
 };
 
@@ -205,7 +207,13 @@ export default function CanvasFlowPage() {
   const [editingBaseId, setEditingBaseId] = useState<string | null>(null);
   const [openingBaseId, setOpeningBaseId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin]     = useState(false);
+  const [isReorderingBaseFlows, setIsReorderingBaseFlows] = useState(false);
+  const [draggedBaseId, setDraggedBaseId] = useState<string | null>(null);
+  const [savingBaseOrder, setSavingBaseOrder] = useState(false);
+  const [baseOrderError, setBaseOrderError] = useState<string | null>(null);
   const [resolvedThumbs, setResolvedThumbs] = useState<Map<string, string>>(new Map());
+  const baseOrderBeforeEdit = useRef<FlowCardSummary[] | null>(null);
+  const draggedBaseIdRef = useRef<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -331,6 +339,76 @@ export default function CanvasFlowPage() {
     setBaseFlows(baseFlows.filter((f) => f.id !== id));
   }
 
+  function startReorderingBaseFlows() {
+    baseOrderBeforeEdit.current = baseFlows;
+    setMenuOpenId(null);
+    setEditingBaseId(null);
+    setBaseOrderError(null);
+    setIsReorderingBaseFlows(true);
+  }
+
+  function cancelReorderingBaseFlows() {
+    if (baseOrderBeforeEdit.current) setBaseFlows(baseOrderBeforeEdit.current);
+    baseOrderBeforeEdit.current = null;
+    draggedBaseIdRef.current = null;
+    setDraggedBaseId(null);
+    setBaseOrderError(null);
+    setIsReorderingBaseFlows(false);
+  }
+
+  function moveBaseFlowTo(sourceId: string, targetId: string) {
+    if (sourceId === targetId) return;
+    setBaseFlows((current) => {
+      const sourceIndex = current.findIndex((flow) => flow.id === sourceId);
+      const targetIndex = current.findIndex((flow) => flow.id === targetId);
+      if (sourceIndex === -1 || targetIndex === -1) return current;
+
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  }
+
+  function moveBaseFlowBy(id: string, offset: -1 | 1) {
+    setBaseFlows((current) => {
+      const sourceIndex = current.findIndex((flow) => flow.id === id);
+      const targetIndex = sourceIndex + offset;
+      if (sourceIndex === -1 || targetIndex < 0 || targetIndex >= current.length) return current;
+
+      const next = [...current];
+      [next[sourceIndex], next[targetIndex]] = [next[targetIndex], next[sourceIndex]];
+      return next;
+    });
+  }
+
+  async function saveBaseFlowOrder() {
+    setSavingBaseOrder(true);
+    setBaseOrderError(null);
+    try {
+      const response = await fetch('/api/flows/base', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flowIds: baseFlows.map((flow) => flow.id) }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(result?.error ?? 'Could not save the Base Flow order');
+      }
+
+      setBaseFlows((current) => current.map((flow, index) => ({
+        ...flow,
+        base_flow_order: index,
+      })));
+      baseOrderBeforeEdit.current = null;
+      setIsReorderingBaseFlows(false);
+    } catch (error) {
+      setBaseOrderError(error instanceof Error ? error.message : 'Could not save the Base Flow order');
+    } finally {
+      setSavingBaseOrder(false);
+    }
+  }
+
   const filteredFlows = flows.filter((f) =>
     f.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -343,9 +421,60 @@ export default function CanvasFlowPage() {
       <div className="max-w-[1400px] mx-auto">
       {/* Base Flows */}
       <section className="mb-10">
-        <h2 className="text-sm font-semibold mb-4" style={{ color: 'var(--color-white-muted)' }}>
-          BASE FLOWS
-        </h2>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-white-muted)' }}>
+              BASE FLOWS
+            </h2>
+            {isReorderingBaseFlows && (
+              <p className="text-xs mt-1" style={{ color: 'var(--color-white-muted)' }}>
+                Drag cards or use the arrow buttons to set their display order.
+              </p>
+            )}
+          </div>
+          {isAdmin && baseFlows.length > 1 && (
+            isReorderingBaseFlows ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={cancelReorderingBaseFlows}
+                  disabled={savingBaseOrder}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-white/5 disabled:opacity-40"
+                  style={{ border: 'var(--border-default)', color: 'var(--color-white-muted)' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { void saveBaseFlowOrder(); }}
+                  disabled={savingBaseOrder}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-40"
+                  style={{ background: '#fff', color: '#000' }}
+                >
+                  {savingBaseOrder ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
+                  {savingBaseOrder ? 'Saving…' : 'Save order'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={startReorderingBaseFlows}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors hover:bg-white/5"
+                style={{ border: 'var(--border-default)', color: 'var(--color-white)' }}
+              >
+                <GripVertical size={13} />
+                Reorder cards
+              </button>
+            )
+          )}
+        </div>
+
+        {baseOrderError && (
+          <p
+            role="alert"
+            className="text-xs mb-3 px-3 py-2 rounded-lg"
+            style={{ color: 'var(--color-error)', background: 'var(--color-bg-elevated)' }}
+          >
+            {baseOrderError}
+          </p>
+        )}
 
         {loading ? (
           <FlowCardSkeletonGrid count={5} />
@@ -364,7 +493,7 @@ export default function CanvasFlowPage() {
           // 8 are shown outright; any beyond that peek out from under a gradient.
           <div className="relative">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {(baseFlows.length > BASE_FLOWS_VISIBLE
+            {(!isReorderingBaseFlows && baseFlows.length > BASE_FLOWS_VISIBLE
               ? baseFlows.slice(0, BASE_FLOWS_VISIBLE + 4)
               : baseFlows
             ).map((bf, index) => {
@@ -374,14 +503,42 @@ export default function CanvasFlowPage() {
               const isOpening = openingBaseId === bf.id;
 
               return (
-                <CardShell
+                <div
                   key={bf.id}
-                  revealIndex={index}
-                  onClick={() => {
-                    if (isEditing || menuOpen || isOpening) return;
-                    createFlowFromBase(bf);
+                  draggable={isReorderingBaseFlows && !savingBaseOrder}
+                  onDragStart={(event) => {
+                    if (!isReorderingBaseFlows) return;
+                    draggedBaseIdRef.current = bf.id;
+                    setDraggedBaseId(bf.id);
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', bf.id);
                   }}
+                  onDragEnter={(event) => {
+                    const sourceId = draggedBaseIdRef.current;
+                    if (!isReorderingBaseFlows || !sourceId) return;
+                    event.preventDefault();
+                    moveBaseFlowTo(sourceId, bf.id);
+                  }}
+                  onDragOver={(event) => {
+                    if (!isReorderingBaseFlows) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(event) => event.preventDefault()}
+                  onDragEnd={() => {
+                    draggedBaseIdRef.current = null;
+                    setDraggedBaseId(null);
+                  }}
+                  className="rounded-xl transition-opacity"
+                  style={{ opacity: draggedBaseId === bf.id ? 0.45 : 1 }}
                 >
+                  <CardShell
+                    revealIndex={index}
+                    onClick={() => {
+                      if (isReorderingBaseFlows || isEditing || menuOpen || isOpening) return;
+                      createFlowFromBase(bf);
+                    }}
+                  >
                   {/* Thumbnail area */}
                   <div
                     className="m-1 aspect-video flex items-center justify-center rounded-lg overflow-hidden"
@@ -405,7 +562,29 @@ export default function CanvasFlowPage() {
                           Created By: {bf.author_username ?? 'unknown'}
                         </p>
                       </div>
-                      {isAdmin && (
+                      {isReorderingBaseFlows ? (
+                        <div className="flex items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            onClick={() => moveBaseFlowBy(bf.id, -1)}
+                            disabled={index === 0 || savingBaseOrder}
+                            className="p-1 rounded transition-colors hover:bg-white/10 disabled:opacity-20"
+                            title={`Move ${bf.title} earlier`}
+                            aria-label={`Move ${bf.title} earlier`}
+                          >
+                            <ChevronLeft size={14} style={{ color: 'var(--color-white-muted)' }} />
+                          </button>
+                          <GripVertical size={15} style={{ color: 'var(--color-white-muted)' }} aria-hidden="true" />
+                          <button
+                            onClick={() => moveBaseFlowBy(bf.id, 1)}
+                            disabled={index === baseFlows.length - 1 || savingBaseOrder}
+                            className="p-1 rounded transition-colors hover:bg-white/10 disabled:opacity-20"
+                            title={`Move ${bf.title} later`}
+                            aria-label={`Move ${bf.title} later`}
+                          >
+                            <ChevronRight size={14} style={{ color: 'var(--color-white-muted)' }} />
+                          </button>
+                        </div>
+                      ) : isAdmin && (
                         <button
                           className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded"
                           onClick={(e) => {
@@ -479,13 +658,14 @@ export default function CanvasFlowPage() {
                       <RefreshCw size={18} className="animate-spin" style={{ color: 'var(--color-white)' }} />
                     </div>
                   )}
-                </CardShell>
+                  </CardShell>
+                </div>
               );
             })}
           </div>
 
           {/* Fade + "Explore all flows" when there are more than 8 base flows */}
-          {baseFlows.length > BASE_FLOWS_VISIBLE && (
+          {!isReorderingBaseFlows && baseFlows.length > BASE_FLOWS_VISIBLE && (
             <div
               className="absolute inset-x-0 bottom-0 flex items-end justify-center pb-6 pointer-events-none"
               style={{
