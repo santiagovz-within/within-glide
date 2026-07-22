@@ -398,7 +398,7 @@ export default function CanvasFlowPage() {
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium leading-tight truncate" style={{ color: 'var(--color-white)' }}>
+                        <p className="text-sm font-bold leading-tight truncate" style={{ color: 'var(--color-white)' }}>
                           {bf.title}
                         </p>
                         <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-white-muted)' }}>
