@@ -75,24 +75,38 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
   const [description, setDescription] = useState(existingText ?? '');
   const [thumbnailUrl, setThumbnailUrl] = useState(flow.thumbnail_url ?? '');
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleUpload(file: File) {
     setUploading(true);
+    setUploadError(null);
     try {
-      const { default: imageCompression } = await import('browser-image-compression');
-      const compressed = await imageCompression(file, {
-        maxSizeMB:        0.15,
-        maxWidthOrHeight: 640,
-        useWebWorker:     true,
-        fileType:         'image/jpeg',
-      });
+      let uploadFile: File | Blob = file;
+      let uploadName = file.name;
+
+      // GIFs must remain in their original format or their animation is lost.
+      // Static thumbnails can still use the existing lightweight JPEG compression.
+      if (file.type !== 'image/gif') {
+        const { default: imageCompression } = await import('browser-image-compression');
+        uploadFile = await imageCompression(file, {
+          maxSizeMB:        0.15,
+          maxWidthOrHeight: 640,
+          useWebWorker:     true,
+          fileType:         'image/jpeg',
+        });
+        uploadName = 'thumbnail.jpg';
+      }
+
       const formData = new FormData();
-      formData.append('file', compressed, 'thumbnail.jpg');
+      formData.append('file', uploadFile, uploadName);
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const { url } = await res.json();
-      if (url) setThumbnailUrl(url);
+      const result = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !result.url) throw new Error(result.error ?? 'Upload failed');
+      setThumbnailUrl(result.url);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
@@ -168,18 +182,28 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
           disabled={uploading}
           className="flex items-center justify-center rounded-lg transition-colors hover:bg-white/10 disabled:opacity-40"
           style={{ border: 'var(--border-default)', width: 30, height: 30, flexShrink: 0 }}
-          title="Upload image"
+          title="Upload PNG, JPEG, WebP, or GIF"
         >
           {uploading ? <RefreshCw size={11} className="animate-spin" style={{ color: 'var(--color-white-muted)' }} /> : <Upload size={11} style={{ color: 'var(--color-white-muted)' }} />}
         </button>
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleUpload(file);
+            e.target.value = '';
+          }}
         />
       </div>
+
+      {uploadError && (
+        <p className="text-[10px] leading-tight" role="alert" style={{ color: 'var(--color-error)' }}>
+          {uploadError}
+        </p>
+      )}
 
       {/* Save */}
       <button
