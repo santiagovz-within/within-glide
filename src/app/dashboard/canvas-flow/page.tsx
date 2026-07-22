@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/client';
 import type { Flow } from '@/types';
 import { formatDistanceToNow } from '@/lib/utils/date';
 import { isGcsRef, isSignedGcsUrl, resolveGcsRefs } from '@/lib/utils/mediaUtils';
+import { uploadImageToStorage } from '@/lib/utils/uploadImage';
+import { MAX_UPLOAD_SIZE_BYTES } from '@/lib/utils/constants';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 
 // Number of base flows shown before the fade + "Explore all flows" button.
@@ -83,28 +85,27 @@ function EditOverlay({ flow, onSave, onClose }: EditOverlayProps) {
     setUploading(true);
     setUploadError(null);
     try {
-      let uploadFile: File | Blob = file;
-      let uploadName = file.name;
+      if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+        throw new Error('File too large (max 20MB)');
+      }
+
+      let uploadFile = file;
 
       // GIFs must remain in their original format or their animation is lost.
       // Static thumbnails can still use the existing lightweight JPEG compression.
       if (file.type !== 'image/gif') {
         const { default: imageCompression } = await import('browser-image-compression');
-        uploadFile = await imageCompression(file, {
+        const compressed = await imageCompression(file, {
           maxSizeMB:        0.15,
           maxWidthOrHeight: 640,
           useWebWorker:     true,
           fileType:         'image/jpeg',
         });
-        uploadName = 'thumbnail.jpg';
+        uploadFile = new File([compressed], 'thumbnail.jpg', { type: 'image/jpeg' });
       }
 
-      const formData = new FormData();
-      formData.append('file', uploadFile, uploadName);
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const result = await res.json() as { url?: string; error?: string };
-      if (!res.ok || !result.url) throw new Error(result.error ?? 'Upload failed');
-      setThumbnailUrl(result.url);
+      // Upload directly to GCS so animated GIFs do not hit Vercel's request-size limit.
+      setThumbnailUrl(await uploadImageToStorage(uploadFile));
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Upload failed');
     } finally {
