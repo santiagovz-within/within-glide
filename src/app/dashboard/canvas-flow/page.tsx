@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Search, MoreHorizontal, Clock, Workflow,
-  Edit2, Check, X, Upload, RefreshCw,
+  Edit2, Check, X, Upload, RefreshCw, ArrowUpRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { Flow } from '@/types';
@@ -12,10 +12,15 @@ import { formatDistanceToNow } from '@/lib/utils/date';
 import { isGcsRef, isSignedGcsUrl, resolveGcsRefs } from '@/lib/utils/mediaUtils';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 
+// Number of base flows shown before the fade + "Explore all flows" button.
+const BASE_FLOWS_VISIBLE = 8;
+
 type FlowCardSummary = Pick<
   Flow,
   'id' | 'title' | 'description' | 'thumbnail_url' | 'created_at' | 'updated_at'
->;
+> & {
+  author_username?: string | null;
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -355,10 +360,15 @@ export default function CanvasFlowPage() {
             </p>
           </div>
         ) : (
-          // Same grid as recent flows — no horizontal scroll, no overflow:hidden parent to clip hovers
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {baseFlows.map((bf, index) => {
-              const { icon, text } = parseDescription(bf.description);
+          // 4-column grid so the base-flow thumbnails read larger. Only the first
+          // 8 are shown outright; any beyond that peek out from under a gradient.
+          <div className="relative">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {(baseFlows.length > BASE_FLOWS_VISIBLE
+              ? baseFlows.slice(0, BASE_FLOWS_VISIBLE + 4)
+              : baseFlows
+            ).map((bf, index) => {
+              const { icon } = parseDescription(bf.description);
               const isEditing = editingBaseId === bf.id;
               const menuOpen  = menuOpenId === bf.id;
               const isOpening = openingBaseId === bf.id;
@@ -391,9 +401,9 @@ export default function CanvasFlowPage() {
                         <p className="text-sm font-medium leading-tight truncate" style={{ color: 'var(--color-white)' }}>
                           {bf.title}
                         </p>
-                        {text && (
-                          <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-white-muted)' }}>{text}</p>
-                        )}
+                        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-white-muted)' }}>
+                          Created By: {bf.author_username ?? 'unknown'}
+                        </p>
                       </div>
                       {isAdmin && (
                         <button
@@ -407,12 +417,6 @@ export default function CanvasFlowPage() {
                           <MoreHorizontal size={14} style={{ color: 'var(--color-white-muted)' }} />
                         </button>
                       )}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <Clock size={10} style={{ color: 'var(--color-white-muted)' }} />
-                      <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
-                        Last edited {formatDistanceToNow(bf.updated_at)}
-                      </p>
                     </div>
                   </div>
 
@@ -478,6 +482,28 @@ export default function CanvasFlowPage() {
                 </CardShell>
               );
             })}
+          </div>
+
+          {/* Fade + "Explore all flows" when there are more than 8 base flows */}
+          {baseFlows.length > BASE_FLOWS_VISIBLE && (
+            <div
+              className="absolute inset-x-0 bottom-0 flex items-end justify-center pb-6 pointer-events-none"
+              style={{
+                height: 320,
+                background:
+                  'linear-gradient(to top, var(--color-bg-darkest) 28%, transparent 100%)',
+              }}
+            >
+              <button
+                onClick={(e) => e.stopPropagation()}
+                className="pointer-events-auto flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-semibold transition-opacity hover:opacity-90"
+                style={{ background: '#c8f24a', color: '#0f0f10', border: 'none', cursor: 'pointer' }}
+              >
+                Explore all flows
+                <ArrowUpRight size={16} />
+              </button>
+            </div>
+          )}
           </div>
         )}
       </section>
