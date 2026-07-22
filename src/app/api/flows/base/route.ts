@@ -17,18 +17,19 @@ export async function GET() {
 
     // Resolve creator usernames in a single lookup.
     const userIds = [...new Set(rows.map((f) => f.user_id).filter(Boolean))];
-    const usernameById = new Map<string, string>();
+    const nameById = new Map<string, string>();
     if (userIds.length > 0) {
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, username')
+        .select('id, username, display_name')
         .in('id', userIds);
-      for (const p of profiles ?? []) usernameById.set(p.id, p.username);
+      // Prefer the human-friendly display name, fall back to username.
+      for (const p of profiles ?? []) nameById.set(p.id, p.display_name || p.username);
     }
 
     const baseFlows = rows.map(({ user_id, ...rest }) => ({
       ...rest,
-      author_username: usernameById.get(user_id) ?? null,
+      author_username: nameById.get(user_id) ?? null,
     }));
 
     return NextResponse.json({ baseFlows });
