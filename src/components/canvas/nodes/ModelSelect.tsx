@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ByteDance, Fal, Flux, Kling, NanoBanana, OpenAI, TopazLabs } from '@lobehub/icons';
+import { ByteDance, Fal, Flux, Google, Kling, NanoBanana, OpenAI, TopazLabs } from '@lobehub/icons';
 import { ChevronDown } from 'lucide-react';
 
 interface Option {
@@ -25,6 +25,8 @@ function ModelIcon({ modelId, size = 13 }: { modelId: string; size?: number }) {
       return <OpenAI size={size} />;
     case 'flux-2-pro':
       return <Flux size={size} />;
+    case 'google-omni-flash':
+      return <Google.Color size={size} />;
     case 'kling-3-pro':
       return <Kling.Color size={size} />;
     case 'seedance-2':

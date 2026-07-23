@@ -17,6 +17,7 @@ const FRAME_ROW_HEIGHT = 36;
 const FRAME_ROW_GAP = 25;
 
 const KLING_ASPECT_RATIOS    = ['16:9', '9:16', '1:1'];
+const OMNI_ASPECT_RATIOS     = ['16:9', '9:16'];
 const SEEDANCE_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
 const SEEDANCE_RESOLUTIONS   = ['720p', '1080p', '4k'];
 
@@ -61,10 +62,15 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   }, [localPrompt]);
 
   const isKling     = data.model === 'kling-3-pro';
+  const isOmni      = data.model === 'google-omni-flash';
   const isSeedance  = data.model === 'seedance-2';
   const hasImage    = !!data.startFrameUrl;
 
-  const aspectRatios = isSeedance ? SEEDANCE_ASPECT_RATIOS : KLING_ASPECT_RATIOS;
+  const aspectRatios = isSeedance
+    ? SEEDANCE_ASPECT_RATIOS
+    : isOmni
+      ? OMNI_ASPECT_RATIOS
+      : KLING_ASPECT_RATIOS;
 
   // Read start-frame source node directly from store (reactive, zero-latency)
   const storeEdges = useFlowStore(state => state.edges);
@@ -125,6 +131,17 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     }));
   }
 
+  function handleModelChange(model: string) {
+    const modelConfig = VIDEO_MODELS.find(option => option.id === model);
+    const supportedAspectRatios = modelConfig?.supportedAspectRatios ?? [];
+    updateData({
+      model,
+      ...(!supportedAspectRatios.includes(data.aspectRatio) && supportedAspectRatios[0]
+        ? { aspectRatio: supportedAspectRatios[0] }
+        : {}),
+    });
+  }
+
   function navigateHistory(idx: number) {
     setHistIdx(idx);
     const url = videoHistory[idx];
@@ -149,6 +166,10 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
   async function handleGenerate() {
     if (isGenerating) return;
+    if (isOmni && !hasImage) {
+      updateData({ status: 'error', errorMessage: 'Google Omni Flash requires a start frame.' });
+      return;
+    }
     setIsGenerating(true);
     updateData({ status: 'processing', errorMessage: undefined, pendingRequestId: undefined, pendingEndpoint: undefined });
 
@@ -281,7 +302,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     <>
       <button
         onClick={handleGenerate}
-        disabled={isGenerating}
+        disabled={isGenerating || (isOmni && !hasImage)}
+        title={isOmni && !hasImage ? 'Connect a start frame to generate with Google Omni Flash' : undefined}
         className="w-full flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-opacity disabled:opacity-40 nodrag"
         style={{ background: 'var(--action-btn-bg)', color: 'var(--action-btn-color)', borderRadius: 11 }}
       >
@@ -342,14 +364,16 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         offset={`${startFrameHandleTop}px`}
         connected={storeEdges.some(e => e.target === id && e.targetHandle === 'start_frame')}
       />
-      <TypedHandle
-        type="target"
-        position={Position.Left}
-        id="end_frame"
-        portType="image"
-        offset={`${endFrameHandleTop}px`}
-        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'end_frame')}
-      />
+      {!isOmni && (
+        <TypedHandle
+          type="target"
+          position={Position.Left}
+          id="end_frame"
+          portType="image"
+          offset={`${endFrameHandleTop}px`}
+          connected={storeEdges.some(e => e.target === id && e.targetHandle === 'end_frame')}
+        />
+      )}
 
       {/* Prompt */}
       <div ref={promptSectionRef} className="mb-3">
@@ -386,7 +410,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       {/* Model selector */}
       <div className="mb-2">
         <label className="text-xs font-medium block mb-1" style={{ color: 'var(--color-white-muted)' }}>Model</label>
-        <ModelSelect options={VIDEO_MODELS} value={data.model} onChange={(v) => updateData({ model: v })} />
+        <ModelSelect options={VIDEO_MODELS} value={data.model} onChange={handleModelChange} />
       </div>
 
       {isSeedance && (
@@ -471,27 +495,29 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             borderRadius: '4px 16px 16px 4px',
             background: data.startFrameUrl ? '#a855f7' : 'var(--color-bg-surface)',
             color: data.startFrameUrl ? '#fff' : 'var(--color-white-muted)',
-            marginBottom: FRAME_ROW_GAP,
+            marginBottom: isOmni ? 0 : FRAME_ROW_GAP,
             transition: 'background 0.15s, color 0.15s',
           }}
         >
-          Start Frame
+          Start Frame{isOmni ? ' (Required)' : ''}
         </div>
-        <div
-          ref={endFrameRowRef}
-          className="flex items-center text-xs"
-          style={{
-            height: FRAME_ROW_HEIGHT,
-            paddingLeft: 12,
-            paddingRight: 12,
-            borderRadius: '4px 16px 16px 4px',
-            background: data.endFrameUrl ? '#a855f7' : 'var(--color-bg-surface)',
-            color: data.endFrameUrl ? '#fff' : 'var(--color-white-muted)',
-            transition: 'background 0.15s, color 0.15s',
-          }}
-        >
-          End Frame
-        </div>
+        {!isOmni && (
+          <div
+            ref={endFrameRowRef}
+            className="flex items-center text-xs"
+            style={{
+              height: FRAME_ROW_HEIGHT,
+              paddingLeft: 12,
+              paddingRight: 12,
+              borderRadius: '4px 16px 16px 4px',
+              background: data.endFrameUrl ? '#a855f7' : 'var(--color-bg-surface)',
+              color: data.endFrameUrl ? '#fff' : 'var(--color-white-muted)',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            End Frame
+          </div>
+        )}
       </div>
 
       {/* Video history navigation */}

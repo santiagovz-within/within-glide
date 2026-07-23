@@ -32,6 +32,11 @@ export const FAL_MODELS = {
     usesAspectRatio: true,
     type: 'image' as const,
   },
+  'google-omni-flash': {
+    endpoint: 'google/gemini-omni-flash/image-to-video',
+    requiresImageInput: true,
+    type: 'video' as const,
+  },
   'kling-3-pro': {
     endpoint: 'fal-ai/kling-video/v3/pro/text-to-video',
     imageToVideoEndpoint: 'fal-ai/kling-video/v3/4k/image-to-video',
@@ -112,6 +117,18 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 15,
   },
+  'google-omni-flash': {
+    id: 'google-omni-flash',
+    name: 'Google Omni Flash',
+    provider: 'fal',
+    type: 'video',
+    supportedAspectRatios: ['16:9', '9:16'],
+    supportedResolutions: ['1K'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 90,
+  },
   'kling-3-pro': {
     id: 'kling-3-pro',
     name: 'Kling 3 Pro',
@@ -163,7 +180,12 @@ export const MODELS: Record<string, ModelConfig> = {
 };
 
 export const IMAGE_MODELS = Object.values(MODELS).filter(m => m.type === 'image');
-export const VIDEO_MODELS = Object.values(MODELS).filter(m => m.type === 'video');
+export const VIDEO_MODELS = [
+  MODELS['google-omni-flash'],
+  MODELS['seedance-2'],
+  MODELS['kling-3-pro'],
+];
+export const CHAT_VIDEO_MODELS = VIDEO_MODELS.filter(m => m.id !== 'google-omni-flash');
 export const UPSCALE_MODELS = Object.values(MODELS).filter(m => m.type === 'upscale');
 
 export function supportsMultipleImageReferences(modelId: string): boolean {

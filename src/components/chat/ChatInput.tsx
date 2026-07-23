@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Sparkles, Upload, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { useChatStore } from '@/lib/stores/chatStore';
-import { IMAGE_MODELS, VIDEO_MODELS, MODELS } from '@/lib/api/models';
+import { IMAGE_MODELS, CHAT_VIDEO_MODELS, MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS, ACCEPTED_IMAGE_TYPES } from '@/lib/utils/constants';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 
@@ -55,7 +55,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
   const fileEndRef   = useRef<HTMLInputElement>(null);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
 
-  const models        = mode === 'image' ? IMAGE_MODELS : VIDEO_MODELS;
+  const models        = mode === 'image' ? IMAGE_MODELS : CHAT_VIDEO_MODELS;
   const currentModel  = MODELS[settings.model];
   const isSeedance    = settings.model === 'seedance-2';
 

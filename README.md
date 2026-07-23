@@ -52,6 +52,7 @@ All generation runs through the [FAL AI](https://fal.ai) platform.
 | Nano Banana Pro | Image generation |
 | GPT Image 2 (OpenAI) | Image generation |
 | FLUX 2 Pro | Image generation |
+| Google Omni Flash | Image-to-video generation |
 | Kling 3 Pro | Video generation |
 | Seedance 2.0 (ByteDance) | Video generation |
 | SeedVR2 | Image / video upscale |

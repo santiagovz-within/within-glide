@@ -47,6 +47,29 @@ export async function POST(request: NextRequest) {
       const seedanceResolution = (body as GenerateRequestBody & { seedanceResolution?: string }).seedanceResolution ?? '720p';
       const hasImage = !!startFrameUrl;
       const isSeedance = model === 'seedance-2';
+      const isOmni = model === 'google-omni-flash';
+      const duration = body.duration ?? 5;
+
+      if (isOmni && !startFrameUrl) {
+        return NextResponse.json(
+          { error: 'Google Omni Flash requires a start frame.' },
+          { status: 400 }
+        );
+      }
+
+      if (isOmni && !['16:9', '9:16'].includes(aspectRatio)) {
+        return NextResponse.json(
+          { error: 'Google Omni Flash supports only 16:9 and 9:16 aspect ratios.' },
+          { status: 400 }
+        );
+      }
+
+      if (isOmni && (!Number.isInteger(duration) || duration < 3 || duration > 10)) {
+        return NextResponse.json(
+          { error: 'Google Omni Flash duration must be an integer from 3 to 10 seconds.' },
+          { status: 400 }
+        );
+      }
 
       const endpoint = hasImage && 'imageToVideoEndpoint' in modelConfig
         ? modelConfig.imageToVideoEndpoint
@@ -55,10 +78,10 @@ export async function POST(request: NextRequest) {
       const { request_id } = await fal.queue.submit(endpoint as string, {
         input: {
           prompt,
-          ...(!hasImage ? { aspect_ratio: aspectRatio } : {}),
-          duration: String(body.duration ?? 5),
+          ...(!hasImage || isOmni ? { aspect_ratio: aspectRatio } : {}),
+          duration: isOmni ? duration : String(duration),
           ...(startFrameUrl ? { image_url: startFrameUrl } : {}),
-          ...(endFrameUrl   ? { end_image_url: endFrameUrl } : {}),
+          ...(!isOmni && endFrameUrl ? { end_image_url: endFrameUrl } : {}),
           ...(isSeedance    ? { generate_audio: generateAudio !== false, resolution: seedanceResolution } : {}),
         },
       });
