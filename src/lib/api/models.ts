@@ -1,6 +1,7 @@
 import type { ModelConfig, PromptReferenceStyle } from '@/types';
 import type { FalPricingRule } from '@/lib/falPricing';
 import { DEFAULT_PROMPT_REFERENCE } from '@/lib/promptTags';
+import { LAYERIZE_ENDPOINT } from '@/lib/layerize';
 
 // Google Gemini image generation model IDs — keyed by our internal model ID
 export const GOOGLE_IMAGE_MODELS: Record<string, string> = {};
@@ -212,7 +213,9 @@ export function getFalPricingRule(endpoint: string): FalPricingRule | undefined 
 }
 
 export function getFalPricingEndpointIds(): string[] {
-  const endpoints = new Set<string>();
+  // Layer counts are model-selected, so price actual billable units without
+  // presenting a fixed pre-generation estimate for Layerize.
+  const endpoints = new Set<string>([LAYERIZE_ENDPOINT]);
   for (const config of Object.values(FAL_MODELS)) {
     endpoints.add(config.endpoint);
     if ('editEndpoint' in config) endpoints.add(config.editEndpoint);

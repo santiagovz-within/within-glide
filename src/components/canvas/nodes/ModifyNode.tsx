@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils/cn';
 import glassStyles from './ImageGenerationGlass.module.css';
 import { FAL_MODELS, FAL_NODE_ENDPOINTS } from '@/lib/api/models';
 import FalCostEstimate from './FalCostEstimate';
+import { LayerizePanel } from './LayerizePanel';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -475,7 +476,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const prevInputMediaTypeRef = useRef<'image' | 'video' | null>(null);
 
-  const mode         = (data.mode as 'prompt' | 'expand') ?? 'prompt';
+  const mode         = data.mode ?? 'prompt';
   const expandTop    = (data.expandTop    as number) ?? 0;
   const expandRight  = (data.expandRight  as number) ?? 0;
   const expandBottom = (data.expandBottom as number) ?? 0;
@@ -949,9 +950,9 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     ? `${resizePlan.outputW} × ${resizePlan.outputH}px${resizePlan.needsResize ? ' (scaled to fit)' : ''}`
     : null;
 
-  const inputPortType  = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' ? 'image' : 'neutral';
+  const inputPortType  = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' || mode === 'layerize' ? 'image' : 'neutral';
   const outputHandleId = inputMediaType === 'video' ? 'video' : 'image';
-  const outputPortType = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' ? 'image' : 'neutral';
+  const outputPortType = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' || mode === 'layerize' ? 'image' : 'neutral';
   const accentColor    = inputMediaType === 'video' ? PORT_COLORS.video : PORT_COLORS.image;
 
   const outpaintAspect     = data.outpaintAspectRatio ?? '16:9';
@@ -1101,7 +1102,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       accentColor={accentColor}
       titlePosition="outside"
       appearance="imageGenerationGlass"
-      footer={footer}
+      footer={mode === 'layerize' && inputMediaType !== 'video' ? undefined : footer}
     >
       {/* Handles */}
       {inputMediaType === 'image' && mode === 'prompt' && (
@@ -1124,32 +1125,43 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
       />
 
       {/* ── No input ── */}
-      {inputMediaType === null && (
+      {inputMediaType === null && mode !== 'layerize' && (
         <div ref={imageSlotRef} className={glassStyles.emptyState}>
           Connect an image or video
         </div>
       )}
 
       {/* ── Image mode ── */}
-      {inputMediaType === 'image' && (
+      {inputMediaType !== 'video' && (
         <>
           {/* Mode toggle */}
           <div className={cn(glassStyles.glassSurface, glassStyles.segmented, 'nodrag')}>
             <span className={cn(glassStyles.glassContent, 'flex w-full gap-[3px]')}>
-              {(['prompt', 'expand'] as const).map((m) => (
+              {(['prompt', 'layerize', 'expand'] as const).map((m) => (
                 <button
                   key={m}
                   className={cn(glassStyles.segment, mode === m && glassStyles.segmentActive, 'nodrag')}
+                  disabled={isGenerating || (mode === 'layerize' && data.status === 'processing')}
+                  aria-pressed={mode === m}
                   onClick={() => updateData({ mode: m })}
                 >
-                  {m === 'prompt' ? 'Prompt' : 'Expand'}
+                  {m === 'prompt' ? 'Prompt' : m === 'layerize' ? 'Layerize' : 'Expand'}
                 </button>
               ))}
             </span>
           </div>
 
+          {mode === 'layerize' && (
+            <>
+              {availableImages.length > 1 && (
+                <SourceThumbnails images={availableImages} selectedIndex={safeIndex} aspect={thumbnailAspect} onSelect={setSelectedIndex} />
+              )}
+              <LayerizePanel id={id} data={data} connectedImage={selectedImage} sourceSlotRef={imageSlotRef} updateData={updateData} />
+            </>
+          )}
+
           {/* ── Prompt mode ── */}
-          {mode === 'prompt' && (
+          {mode === 'prompt' && inputMediaType === 'image' && (
             <>
               <div
                 ref={promptSectionRef}
@@ -1213,7 +1225,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           )}
 
           {/* ── Expand mode ── */}
-          {mode === 'expand' && (
+          {mode === 'expand' && inputMediaType === 'image' && (
             <>
               <div
                 ref={imageSlotRef}

@@ -68,7 +68,8 @@ export function getActiveMediaSourceHandle(
   }
 
   if (node.type === 'modifyNode') {
-    const activeType = getIncomingMediaType(node.id, 'image', nodes, edges);
+    const activeType = getIncomingMediaType(node.id, 'image', nodes, edges)
+      ?? ((node.data as ModifyNodeData).mode === 'layerize' ? 'image' : null);
     return activeType === mediaType ? mediaType : null;
   }
 

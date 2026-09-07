@@ -284,7 +284,14 @@ export interface VideoToGifNodeData extends Record<string, unknown> {
 
 export interface ModifyNodeData extends Record<string, unknown> {
   model: string;
-  mode?: 'prompt' | 'expand';
+  mode?: 'prompt' | 'layerize' | 'expand';
+  layerizeInputUrl?: string;
+  layerizeSourceUrl?: string;
+  layerizeLayers?: import('@/lib/layerize').EditableLayer[];
+  layerizeSelectedId?: string;
+  layerizeRequestId?: string;
+  layerizeRequestSourceUrl?: string;
+  layerizeCompositionDirty?: boolean;
   prompt?: string;
   promptConnected?: boolean;
   inputImageUrl?: string;
