@@ -432,7 +432,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           value={localPrompt}
           tags={promptTags}
           taggable={taggableInputs}
-          placeholder="Write your prompt here. Type @ to reference image inputs"
+          placeholder="Write your prompt here. Type @ to reference specific image inputs..."
           onFocusChange={(focused) => { isFocused.current = focused; }}
           onChange={({ prompt, tags }) => {
             setLocalPrompt(prompt);
