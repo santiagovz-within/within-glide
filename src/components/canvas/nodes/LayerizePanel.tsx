@@ -294,7 +294,7 @@ export function LayerizePanel({ id, data, connectedImage, sourceSlotRef, updateD
 
       <div className={styles.heading}><span>Composition</span><IconButton title="Download composition" disabled={downloading} onClick={() => download(false)}><Download size={14} /></IconButton></div>
       <div className={styles.canvasArea}>
-        <div ref={canvasRef} className={styles.canvas} style={{ aspectRatio: `${width} / ${height}`, width: Math.min(280, 220 * width / height) }} aria-label="Layer composition">
+        <div ref={canvasRef} className={styles.canvas} style={{ aspectRatio: `${width} / ${height}` }} aria-label="Layer composition">
           {layers.map(layer => layer.visible && <button key={layer.id} className={cn(styles.canvasLayer, selected?.id === layer.id && styles.selectedLayer)}
             aria-label={`Position ${layer.name}`} disabled={busy || uploading}
             style={{ left: `${layer.bounds.x / width * 100}%`, top: `${layer.bounds.y / height * 100}%`, width: `${layer.bounds.width / width * 100}%`, height: `${layer.bounds.height / height * 100}%` }}

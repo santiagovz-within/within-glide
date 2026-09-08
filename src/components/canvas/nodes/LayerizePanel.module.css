@@ -14,7 +14,7 @@
 .panel button:focus-visible { outline: 1px solid #c1eca0; outline-offset: -1px; }
 .heading, .sourceHeading { display: flex; align-items: center; justify-content: space-between; min-height: 24px; color: #a7a7a7; }
 .sourceHeading { color: #c1eca0; }
-.sourceImage { width: 100%; height: 104px; object-fit: contain; background: #171717; border-radius: 6px; }
+.sourceImage { display: block; width: 100%; height: auto; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; background: #0f0f10; }
 .upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; height: 104px; border: 1px dashed #505050; border-radius: 6px; color: #b4b4b4; }
 .iconButton { display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 26px; flex: 0 0 25px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: inherit; }
 .iconButton:hover:not(:disabled), .action:hover:not(:disabled) { background: #383838; }
@@ -27,8 +27,8 @@
 .layerSelect span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orderButtons { display: flex; flex-direction: column; flex: 0 0 20px; }
 .orderButtons .iconButton { width: 20px; height: 19px; flex-basis: 19px; }
-.canvasArea { display: flex; justify-content: center; align-items: center; min-height: 36px; background: #151515; }
-.canvas { position: relative; max-width: 100%; overflow: hidden; isolation: isolate; background-color: #292929; background-image: conic-gradient(#353535 25%, transparent 0 50%, #353535 0 75%, transparent 0); background-size: 12px 12px; touch-action: none; }
+.canvasArea { width: 100%; min-height: 36px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; }
+.canvas { position: relative; width: 100%; overflow: hidden; isolation: isolate; background-color: #292929; background-image: conic-gradient(#353535 25%, transparent 0 50%, #353535 0 75%, transparent 0); background-size: 12px 12px; touch-action: none; }
 .canvasLayer { position: absolute; padding: 0; border: 0; background: transparent; touch-action: none; cursor: move !important; }
 .canvasLayer img { display: block; width: 100%; height: 100%; pointer-events: none; }
 .selectedLayer { outline: 1px solid #c1eca0; outline-offset: -1px; }
