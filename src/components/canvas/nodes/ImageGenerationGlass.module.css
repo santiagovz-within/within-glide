@@ -231,6 +231,36 @@ textarea.promptContent {
   color: rgba(255, 255, 255, 0.5);
 }
 
+/*
+ * Inline "@imageN" chip painted in the prompt mirror. The chip box has no
+ * padding or margin so it advances exactly like the transparent textarea text
+ * it sits over; spaces the user types beside it stay visible. The label is
+ * scaled down inside the box to give the look of inner padding, and the
+ * background is a pseudo-element inset from the top and bottom so chips on
+ * adjacent lines never touch each other or the text around them.
+ */
+.promptChip {
+  position: relative;
+  color: var(--tag-image-text);
+  cursor: default;
+  pointer-events: auto;
+}
+
+.promptChip::before {
+  content: '';
+  position: absolute;
+  inset: 1px 0;
+  border-radius: 4px;
+  background: var(--tag-image-bg);
+}
+
+.promptChipText {
+  /* Positioned so it paints above the ::before background (tree order). */
+  position: relative;
+  display: inline-block;
+  transform: scale(0.86);
+}
+
 .connectedPrompt {
   display: flex;
   min-height: 40px;

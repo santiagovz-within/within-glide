@@ -61,19 +61,11 @@ interface Anchor {
   scale: number;
 }
 
-const CHIP_STYLE: React.CSSProperties = {
-  color: 'var(--tag-image-text)',
-  background: 'var(--tag-image-bg)',
-  borderRadius: 4,
-  // 3px of side padding, cancelled by a matching negative margin so the chip
-  // advances exactly like the invisible text underneath and never drifts from
-  // it. No vertical spread: the prompt line-height (see .promptContent) leaves
-  // the breathing room between chips on adjacent lines instead.
-  padding: '0 3px',
-  margin: '0 -3px',
-  pointerEvents: 'auto',
-  cursor: 'default',
-};
+// Chip visuals live in the CSS module (.promptChip / .promptChipText). The
+// chip box must advance exactly like the invisible textarea text underneath,
+// so it gets no padding or margin: the label is scaled down inside the box to
+// fake inner padding, and the background is drawn by a pseudo-element inset
+// from the top and bottom so it never touches neighbouring lines.
 
 function measure(el: HTMLElement): Anchor {
   const rect = el.getBoundingClientRect();
@@ -250,7 +242,7 @@ export function PromptEditor({
             seg.kind === 'tag' ? (
               <span
                 key={i}
-                style={CHIP_STYLE}
+                className={glassStyles.promptChip}
                 onMouseEnter={(e) => setHoverTag({ tag: seg.tag, rect: e.currentTarget.getBoundingClientRect() })}
                 onMouseLeave={() => setHoverTag(null)}
                 onMouseDown={(e) => {
@@ -259,7 +251,7 @@ export function PromptEditor({
                   textareaRef.current?.focus();
                 }}
               >
-                {seg.text}
+                <span className={glassStyles.promptChipText}>{seg.text}</span>
               </span>
             ) : (
               <span key={i}>{renderText ? renderText(seg.text) : seg.text}</span>
