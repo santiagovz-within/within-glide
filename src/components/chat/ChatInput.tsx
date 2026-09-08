@@ -130,9 +130,21 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
   const canGenerate = !!prompt.trim() && !isGenerating && !isUploading;
 
   useLayoutEffect(() => {
-    if (!textareaRef.current) return;
-    textareaRef.current.style.height = 'auto';
-    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const resize = () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 140)}px`;
+    };
+    resize();
+    let width = textarea.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (textarea.clientWidth === width) return;
+      width = textarea.clientWidth;
+      resize();
+    });
+    observer.observe(textarea);
+    return () => observer.disconnect();
   }, [prompt]);
 
   return (
@@ -219,12 +231,12 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
           ))}
         </div>
         <div className={styles.model}>
-          <ModelSelect standalone compact placement="top" options={models} value={settings.model} onChange={handleModelChange} />
+          <ModelSelect standalone size="large" compact placement="top" options={models} value={settings.model} onChange={handleModelChange} />
         </div>
-        <NodeSelect standalone placement="top" label="Aspect ratio" options={validAspects.map(r => r.value)} value={settings.aspectRatio} onChange={aspectRatio => updateSettings({ aspectRatio })} leadingIcon={<AspectRatioGlyph ratio={settings.aspectRatio} />} optionIcon={value => <AspectRatioGlyph ratio={value} />} />
+        <NodeSelect standalone size="large" placement="top" label="Aspect ratio" options={validAspects.map(r => r.value)} value={settings.aspectRatio} onChange={aspectRatio => updateSettings({ aspectRatio })} leadingIcon={<AspectRatioGlyph ratio={settings.aspectRatio} />} optionIcon={value => <AspectRatioGlyph ratio={value} />} />
         {mode === 'image' ? (
           <>
-            <NodeSelect standalone placement="top" label="Resolution" options={[...RESOLUTIONS]} value={settings.resolution} onChange={resolution => updateSettings({ resolution: resolution as typeof settings.resolution })} leadingIcon={<Maximize size={12} />} />
+            <NodeSelect standalone size="large" placement="top" label="Resolution" options={[...RESOLUTIONS]} value={settings.resolution} onChange={resolution => updateSettings({ resolution: resolution as typeof settings.resolution })} leadingIcon={<Maximize size={12} />} />
             <div className={cn(glass.glassSurface, styles.stepper)} role="group" aria-label="Number of images">
               <button onClick={() => updateSettings({ numGenerations: settings.numGenerations - 1 })} disabled={settings.numGenerations <= 1} title="Fewer images" aria-label="Fewer images"><Minus size={13} /></button>
               <output aria-label="Image count">{settings.numGenerations}/4</output>
@@ -232,7 +244,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
             </div>
           </>
         ) : (
-          <NodeSelect standalone placement="top" label="Duration" options={DURATIONS.map(d => `${d}s`)} value={`${settings.duration ?? 5}s`} onChange={duration => updateSettings({ duration: Number.parseInt(duration, 10) })} leadingIcon={<Timer size={12} />} />
+          <NodeSelect standalone size="large" placement="top" label="Duration" options={DURATIONS.map(d => `${d}s`)} value={`${settings.duration ?? 5}s`} onChange={duration => updateSettings({ duration: Number.parseInt(duration, 10) })} leadingIcon={<Timer size={12} />} />
         )}
         {isSeedance && <span className={styles.warning} title="Expensive model"><AlertTriangle size={13} />Expensive</span>}
         <div className={styles.actions}>

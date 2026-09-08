@@ -15,6 +15,7 @@ interface NodeSelectProps {
   optionIcon?: (option: string) => React.ReactNode;
   appearance?: 'default' | 'imageGenerationGlass';
   standalone?: boolean;
+  size?: 'default' | 'large';
   placement?: 'top' | 'bottom';
   label?: string;
   locked?: boolean;
@@ -54,7 +55,7 @@ function CanvasNodeSelect(props: NodeSelectProps) {
 function NodeSelectControl({
   options, value, onChange, leadingIcon, optionIcon,
   appearance = 'imageGenerationGlass', locked = false,
-  placement = 'bottom', label, reactFlowStore,
+  placement = 'bottom', label, size = 'default', reactFlowStore,
 }: NodeSelectProps & { reactFlowStore?: ReturnType<typeof useStoreApi> }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
@@ -189,6 +190,7 @@ function NodeSelectControl({
         aria-expanded={open}
         className={cn(
           'nodrag',
+          size === 'large' && glassStyles.largeControls,
           isImageGenerationGlass
             ? [glassStyles.glassSurface, glassStyles.selectTrigger, locked && glassStyles.selectTriggerLocked]
             : 'w-full h-full flex items-center gap-1.5 px-2 py-1.5 text-xs',
@@ -234,6 +236,7 @@ function NodeSelectControl({
           }}
           className={cn(
             'nodrag',
+            size === 'large' && glassStyles.largeControls,
             isImageGenerationGlass && glassStyles.glassSurface,
             isImageGenerationGlass && glassStyles.dropdownMenu,
           )}

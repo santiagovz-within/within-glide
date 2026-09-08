@@ -391,6 +391,41 @@ textarea.promptContent {
   font-size: 10px;
 }
 
+.largeControls.modelTrigger,
+.largeControls.selectTrigger {
+  height: 42px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.largeControls .modelName {
+  font-size: 13px;
+}
+
+.largeControls .modelDescription {
+  font-size: 9px;
+  line-height: 15px;
+  letter-spacing: 0;
+  white-space: normal;
+}
+
+.largeControls .dropdownOption {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.largeControls .modelIcon {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.largeControls .chevron {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+}
+
 .modePill {
   display: inline-flex;
   width: fit-content;

@@ -19,6 +19,7 @@ interface ModelSelectProps {
   onChange: (value: string) => void;
   appearance?: 'default' | 'imageGenerationGlass';
   standalone?: boolean;
+  size?: 'default' | 'large';
   placement?: 'top' | 'bottom';
   label?: string;
   compact?: boolean;
@@ -126,7 +127,7 @@ function CanvasModelSelect(props: ModelSelectProps) {
   return <ModelSelectControl {...props} reactFlowStore={reactFlowStore} />;
 }
 
-function ModelSelectControl({ options, value, onChange, appearance = 'imageGenerationGlass', placement = 'bottom', label = 'Model', compact = false, reactFlowStore }: ModelSelectProps & { reactFlowStore?: ReturnType<typeof useStoreApi> }) {
+function ModelSelectControl({ options, value, onChange, appearance = 'imageGenerationGlass', placement = 'bottom', label = 'Model', compact = false, size = 'default', reactFlowStore }: ModelSelectProps & { reactFlowStore?: ReturnType<typeof useStoreApi> }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const [pos, setPos] = useState<DropdownPosition>({ top: 0, left: 0, width: 0, scale: 1, triggerTop: 0, viewportHeight: 0 });
@@ -284,6 +285,7 @@ function ModelSelectControl({ options, value, onChange, appearance = 'imageGener
         aria-label={label}
         className={cn(
           'nodrag',
+          size === 'large' && glassStyles.largeControls,
           isImageGenerationGlass
             ? [glassStyles.glassSurface, glassStyles.modelTrigger]
             : 'w-full flex items-center gap-1.5 px-2 py-1.5 text-xs',
@@ -327,6 +329,7 @@ function ModelSelectControl({ options, value, onChange, appearance = 'imageGener
           }}
           className={cn(
             'nodrag',
+            size === 'large' && glassStyles.largeControls,
             isImageGenerationGlass && glassStyles.glassSurface,
             isImageGenerationGlass && glassStyles.dropdownMenu,
           )}
