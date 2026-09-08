@@ -20,6 +20,7 @@ import {
   segmentPrompt,
   syncTagsWithText,
   tagFromInput,
+  type PromptSegment,
   type TaggableInput,
 } from '@/lib/promptTags';
 import glassStyles from './ImageGenerationGlass.module.css';
@@ -66,6 +67,27 @@ interface Anchor {
 // so it gets no padding or margin: the label is scaled down inside the box to
 // fake inner padding, and the background is drawn by a pseudo-element inset
 // from the top and bottom so it never touches neighbouring lines.
+//
+// Chips are atomic inline-blocks, and browsers allow a line break on either
+// side of an atomic inline even with no space there. The textarea only breaks
+// at whitespace, so a chip glued to a word ("as@image2" or "@image2.") could
+// wrap differently in the mirror and shift everything after it. A zero-width
+// word joiner (U+2060) next to the chip forbids that break; it is only added
+// where there is no whitespace, because a joiner right after a space would
+// also forbid the legitimate break at that space.
+const WORD_JOINER = '\u2060';
+
+function joinsPrevious(segments: PromptSegment[], i: number): boolean {
+  const prev = segments[i - 1];
+  if (!prev) return false;
+  return prev.kind === 'tag' || !/\s$/.test(prev.text);
+}
+
+function joinsNext(segments: PromptSegment[], i: number): boolean {
+  const next = segments[i + 1];
+  if (!next) return false;
+  return next.kind === 'tag' || !/^\s/.test(next.text);
+}
 
 function measure(el: HTMLElement): Anchor {
   const rect = el.getBoundingClientRect();
@@ -166,7 +188,11 @@ export function PromptEditor({
     const caret = el.selectionStart ?? el.value.length;
     const next = activeMentionQuery(el.value, caret);
     setMention(next);
-    if (next) setHighlight(0);
+    // Only reset the highlight when the mention itself changes. This also runs
+    // on key-up after ArrowUp/ArrowDown (which don't move the caret while the
+    // picker is open), and resetting there would undo the arrow navigation.
+    const changed = !!next && (!mention || next.start !== mention.start || next.query !== mention.query);
+    if (changed) setHighlight(0);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -240,18 +266,21 @@ export function PromptEditor({
         >
           {segments.map((seg, i) =>
             seg.kind === 'tag' ? (
-              <span
-                key={i}
-                className={glassStyles.promptChip}
-                onMouseEnter={(e) => setHoverTag({ tag: seg.tag, rect: e.currentTarget.getBoundingClientRect() })}
-                onMouseLeave={() => setHoverTag(null)}
-                onMouseDown={(e) => {
-                  // Let a click on a chip land in the textarea like normal text.
-                  e.preventDefault();
-                  textareaRef.current?.focus();
-                }}
-              >
-                <span className={glassStyles.promptChipText}>{seg.text}</span>
+              <span key={i}>
+                {joinsPrevious(segments, i) ? WORD_JOINER : null}
+                <span
+                  className={glassStyles.promptChip}
+                  onMouseEnter={(e) => setHoverTag({ tag: seg.tag, rect: e.currentTarget.getBoundingClientRect() })}
+                  onMouseLeave={() => setHoverTag(null)}
+                  onMouseDown={(e) => {
+                    // Let a click on a chip land in the textarea like normal text.
+                    e.preventDefault();
+                    textareaRef.current?.focus();
+                  }}
+                >
+                  <span className={glassStyles.promptChipText}>{seg.text}</span>
+                </span>
+                {joinsNext(segments, i) ? WORD_JOINER : null}
               </span>
             ) : (
               <span key={i}>{renderText ? renderText(seg.text) : seg.text}</span>

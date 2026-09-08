@@ -240,8 +240,17 @@ textarea.promptContent {
  * adjacent lines never touch each other or the text around them.
  */
 .promptChip {
+  /*
+   * Atomic inline: an ordinary inline span can be split into fragments at a
+   * line wrap, and the absolutely positioned background below then gets a
+   * degenerate containing box and disappears. `line-height: normal` keeps the
+   * box at the font's content height rather than the looser prompt line-height.
+   */
   position: relative;
+  display: inline-block;
+  vertical-align: baseline;
   color: var(--tag-image-text);
+  line-height: normal;
   cursor: default;
   pointer-events: auto;
 }
