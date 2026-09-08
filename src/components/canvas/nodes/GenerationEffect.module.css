@@ -1,0 +1,22 @@
+.roundedCells {
+  /* About 1px of corner rounding at the half-size preset's ~7px cell size. */
+  --cell-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Crect x='2' y='2' width='96' height='96' rx='16' fill='white'/%3E%3C/svg%3E");
+}
+
+.roundedCells > :global(.image-gen-shader),
+.roundedCells:not([data-reveal-phase='visible']) > :global(.image-gen-overlay) {
+  mask-image: var(--cell-mask);
+  mask-mode: alpha;
+  mask-repeat: repeat;
+  mask-position: 0 0;
+}
+
+.roundedCells > :global(.image-gen-shader) {
+  mask-size: calc(100% / var(--shader-columns, 2))
+    calc(100% / var(--shader-rows, 2));
+}
+
+.roundedCells > :global(.image-gen-overlay) {
+  mask-size: calc(100% / var(--reveal-columns, 2))
+    calc(100% / var(--reveal-rows, 2));
+}
