@@ -166,11 +166,48 @@ export const FAL_MODELS = {
     pricing: { kind: 'output-megapixels' },
     type: 'upscale' as const,
   },
+  'seedvr2-seamless': {
+    endpoint: 'fal-ai/seedvr/upscale/image/seamless',
+    scaleParam: 'upscale_factor',
+    scaleOptions: [2, 4, 8, 10],
+    pricing: { kind: 'output-megapixels' },
+    type: 'upscale' as const,
+  },
   'topaz': {
     endpoint: 'fal-ai/topaz/upscale/image',
     scaleParam: 'upscale_factor',
     scaleOptions: [2, 4],
     pricing: { kind: 'topaz-image' },
+    type: 'upscale' as const,
+  },
+  'topaz-precision': {
+    endpoint: 'topaz/upscale/image/precision',
+    scaleParam: 'upscale_factor',
+    scaleOptions: [2, 4],
+    // Topaz sub-model, sent as the endpoint's `model` field.
+    variantParam: 'model',
+    variantLabel: 'Topaz model',
+    variants: ['Standard V2', 'High Fidelity V3', 'High Fidelity V2', 'Low Resolution V2', 'CGI', 'Text Refine'],
+    defaultVariant: 'Standard V2',
+    // Fal bills $0.08 per started 24 MP of output for every precision model.
+    pricing: { kind: 'started-megapixels', megapixelsPerUnit: 24 },
+    type: 'upscale' as const,
+  },
+  'topaz-generative': {
+    endpoint: 'topaz/upscale/image/generative',
+    scaleParam: 'upscale_factor',
+    scaleOptions: [2, 4],
+    variantParam: 'model',
+    variantLabel: 'Topaz model',
+    variants: ['Wonder 3.5', 'Wonder 3', 'Wonder 2', 'Wonder', 'Recover 3', 'Standard MAX', 'Redefine', 'Recovery V2', 'Recovery'],
+    defaultVariant: 'Wonder 3',
+    // Fal bills $0.08 per started 8 MP of output with Wonder 3 / 3.5 and per
+    // started 4 MP with every other generative model.
+    pricing: {
+      kind: 'started-megapixels',
+      megapixelsPerUnit: 4,
+      variantMegapixelsPerUnit: { 'Wonder 3.5': 8, 'Wonder 3': 8 },
+    },
     type: 'upscale' as const,
   },
   'ideogram-remove-bg': {
@@ -210,6 +247,39 @@ export function getFalPricingRule(endpoint: string): FalPricingRule | undefined 
 
   return Object.values(FAL_NODE_ENDPOINTS)
     .find(config => config.endpoint === endpoint)?.pricing as FalPricingRule | undefined;
+}
+
+export interface UpscaleVariantConfig {
+  /** Fal input field that receives the selected variant. */
+  param: string;
+  /** Label shown above the variant dropdown. */
+  label: string;
+  options: readonly string[];
+  defaultOption: string;
+}
+
+/** Sub-model choices (e.g. Topaz "Standard V2") for upscale models that expose them. */
+export function getUpscaleVariantConfig(modelId: string): UpscaleVariantConfig | undefined {
+  const config = FAL_MODELS[modelId as keyof typeof FAL_MODELS];
+  if (!config || !('variants' in config)) return undefined;
+  return {
+    param: config.variantParam,
+    label: config.variantLabel,
+    options: config.variants,
+    defaultOption: config.defaultVariant,
+  };
+}
+
+/**
+ * Resolves the variant to send for an upscale model: the requested one when
+ * valid, the model's default when none is set, and `null` for an invalid
+ * request. Models without variants resolve to `undefined`.
+ */
+export function resolveUpscaleVariant(modelId: string, requested?: string): string | null | undefined {
+  const variantConfig = getUpscaleVariantConfig(modelId);
+  if (!variantConfig) return undefined;
+  if (requested === undefined || requested === '') return variantConfig.defaultOption;
+  return variantConfig.options.includes(requested) ? requested : null;
 }
 
 export function getFalPricingEndpointIds(): string[] {
@@ -464,6 +534,18 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 30,
   },
+  'seedvr2-seamless': {
+    id: 'seedvr2-seamless',
+    name: 'SeedVR2 Seamless',
+    provider: 'fal',
+    type: 'upscale',
+    supportedAspectRatios: [],
+    supportedResolutions: ['2K', '4K'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 30,
+  },
   'topaz': {
     id: 'topaz',
     name: 'Topaz',
@@ -475,6 +557,30 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsImageInput: true,
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 20,
+  },
+  'topaz-precision': {
+    id: 'topaz-precision',
+    name: 'Topaz Precision',
+    provider: 'fal',
+    type: 'upscale',
+    supportedAspectRatios: [],
+    supportedResolutions: ['2K', '4K'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 20,
+  },
+  'topaz-generative': {
+    id: 'topaz-generative',
+    name: 'Topaz Generative',
+    provider: 'fal',
+    type: 'upscale',
+    supportedAspectRatios: [],
+    supportedResolutions: ['2K', '4K'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 40,
   },
 };
 

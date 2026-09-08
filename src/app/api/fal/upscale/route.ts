@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { FAL_MODELS } from '@/lib/api/models';
+import { FAL_MODELS, getUpscaleVariantConfig, resolveUpscaleVariant } from '@/lib/api/models';
 import { getSignedReadUrl } from '@/lib/gcs';
 import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
 import { getFalStorageHeaders } from '@/lib/falStorage';
@@ -18,15 +18,21 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { model, imageUrl, scaleFactor = 2, sourceType, sourceId, nodeId } = await request.json();
+    const { model, imageUrl, scaleFactor = 2, modelVariant, sourceType, sourceId, nodeId } = await request.json();
 
     const modelConfig = FAL_MODELS[model as keyof typeof FAL_MODELS];
     if (!modelConfig || modelConfig.type !== 'upscale') {
       return NextResponse.json({ error: 'Invalid upscale model' }, { status: 400 });
     }
 
+    const variant = resolveUpscaleVariant(model, typeof modelVariant === 'string' ? modelVariant : undefined);
+    if (variant === null) {
+      return NextResponse.json({ error: 'Invalid upscale model variant' }, { status: 400 });
+    }
+
     const scaleParam = 'scaleParam' in modelConfig ? modelConfig.scaleParam : 'scale';
-    const falInput = { image_url: imageUrl, [scaleParam]: scaleFactor };
+    const falInput: Record<string, unknown> = { image_url: imageUrl, [scaleParam]: scaleFactor };
+    if (variant) falInput[getUpscaleVariantConfig(model)!.param] = variant;
     const falHeaders = await getFalStorageHeaders({
       userId: user.id,
       sourceType: sourceType ?? 'canvas',
@@ -75,7 +81,7 @@ export async function POST(request: NextRequest) {
       node_id: nodeId,
       model,
       parameters: mergeFalBillingParameters(
-        { scaleFactor, endpoint: modelConfig.endpoint },
+        { scaleFactor, endpoint: modelConfig.endpoint, ...(variant ? { modelVariant: variant } : {}) },
         billing,
       ),
       media_type: 'image',

@@ -226,6 +226,8 @@ export interface VideoGenNodeData extends Record<string, unknown> {
 export interface UpscaleNodeData extends Record<string, unknown> {
   model: string;
   scaleFactor: number;
+  /** Sub-model for models that expose one (e.g. Topaz "Standard V2"). */
+  modelVariant?: string;
   inputImageUrl?: string;
   outputImageUrl?: string;
   status: NodeStatus;
@@ -336,6 +338,8 @@ export interface BulkItemResult {
 export interface UpscaleMediaNodeData extends Record<string, unknown> {
   model: string;
   scaleFactor: number;
+  /** Sub-model for image upscale models that expose one (e.g. Topaz "Standard V2"). */
+  modelVariant?: string;
   upscaleFactor: number;
   targetFps?: number;
   h264Output?: boolean;
@@ -458,6 +462,7 @@ export interface UpscaleRequest {
   model: string;
   imageUrl: string;
   scaleFactor?: number;
+  modelVariant?: string;
 }
 
 export interface EnhancePromptRequest {

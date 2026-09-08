@@ -14,8 +14,9 @@ import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type {
   UpscaleMediaNodeData, BulkItemResult,
 } from '@/types';
-import { UPSCALE_MODELS, FAL_MODELS, FAL_NODE_ENDPOINTS } from '@/lib/api/models';
+import { UPSCALE_MODELS, FAL_MODELS, FAL_NODE_ENDPOINTS, getUpscaleVariantConfig, resolveUpscaleVariant } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
+import { NodeSelect } from './NodeSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { getNodeMediaUrls, getSourceMediaType } from '../mediaOutputs';
 import { CanvasImage, CanvasVideo } from '@/components/canvas/CanvasMedia';
@@ -361,6 +362,9 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
   const falModelConfig  = FAL_MODELS[data.model as keyof typeof FAL_MODELS] as unknown as { scaleOptions?: number[] } | undefined;
   const scaleOptions: number[] = falModelConfig?.scaleOptions ?? [2, 4];
   const validScaleFactor = scaleOptions.includes(data.scaleFactor) ? data.scaleFactor : scaleOptions[scaleOptions.length - 1];
+  // Sub-model (e.g. Topaz "Standard V2") for image models that expose one
+  const variantConfig = getUpscaleVariantConfig(data.model);
+  const selectedVariant = resolveUpscaleVariant(data.model, data.modelVariant) ?? variantConfig?.defaultOption;
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -372,7 +376,8 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
     const cfg  = FAL_MODELS[model as keyof typeof FAL_MODELS] as unknown as { scaleOptions?: number[] } | undefined;
     const opts: number[] = cfg?.scaleOptions ?? [2, 4];
     const clampedScale = opts.includes(data.scaleFactor) ? data.scaleFactor : opts[opts.length - 1];
-    dispatchUpdate({ model, scaleFactor: clampedScale });
+    // Each model has its own variant list, so fall back to the new model's default.
+    dispatchUpdate({ model, scaleFactor: clampedScale, modelVariant: undefined });
   }
 
   function updateBulkItem(index: number, patch: Partial<BulkItemResult>) {
@@ -398,6 +403,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           model: data.model,
           imageUrl: inputImageUrl,
           scaleFactor: validScaleFactor,
+          modelVariant: selectedVariant,
           sourceType: 'canvas',
           sourceId: useFlowStore.getState().currentFlow?.id,
           nodeId: id,
@@ -504,6 +510,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           model: data.model,
           imageUrl: url,
           scaleFactor: validScaleFactor,
+          modelVariant: selectedVariant,
           sourceType: 'canvas',
           sourceId: useFlowStore.getState().currentFlow?.id,
           nodeId: id,
@@ -668,6 +675,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           endpoint: pricingEndpoint,
           inputMedia: metadata ?? undefined,
           scaleFactor: inputMediaType === 'video' ? upscaleFactor : validScaleFactor,
+          modelVariant: inputMediaType === 'video' ? undefined : selectedVariant,
           targetFps: inputMediaType === 'video' ? data.targetFps ?? null : null,
         }];
       })
@@ -870,6 +878,19 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
       {inputMediaType === 'image' && (
         <>
           <ModelSelect options={UPSCALE_MODELS} value={data.model} onChange={handleModelChange} />
+
+          {variantConfig && selectedVariant && (
+            <div className={glassStyles.field}>
+              <span className={glassStyles.microLabel}>{variantConfig.label}</span>
+              <NodeSelect
+                options={[...variantConfig.options]}
+                value={selectedVariant}
+                onChange={(modelVariant) => dispatchUpdate({ modelVariant })}
+                label={variantConfig.label}
+                appearance="imageGenerationGlass"
+              />
+            </div>
+          )}
 
           <div className={glassStyles.field}>
             <span className={glassStyles.microLabel}>Scale</span>

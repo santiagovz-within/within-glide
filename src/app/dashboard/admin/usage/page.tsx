@@ -60,7 +60,10 @@ const MODEL_COLOR_MAP: Record<string, string> = {
   'seedance-2-5':    '#818cf8',
   'seedance-2-mini': '#38bdf8',
   'seedvr2':         '#fb923c',
+  'seedvr2-seamless': '#fdba74',
   'topaz':           '#f472b6',
+  'topaz-precision': '#f9a8d4',
+  'topaz-generative': '#f0abfc',
 };
 
 function modelColor(model: string): string {

@@ -24,6 +24,16 @@ export type FalPricingRule =
     } & CustomImageSizeBounds)
   | { kind: 'output-megapixels' }
   | { kind: 'topaz-image' }
+  | {
+      /**
+       * Billed per started block of output megapixels (Topaz Precision and
+       * Generative). `variantMegapixelsPerUnit` overrides the block size for
+       * specific sub-models (e.g. Wonder 3 bills per 8 MP instead of 4 MP).
+       */
+      kind: 'started-megapixels';
+      megapixelsPerUnit: number;
+      variantMegapixelsPerUnit?: Record<string, number>;
+    }
   | { kind: 'flux-outpaint' }
   | {
       kind: 'video-seconds';
@@ -62,6 +72,8 @@ export interface FalCostEstimateInput {
   /** Reference/style images attached to the request, when the rate depends on it. */
   referenceImageCount?: number;
   scaleFactor?: number;
+  /** Sub-model selected for endpoints that expose one (e.g. Topaz "Wonder 3"). */
+  modelVariant?: string;
   targetFps?: number | null;
   fps?: number;
   frameCount?: number;
@@ -229,6 +241,16 @@ export function estimateFalCost(
       const dimensions = getOutputDimensions(input);
       if (!dimensions) break;
       billableUnits = outputCount * topazImageMultiplier(megapixels(dimensions.width, dimensions.height));
+      break;
+    }
+
+    case 'started-megapixels': {
+      const dimensions = getOutputDimensions(input);
+      if (!dimensions) break;
+      const megapixelsPerUnit = (input.modelVariant && rule.variantMegapixelsPerUnit?.[input.modelVariant])
+        || rule.megapixelsPerUnit;
+      if (!positive(megapixelsPerUnit)) break;
+      billableUnits = outputCount * Math.ceil(megapixels(dimensions.width, dimensions.height) / megapixelsPerUnit);
       break;
     }
 

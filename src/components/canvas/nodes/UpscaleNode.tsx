@@ -12,8 +12,9 @@ import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { SendToFigmaButton } from './SendToFigmaButton';
 import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData, SelectNodeData } from '@/types';
-import { UPSCALE_MODELS, FAL_MODELS } from '@/lib/api/models';
+import { UPSCALE_MODELS, FAL_MODELS, getUpscaleVariantConfig, resolveUpscaleVariant } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
+import { NodeSelect } from './NodeSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { CanvasImage } from '@/components/canvas/CanvasMedia';
 import { cn } from '@/lib/utils/cn';
@@ -132,6 +133,9 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
   const validScaleFactor = scaleOptions.includes(data.scaleFactor)
     ? data.scaleFactor
     : scaleOptions[scaleOptions.length - 1];
+  // Sub-model (e.g. Topaz "Standard V2") for models that expose one
+  const variantConfig = getUpscaleVariantConfig(data.model);
+  const selectedVariant = resolveUpscaleVariant(data.model, data.modelVariant) ?? variantConfig?.defaultOption;
   const inputMetadata = useMediaMetadata(inputImageUrl ? [inputImageUrl] : [], 'image').get(inputImageUrl ?? '');
 
   function updateData(updates: Partial<UpscaleNodeData>) {
@@ -146,7 +150,8 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
     const clampedScale = newOptions.includes(data.scaleFactor)
       ? data.scaleFactor
       : newOptions[newOptions.length - 1];
-    updateData({ model, scaleFactor: clampedScale });
+    // Each model has its own variant list, so fall back to the new model's default.
+    updateData({ model, scaleFactor: clampedScale, modelVariant: undefined });
   }
 
   async function handleUpscale() {
@@ -163,6 +168,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
           model: data.model,
           imageUrl: inputImageUrl,
           scaleFactor: validScaleFactor,
+          modelVariant: selectedVariant,
           sourceType: 'canvas',
           sourceId: useFlowStore.getState().currentFlow?.id,
           nodeId: id,
@@ -205,6 +211,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
             endpoint: (falModelConfig as { endpoint: string }).endpoint,
             inputMedia: inputMetadata,
             scaleFactor: validScaleFactor,
+            modelVariant: selectedVariant,
           } : null} />
         </span>
       </button>
@@ -254,6 +261,19 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
       />
 
       <ModelSelect options={UPSCALE_MODELS} value={data.model} onChange={handleModelChange} />
+
+      {variantConfig && selectedVariant && (
+        <div className={glassStyles.field}>
+          <span className={glassStyles.microLabel}>{variantConfig.label}</span>
+          <NodeSelect
+            options={[...variantConfig.options]}
+            value={selectedVariant}
+            onChange={(modelVariant) => updateData({ modelVariant })}
+            label={variantConfig.label}
+            appearance="imageGenerationGlass"
+          />
+        </div>
+      )}
 
       <div className={glassStyles.field}>
         <span className={glassStyles.microLabel}>Scale</span>

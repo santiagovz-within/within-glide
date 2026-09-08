@@ -65,6 +65,9 @@ const MODEL_SUBTITLES: Record<string, string> = {
   'wan-3-prime': 'HIGH QUALITY WITH AUDIO (UP TO 1080p)',
   'google-omni-flash': 'EXCELLENT & FASTEST (UP TO 4K)',
   'seedance-2-mini': 'DRAFT QUALITY (720p)',
+  'seedvr2-seamless': 'KEEPS SEAMLESS TILING',
+  'topaz-precision': 'FAITHFUL DETAIL, CHOOSE A TOPAZ MODEL',
+  'topaz-generative': 'ADDS GENERATED DETAIL, CHOOSE A TOPAZ MODEL',
 };
 
 function ModelIcon({
@@ -110,8 +113,11 @@ function ModelIcon({
     case 'seedance-2-mini':
       return <ByteDance.Color size={size} />;
     case 'seedvr2':
+    case 'seedvr2-seamless':
       return <Fal.Color size={size} />;
     case 'topaz':
+    case 'topaz-precision':
+    case 'topaz-generative':
       return <TopazLabs size={size} />;
     default:
       return null;
