@@ -1,0 +1,197 @@
+.workspace {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.feed {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 2px 2px calc(var(--composer-height, 160px) + 28px);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  align-items: start;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60%;
+  gap: 10px;
+  color: var(--color-white-muted);
+  font-size: 14px;
+}
+
+.dock {
+  position: absolute;
+  z-index: 20;
+  bottom: 16px;
+  left: 50%;
+  width: min(1040px, calc(100% - 32px));
+  transform: translateX(-50%);
+}
+
+.composer {
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  color: #fff;
+}
+
+.composer *, .composer button {
+  letter-spacing: 0;
+}
+
+.promptRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.prompt {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 32px;
+  max-height: 120px;
+  padding: 6px 0;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.prompt::placeholder { color: rgba(255, 255, 255, 0.5); }
+
+.iconButton {
+  --glass-fill: rgba(99, 99, 99, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  color: #ddd;
+  cursor: pointer;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.controls > div > button { height: 36px; }
+.model { width: 164px; max-width: 100%; min-width: 0; }
+.modeToggle, .stepper {
+  --glass-fill: rgba(99, 99, 99, 0.2);
+  display: flex;
+  align-items: center;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.modeToggle button, .stepper button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 36px;
+  color: #aaa;
+  cursor: pointer;
+}
+
+.modeToggle button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+.stepper output {
+  width: 26px;
+  text-align: center;
+  color: #ddd;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.generate { width: auto; min-width: 116px; height: 36px; cursor: pointer; }
+.generateContent { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.composer button:disabled { opacity: 0.35; cursor: default; }
+.composer button:not(:disabled):hover { filter: brightness(1.15); }
+.composer button:focus-visible { outline: 2px solid #bbb; outline-offset: 2px; }
+.references { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px 44px; max-height: 140px; overflow-y: auto; }
+.reference { position: relative; display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; overflow: hidden; border-radius: 8px; background: #303030; }
+.reference img { width: 100%; height: 100%; object-fit: cover; }
+.reference button, .removeFrame { position: absolute; top: 2px; right: 2px; display: flex; padding: 3px; border-radius: 4px; background: rgba(0, 0, 0, 0.75); color: #fff; cursor: pointer; }
+.frame { position: relative; }
+.frameButton { --glass-fill: rgba(99, 99, 99, 0.2); display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 8px 12px; border-radius: 8px; font-size: 11px; color: #bbb; cursor: pointer; }
+.frameButton img { width: 44px; height: 36px; object-fit: cover; border-radius: 4px; }
+.error { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: #f87171; font-size: 12px; }
+.error span { flex: 1; }
+.warning { display: flex; align-items: center; gap: 4px; color: #eab308; font-size: 10px; }
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg-surface);
+}
+
+.openTile { display: block; width: 100%; height: 100%; cursor: pointer; }
+.tile img, .tile video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tileActions { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 5px; opacity: 0; transition: opacity 150ms; }
+.tile:hover .tileActions, .tile:focus-within .tileActions { opacity: 1; }
+.tileActions button { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: rgba(0, 0, 0, 0.65); color: white; backdrop-filter: blur(8px); cursor: pointer; }
+.tileActions button:hover { background: rgba(0, 0, 0, 0.85); }
+.tileActions button:disabled { opacity: 0.4; cursor: default; }
+.tileActions button[aria-pressed="true"] { color: #fb7185; }
+.tile button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
+.status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; color: var(--color-white-muted); font-size: 12px; overflow-y: auto; }
+.play { position: absolute; left: 10px; bottom: 10px; padding: 7px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; pointer-events: none; }
+.toast { position: absolute; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: 8px; background: var(--color-bg-elevated); border: var(--border-default); color: var(--color-white); font-size: 12px; pointer-events: none; }
+
+@container (max-width: 600px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dock { bottom: 8px; width: calc(100% - 16px); }
+  .composer { padding: 10px; }
+  .controls { gap: 5px; }
+  .references { margin-left: 0; }
+}
+
+@container (max-width: 260px) {
+  .actions { width: 100%; }
+  .generate { flex: 1; min-width: 0; }
+  .frameButton { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+}
+
+@media (hover: none) { .tileActions { opacity: 1; } }
+@media (max-width: 767px) { .sessions { display: none; } }

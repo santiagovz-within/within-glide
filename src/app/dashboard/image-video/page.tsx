@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react';
 import { useChatStore } from '@/lib/stores/chatStore';
 import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
@@ -8,6 +8,8 @@ import { SessionList } from '@/components/chat/SessionList';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { GenerationCard } from '@/components/chat/GenerationCard';
 import { GenerationModal } from '@/components/chat/GenerationModal';
+import { Images } from 'lucide-react';
+import styles from '@/components/chat/ImageVideo.module.css';
 import { MODELS } from '@/lib/api/models';
 import type { ChatSession, ChatMessage, Generation } from '@/types';
 
@@ -20,11 +22,30 @@ export default function ImageVideoPage() {
     prompt, referenceImages,
     settings, mode,
     isGenerating, setIsGenerating,
-    setPrompt, setReferenceImages,
-    updateSession, addReferenceImage,
+    updateSession, removeGeneration,
   } = useChatStore();
   const [selectedGen, setSelectedGen] = useState<Generation | null>(null);
-  const [copiedToast, setCopiedToast] = useState(false);
+  const [toast, setToast] = useState('');
+  const [columnCount, setColumnCount] = useState(4);
+  const feedRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const feed = feedRef.current;
+    const dock = dockRef.current;
+    if (!feed || !dock) return;
+    const observer = new ResizeObserver(() => {
+      feed.style.setProperty('--composer-height', `${dock.offsetHeight}px`);
+      setColumnCount(feed.clientWidth <= 600 ? 2 : 4);
+    });
+    observer.observe(feed);
+    observer.observe(dock);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => () => {
+    if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+  }, []);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { addGeneration: addToGallery } = useGalleryStore();
 
@@ -94,9 +115,22 @@ export default function ImageVideoPage() {
   function handleCopyPrompt(text: string) {
     navigator.clipboard.writeText(text).then(() => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-      setCopiedToast(true);
-      copiedTimerRef.current = setTimeout(() => setCopiedToast(false), 1800);
-    }).catch(() => {});
+      setToast('Copied to clipboard');
+      copiedTimerRef.current = setTimeout(() => setToast(''), 1800);
+    }).catch(() => setToast('Could not copy prompt'));
+  }
+
+  async function handleDelete(gen: Generation) {
+    if (!confirm('Delete this generation?')) return;
+    try {
+      const response = await fetch(`/api/generations/${gen.id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Delete failed');
+      removeGeneration(gen.id);
+      useGalleryStore.getState().removeGeneration(gen.id);
+      setSelectedGen(null);
+    } catch {
+      setToast('Could not delete generation');
+    }
   }
 
   async function handleGenerate() {
@@ -273,167 +307,36 @@ export default function ImageVideoPage() {
   }
 
   const activeMessages = activeSessionId ? (messages[activeSessionId] ?? []) : [];
+  const generationIds = new Set(activeMessages.flatMap(message => message.generation_ids ?? []));
+  const activeGenerations = Object.values(generations)
+    .filter(gen => gen.media_type !== 'prompt' && (generationIds.has(gen.id) || (activeSessionId && gen.source_type === 'chat' && gen.source_id === activeSessionId)))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const columns = Array.from({ length: columnCount }, (_, column) => activeGenerations.filter((_, index) => index % columnCount === column));
 
   return (
-    <div className="flex h-full overflow-hidden">
-      <SessionList onNewSession={createNewSession} />
-
-      {/* Chat area */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
-        {/* Copied toast */}
-        <div
-          className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full text-xs font-medium pointer-events-none select-none"
-          style={{
-            background: 'var(--color-bg-elevated)',
-            border: 'var(--border-default)',
-            color: 'var(--color-white)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-            opacity: copiedToast ? 1 : 0,
-            transform: `translateX(-50%) translateY(${copiedToast ? 0 : -6}px)`,
-            transition: 'opacity 0.18s ease, transform 0.18s ease',
-          }}
-        >
-          Copied to clipboard
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-          {!activeSessionId ? (
-            <div className="flex flex-col items-center justify-center h-full">
-              <div className="text-center max-w-sm">
-                <p className="text-xl font-semibold mb-2" style={{ color: 'var(--color-white)' }}>
-                  Start generating
-                </p>
-                <p className="text-sm" style={{ color: 'var(--color-white-muted)' }}>
-                  Type a prompt below to generate images or videos
-                </p>
-              </div>
-            </div>
-          ) : activeMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full">
-              <p className="text-sm" style={{ color: 'var(--color-white-muted)' }}>
-                No messages yet. Start generating below.
-              </p>
+    <div className={styles.workspace}>
+      <div className={styles.sessions}><SessionList onNewSession={createNewSession} /></div>
+      <div ref={feedRef} className={styles.feed}>
+        {toast && <div className={styles.toast} role="status">{toast}</div>}
+        <div className={styles.scroll}>
+          {activeGenerations.length > 0 ? (
+            <div className={styles.grid}>
+              {columns.map((column, index) => (
+                <div key={index} className={styles.column}>
+                  {column.map(gen => (
+                    <GenerationCard key={gen.id} generation={gen} onClick={() => setSelectedGen(gen)} onCopyPrompt={handleCopyPrompt} />
+                  ))}
+                </div>
+              ))}
             </div>
           ) : (
-            activeMessages.map((msg) => (
-              <div key={msg.id} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-                {msg.role === 'user' ? (
-                  <div className="flex items-end gap-2 max-w-lg">
-                    {(msg.reference_image_urls ?? []).length > 0 && (
-                      <RefImageStack
-                        urls={msg.reference_image_urls!}
-                        onImageClick={(url) => addReferenceImage(url)}
-                      />
-                    )}
-                    <div
-                      className="px-4 py-3 rounded-2xl rounded-tr-sm cursor-pointer transition-opacity hover:opacity-75 select-none"
-                      style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
-                      onClick={() => msg.content && handleCopyPrompt(msg.content)}
-                      title="Click to copy prompt"
-                    >
-                      <p className="text-sm" style={{ color: 'var(--color-white)' }}>{msg.content}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="max-w-2xl w-full">
-                    <div
-                      className="grid gap-3"
-                      style={{
-                        gridTemplateColumns: `repeat(${Math.min((msg.generation_ids?.length ?? 0), 2)}, 1fr)`,
-                      }}
-                    >
-                      {(msg.generation_ids ?? []).map((genId) => {
-                        const gen = generations[genId];
-                        if (!gen) return (
-                          <div
-                            key={genId}
-                            className="rounded-xl animate-pulse"
-                            style={{ aspectRatio: '1', background: 'var(--color-bg-elevated)' }}
-                          />
-                        );
-                        return (
-                          <GenerationCard
-                            key={genId}
-                            generation={gen}
-                            onClick={() => setSelectedGen(gen)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))
+            <div className={styles.empty}><Images size={24} /><span>{isGenerating ? 'Generating...' : 'No generations yet'}</span></div>
           )}
         </div>
-
-        {/* Input */}
-        <ChatInput onSubmit={handleGenerate} />
+        <div ref={dockRef} className={styles.dock}><ChatInput onSubmit={handleGenerate} /></div>
       </div>
-
-      {/* Generation detail modal */}
       {selectedGen && (
-        <GenerationModal generation={selectedGen} onClose={() => setSelectedGen(null)} />
-      )}
-    </div>
-  );
-}
-
-const REF_ROTATIONS = [-7, 5, -9, 6];
-
-function RefImageStack({ urls, onImageClick }: { urls: string[]; onImageClick?: (url: string) => void }) {
-  const visible = urls.slice(0, 3);
-  const extra = urls.length > 3 ? urls.length - 3 : 0;
-
-  return (
-    <div className="flex items-center" style={{ paddingBottom: 2 }}>
-      {visible.map((url, idx) => (
-        <div
-          key={idx}
-          className="shrink-0 rounded overflow-hidden"
-          style={{
-            width: 26,
-            height: 26,
-            position: 'relative',
-            marginLeft: idx > 0 ? -8 : 0,
-            zIndex: idx + 1,
-            transform: `rotate(${REF_ROTATIONS[idx]}deg)`,
-            border: '1.5px solid rgba(0,0,0,0.55)',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.45)',
-            borderRadius: 5,
-            cursor: onImageClick ? 'pointer' : 'default',
-            transition: 'transform 0.12s ease, box-shadow 0.12s ease',
-          }}
-          onClick={() => onImageClick?.(url)}
-          title={onImageClick ? 'Click to attach' : undefined}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-        </div>
-      ))}
-      {extra > 0 && (
-        <div
-          className="shrink-0 flex items-center justify-center"
-          style={{
-            width: 26,
-            height: 26,
-            position: 'relative',
-            marginLeft: -8,
-            zIndex: visible.length + 1,
-            transform: `rotate(${REF_ROTATIONS[visible.length % REF_ROTATIONS.length]}deg)`,
-            background: 'var(--color-bg-surface)',
-            border: '1.5px solid rgba(0,0,0,0.55)',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.45)',
-            borderRadius: 5,
-            fontSize: 9,
-            fontWeight: 600,
-            color: 'var(--color-white-muted)',
-            letterSpacing: '0.02em',
-          }}
-        >
-          +{extra}
-        </div>
+        <GenerationModal key={selectedGen.id} generation={selectedGen} onClose={() => setSelectedGen(null)} onDelete={handleDelete} />
       )}
     </div>
   );

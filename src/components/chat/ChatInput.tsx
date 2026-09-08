@@ -1,37 +1,21 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Sparkles, Upload, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Sparkles, Plus, Minus, ImagePlus, Image as ImageIcon, Video, X, AlertTriangle, Loader2, Timer, Maximize } from 'lucide-react';
 import { useChatStore } from '@/lib/stores/chatStore';
 import { IMAGE_MODELS, CHAT_VIDEO_MODELS, MODELS } from '@/lib/api/models';
 import { ASPECT_RATIOS, ACCEPTED_IMAGE_TYPES } from '@/lib/utils/constants';
 import { processImageFile } from '@/lib/utils/imageProcessing';
 
+import { ModelSelect } from '@/components/canvas/nodes/ModelSelect';
+import { NodeSelect } from '@/components/canvas/nodes/NodeSelect';
+import { AspectRatioGlyph } from '@/components/canvas/nodes/AspectRatioGlyph';
+import { cn } from '@/lib/utils/cn';
+import glass from '@/components/canvas/nodes/ImageGenerationGlass.module.css';
+import styles from './ImageVideo.module.css';
+
 const RESOLUTIONS = ['1K', '2K', '4K'] as const;
 const DURATIONS   = [3, 5, 8, 10] as const;
-const GEN_COUNTS  = [1, 2, 3, 4]  as const;
-
-function segBtn(active: boolean): React.CSSProperties {
-  return {
-    padding: '5px 10px', fontSize: 11, fontWeight: 700, letterSpacing: '0.065em',
-    background: active ? 'var(--segbtn-active-bg)' : 'transparent',
-    color: active ? 'var(--color-white)' : 'var(--color-white-muted)',
-    cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' as const,
-  };
-}
-
-const SELECT_STYLE: React.CSSProperties = {
-  padding: '5px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-  letterSpacing: '0.065em', cursor: 'pointer', outline: 'none',
-  background: 'var(--select-bg)', border: '1px solid var(--select-border)',
-  color: 'var(--color-white)',
-};
-
-const SEG_WRAP: React.CSSProperties = {
-  display: 'flex', flexShrink: 0, borderRadius: 999, overflow: 'hidden',
-  border: '1px solid var(--segbtn-border)',
-};
-
 interface ChatInputProps {
   onSubmit: () => void;
 }
@@ -115,8 +99,8 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
 
   function clearVideoSlot(slot: 0 | 1) {
     const next = [...referenceImages];
-    next.splice(slot, 1);
-    setReferenceImages(next.filter(Boolean));
+    next[slot] = '';
+    setReferenceImages(next);
   }
 
   async function handleEnhance() {
@@ -143,303 +127,121 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
   }
 
   const isUploading = imgUploadingCount > 0 || videoUploadingSlots.size > 0;
+  const canGenerate = !!prompt.trim() && !isGenerating && !isUploading;
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  useLayoutEffect(() => {
+    if (!textareaRef.current) return;
+    textareaRef.current.style.height = 'auto';
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+  }, [prompt]);
+
   return (
-    <div style={{ padding: '0 12px 12px', background: 'var(--color-bg-darkest)' }}>
-      <div style={{
-        borderRadius: 18,
-        background: 'var(--chatinput-bg)',
-        backdropFilter: 'blur(28px)',
-        WebkitBackdropFilter: 'blur(28px)',
-        border: '1px solid var(--chatinput-border)',
-        boxShadow: '0 -8px 32px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3)',
-      }}>
+    <div className={cn(glass.nodeShell, glass.nodeSurface, glass.glassSurface, styles.composer)}>
+      <div className={styles.promptRow}>
+        <button
+          className={cn(glass.glassSurface, styles.iconButton)}
+          onClick={() => mode === 'image' ? fileImageRef.current?.click() : fileStartRef.current?.click()}
+          disabled={isUploading}
+          title={mode === 'image' ? 'Add images' : 'Add start frame'}
+          aria-label={mode === 'image' ? 'Add images' : 'Add start frame'}
+        >
+          {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+        </button>
+        <input ref={fileImageRef} type="file" accept={Object.keys(ACCEPTED_IMAGE_TYPES).join(',')} multiple hidden onChange={handleImageFilesChange} />
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          aria-label="Prompt"
+          placeholder={`Describe your ${mode}...`}
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              if (canGenerate) onSubmit();
+            }
+          }}
+          className={styles.prompt}
+        />
+      </div>
 
-        {/* ── Controls row ──────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px 8px', flexWrap: 'wrap' }}>
-
-          {/* IMAGE | VIDEO mode toggle */}
-          <div style={SEG_WRAP}>
-            {(['image', 'video'] as const).map((m, i) => (
-              <button key={m} onClick={() => { setMode(m); setReferenceImages([]); }} style={{
-                ...segBtn(mode === m),
-                borderRight: i === 0 ? '1px solid var(--chatinput-divider)' : 'none',
-              }}>
-                {m === 'image' ? 'IMAGE' : 'VIDEO'}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ width: 1, height: 16, background: 'var(--chatinput-divider)', flexShrink: 0, margin: '0 2px' }} />
-
-          {/* Model */}
-          <select value={settings.model} onChange={e => handleModelChange(e.target.value)} style={SELECT_STYLE}>
-            {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-
-          {/* Aspect ratio */}
-          <select value={settings.aspectRatio} onChange={e => updateSettings({ aspectRatio: e.target.value })} style={SELECT_STYLE}>
-            {validAspects.map(r => <option key={r.value} value={r.value}>{r.value}</option>)}
-          </select>
-
-          {/* Resolution (image only) */}
-          {mode === 'image' && (
-            <div style={SEG_WRAP}>
-              {RESOLUTIONS.map((r, i) => (
-                <button key={r} onClick={() => updateSettings({ resolution: r })} style={{
-                  ...segBtn(settings.resolution === r),
-                  borderRight: i < RESOLUTIONS.length - 1 ? '1px solid var(--chatinput-divider)' : 'none',
-                }}>
-                  {r}
-                </button>
-              ))}
+      {mode === 'image' && (referenceImages.length > 0 || imgUploadingCount > 0) && (
+        <div className={styles.references}>
+          {referenceImages.map((url, index) => (
+            <div key={`${url}-${index}`} className={styles.reference}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt={`Reference ${index + 1}`} />
+              <button onClick={() => removeReferenceImage(url)} title="Remove reference" aria-label={`Remove reference ${index + 1}`}><X size={11} /></button>
             </div>
-          )}
-
-          {/* Num images (image only) */}
-          {mode === 'image' && (
-            <div style={SEG_WRAP}>
-              {GEN_COUNTS.map((n, i) => (
-                <button key={n} onClick={() => updateSettings({ numGenerations: n })} style={{
-                  ...segBtn(settings.numGenerations === n),
-                  minWidth: 28, justifyContent: 'center' as const,
-                  borderRight: i < GEN_COUNTS.length - 1 ? '1px solid var(--chatinput-divider)' : 'none',
-                }}>
-                  {n}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Duration (video only) */}
-          {mode === 'video' && (
-            <div style={SEG_WRAP}>
-              {DURATIONS.map((d, i) => (
-                <button key={d} onClick={() => updateSettings({ duration: d })} style={{
-                  ...segBtn(settings.duration === d),
-                  borderRight: i < DURATIONS.length - 1 ? '1px solid var(--chatinput-divider)' : 'none',
-                }}>
-                  {d}s
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Seedance warning */}
-          {isSeedance && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0,
-              fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 999,
-              background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#eab308',
-            }}>
-              <AlertTriangle size={9} /> Expensive
-            </span>
-          )}
-
-          <div style={{ flex: 1 }} />
-
-          {/* Upload button — image mode only (video uses the frame slots below) */}
-          {mode === 'image' && (
-            <>
-              <button
-                onClick={() => fileImageRef.current?.click()}
-                disabled={isUploading}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
-                  padding: '5px 11px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                  letterSpacing: '0.065em', cursor: isUploading ? 'wait' : 'pointer',
-                  background: 'transparent', border: '1px solid transparent',
-                  color: 'var(--color-white-muted)', transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { if (!isUploading) { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.border = '1px solid rgba(255,255,255,0.1)'; }}}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.border = '1px solid transparent'; }}
-              >
-                {imgUploadingCount > 0
-                  ? <><Loader2 size={11} className="animate-spin" /> Uploading {imgUploadingCount}…</>
-                  : <><Upload size={11} /> ADD IMAGES</>
-                }
-              </button>
-              <input
-                ref={fileImageRef}
-                type="file"
-                accept={Object.keys(ACCEPTED_IMAGE_TYPES).join(',')}
-                multiple
-                style={{ display: 'none' }}
-                onChange={handleImageFilesChange}
-              />
-            </>
-          )}
+          ))}
+          {Array.from({ length: imgUploadingCount }, (_, index) => (
+            <div key={index} className={styles.reference}><Loader2 size={16} className="animate-spin" /></div>
+          ))}
         </div>
+      )}
 
-        {/* ── Video frame slots ──────────────────────────────────────────── */}
-        {mode === 'video' && (
-          <div style={{ display: 'flex', gap: 8, padding: '0 12px 8px' }}>
-            {([0, 1] as const).map(slot => {
-              const label = slot === 0 ? 'START FRAME' : 'END FRAME';
-              const fileRef = slot === 0 ? fileStartRef : fileEndRef;
-              const url = referenceImages[slot];
-              const uploading = videoUploadingSlots.has(slot);
+      {mode === 'video' && (
+        <div className={styles.references}>
+          {([0, 1] as const).map(slot => {
+            const label = slot === 0 ? 'Start frame' : 'End frame';
+            const fileRef = slot === 0 ? fileStartRef : fileEndRef;
+            const url = referenceImages[slot];
+            return (
+              <div key={slot} className={styles.frame}>
+                <input ref={fileRef} type="file" accept={Object.keys(ACCEPTED_IMAGE_TYPES).join(',')} hidden onChange={e => handleVideoFrameChange(e, slot)} />
+                <button className={cn(glass.glassSurface, styles.frameButton)} onClick={() => fileRef.current?.click()} disabled={videoUploadingSlots.has(slot)} title={url ? `Replace ${label.toLowerCase()}` : label}>
+                  {videoUploadingSlots.has(slot) ? <Loader2 size={16} className="animate-spin" /> : url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt={label} />
+                  ) : <ImagePlus size={16} />}
+                  <span>{label}{slot === 1 && !url ? ' (optional)' : ''}</span>
+                </button>
+                {url && <button className={styles.removeFrame} onClick={() => clearVideoSlot(slot)} title={`Remove ${label.toLowerCase()}`} aria-label={`Remove ${label.toLowerCase()}`}><X size={12} /></button>}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
-              return (
-                <div key={slot} style={{ flex: 1 }}>
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept={Object.keys(ACCEPTED_IMAGE_TYPES).join(',')}
-                    style={{ display: 'none' }}
-                    onChange={e => handleVideoFrameChange(e, slot)}
-                  />
-                  <button
-                    onClick={() => !url && fileRef.current?.click()}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      height: 52, borderRadius: 10, fontSize: 10, fontWeight: 700,
-                      letterSpacing: '0.07em', cursor: url ? 'default' : 'pointer',
-                      border: url ? 'none' : '1px dashed rgba(255,255,255,0.18)',
-                      background: url ? 'transparent' : 'rgba(255,255,255,0.03)',
-                      color: 'var(--color-white-muted)', overflow: 'hidden', position: 'relative',
-                      transition: 'border-color 0.15s',
-                    }}
-                    onMouseEnter={e => { if (!url) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
-                    onMouseLeave={e => { if (!url) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'; }}
-                  >
-                    {uploading ? (
-                      <Loader2 size={14} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
-                    ) : url ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                        <div style={{
-                          position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                          alignItems: 'center', justifyContent: 'center', gap: 4,
-                          background: 'rgba(0,0,0,0.45)', opacity: 0,
-                          transition: 'opacity 0.15s',
-                        }}
-                          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
-                          onMouseLeave={e => { e.currentTarget.style.opacity = '0'; }}
-                        >
-                          <button
-                            onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}
-                            style={{ fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: '0.06em', background: 'none', border: 'none', cursor: 'pointer' }}
-                          >
-                            REPLACE
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); clearVideoSlot(slot); }}
-                            style={{ padding: '2px 6px', borderRadius: 4, background: 'rgba(239,68,68,0.7)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}
-                          >
-                            <X size={9} style={{ color: '#fff' }} />
-                          </button>
-                        </div>
-                        <span style={{
-                          position: 'absolute', bottom: 4, left: 0, right: 0, textAlign: 'center',
-                          fontSize: 9, fontWeight: 700, letterSpacing: '0.07em',
-                          color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.8)',
-                        }}>
-                          {label}
-                        </span>
-                      </>
-                    ) : (
-                      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                        <Upload size={12} />
-                        <span style={{ fontSize: 9, letterSpacing: '0.07em' }}>{label}</span>
-                        {slot === 1 && <span style={{ fontSize: 8, opacity: 0.5 }}>optional</span>}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      {uploadError && (
+        <div className={styles.error} role="alert">
+          <AlertTriangle size={14} /><span>{uploadError}</span>
+          <button onClick={() => setUploadError(null)} aria-label="Dismiss error"><X size={14} /></button>
+        </div>
+      )}
 
-        {/* ── Error message ──────────────────────────────────────────────── */}
-        {uploadError && (
-          <div style={{ margin: '0 12px 8px', padding: '6px 10px', borderRadius: 8, fontSize: 11, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <AlertTriangle size={11} />
-            {uploadError}
-            <button onClick={() => setUploadError(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}>
-              <X size={11} />
+      <div className={styles.controls}>
+        <div className={cn(glass.glassSurface, styles.modeToggle)} role="group" aria-label="Media type">
+          {(['image', 'video'] as const).map(m => (
+            <button key={m} onClick={() => { if (mode !== m) setMode(m); }} aria-pressed={mode === m} title={m === 'image' ? 'Image' : 'Video'} aria-label={m === 'image' ? 'Image' : 'Video'}>
+              {m === 'image' ? <ImageIcon size={15} /> : <Video size={15} />}
             </button>
-          </div>
-        )}
-
-        {/* Divider */}
-        <div style={{ height: 1, background: 'var(--color-white-subtle)', margin: '0 12px' }} />
-
-        {/* ── Prompt row ──────────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px' }}>
-
-          {/* Image mode reference thumbnails */}
-          {mode === 'image' && (referenceImages.length > 0 || imgUploadingCount > 0) && (
-            <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
-              {referenceImages.map(url => (
-                <div key={url} style={{ position: 'relative', width: 30, height: 30, borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  <button
-                    onClick={() => removeReferenceImage(url)}
-                    style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(0,0,0,0.7)', borderRadius: '0 0 0 4px', padding: '2px', cursor: 'pointer', border: 'none', display: 'flex' }}
-                  >
-                    <X size={7} style={{ color: '#fff' }} />
-                  </button>
-                </div>
-              ))}
-              {/* Uploading placeholders */}
-              {Array.from({ length: imgUploadingCount }).map((_, i) => (
-                <div key={`uploading-${i}`} style={{ width: 30, height: 30, borderRadius: 6, flexShrink: 0, background: 'var(--color-bg-hover)', border: '1px solid var(--chatinput-divider)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Loader2 size={10} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
-                </div>
-              ))}
+          ))}
+        </div>
+        <div className={styles.model}>
+          <ModelSelect standalone compact placement="top" options={models} value={settings.model} onChange={handleModelChange} />
+        </div>
+        <NodeSelect standalone placement="top" label="Aspect ratio" options={validAspects.map(r => r.value)} value={settings.aspectRatio} onChange={aspectRatio => updateSettings({ aspectRatio })} leadingIcon={<AspectRatioGlyph ratio={settings.aspectRatio} />} optionIcon={value => <AspectRatioGlyph ratio={value} />} />
+        {mode === 'image' ? (
+          <>
+            <NodeSelect standalone placement="top" label="Resolution" options={[...RESOLUTIONS]} value={settings.resolution} onChange={resolution => updateSettings({ resolution: resolution as typeof settings.resolution })} leadingIcon={<Maximize size={12} />} />
+            <div className={cn(glass.glassSurface, styles.stepper)} role="group" aria-label="Number of images">
+              <button onClick={() => updateSettings({ numGenerations: settings.numGenerations - 1 })} disabled={settings.numGenerations <= 1} title="Fewer images" aria-label="Fewer images"><Minus size={13} /></button>
+              <output aria-label="Image count">{settings.numGenerations}/4</output>
+              <button onClick={() => updateSettings({ numGenerations: settings.numGenerations + 1 })} disabled={settings.numGenerations >= 4} title="More images" aria-label="More images"><Plus size={13} /></button>
             </div>
-          )}
-
-          {/* Prompt textarea */}
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            placeholder={`Describe your ${mode}…`}
-            value={prompt}
-            onChange={e => {
-              setPrompt(e.target.value);
-              e.target.style.height = 'auto';
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !isGenerating) onSubmit();
-            }}
-            style={{
-              flex: 1, fontSize: 14, outline: 'none', background: 'transparent',
-              border: 'none', color: 'var(--color-white)', padding: '2px 0',
-              resize: 'none', overflow: 'hidden', minHeight: 24, maxHeight: 120,
-            }}
-          />
-
-          {/* Enhance */}
-          <button
-            onClick={handleEnhance}
-            disabled={!prompt.trim()}
-            style={{ flexShrink: 0, padding: 4, borderRadius: 6, cursor: 'pointer', border: 'none', background: 'transparent', opacity: prompt.trim() ? 1 : 0.3, transition: 'opacity 0.15s' }}
-            title="Enhance prompt"
-          >
-            <Sparkles size={14} style={{ color: 'var(--color-accent)', display: 'block' }} />
-          </button>
-
-          {/* Generate */}
-          <button
-            onClick={onSubmit}
-            disabled={!prompt.trim() || isGenerating}
-            style={{
-              flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '6px 16px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-              letterSpacing: '0.065em', cursor: 'pointer', border: 'none', transition: 'opacity 0.15s',
-              background: !prompt.trim() || isGenerating ? 'var(--color-white-subtle)' : 'var(--action-btn-bg)',
-              color: !prompt.trim() || isGenerating ? 'var(--color-white-muted)' : 'var(--action-btn-color)',
-              opacity: !prompt.trim() || isGenerating ? 0.5 : 1,
-            }}
-          >
-            {isGenerating ? 'Generating…' : 'GENERATE'}
+          </>
+        ) : (
+          <NodeSelect standalone placement="top" label="Duration" options={DURATIONS.map(d => `${d}s`)} value={`${settings.duration ?? 5}s`} onChange={duration => updateSettings({ duration: Number.parseInt(duration, 10) })} leadingIcon={<Timer size={12} />} />
+        )}
+        {isSeedance && <span className={styles.warning} title="Expensive model"><AlertTriangle size={13} />Expensive</span>}
+        <div className={styles.actions}>
+          <button className={cn(glass.glassSurface, styles.iconButton)} onClick={handleEnhance} disabled={!prompt.trim()} title="Enhance prompt" aria-label="Enhance prompt"><Sparkles size={15} /></button>
+          <button className={cn(glass.glassSurface, glass.button, glass.generateButton, styles.generate)} onClick={onSubmit} disabled={!canGenerate}>
+            <span className={cn(glass.glassContent, styles.generateContent)}>
+              {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {isGenerating ? 'Generating...' : 'Generate'}
+            </span>
           </button>
         </div>
       </div>

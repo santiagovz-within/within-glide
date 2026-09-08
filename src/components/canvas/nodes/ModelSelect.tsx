@@ -18,6 +18,10 @@ interface ModelSelectProps {
   value: string;
   onChange: (value: string) => void;
   appearance?: 'default' | 'imageGenerationGlass';
+  standalone?: boolean;
+  placement?: 'top' | 'bottom';
+  label?: string;
+  compact?: boolean;
 }
 
 interface DropdownPosition {
@@ -25,6 +29,8 @@ interface DropdownPosition {
   left: number;
   width: number;
   scale: number;
+  triggerTop: number;
+  viewportHeight: number;
 }
 
 function measureDropdown(trigger: HTMLButtonElement): DropdownPosition {
@@ -35,6 +41,8 @@ function measureDropdown(trigger: HTMLButtonElement): DropdownPosition {
     left: rect.left,
     width: trigger.offsetWidth,
     scale,
+    triggerTop: rect.top,
+    viewportHeight: window.innerHeight,
   };
 }
 
@@ -109,13 +117,21 @@ function ModelIcon({
   }
 }
 
-export function ModelSelect({ options, value, onChange, appearance = 'imageGenerationGlass' }: ModelSelectProps) {
+export function ModelSelect(props: ModelSelectProps) {
+  return props.standalone ? <ModelSelectControl {...props} /> : <CanvasModelSelect {...props} />;
+}
+
+function CanvasModelSelect(props: ModelSelectProps) {
+  const reactFlowStore = useStoreApi();
+  return <ModelSelectControl {...props} reactFlowStore={reactFlowStore} />;
+}
+
+function ModelSelectControl({ options, value, onChange, appearance = 'imageGenerationGlass', placement = 'bottom', label = 'Model', compact = false, reactFlowStore }: ModelSelectProps & { reactFlowStore?: ReturnType<typeof useStoreApi> }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
-  const [pos, setPos] = useState<DropdownPosition>({ top: 0, left: 0, width: 0, scale: 1 });
+  const [pos, setPos] = useState<DropdownPosition>({ top: 0, left: 0, width: 0, scale: 1, triggerTop: 0, viewportHeight: 0 });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const reactFlowStore = useStoreApi();
   const selected = options.find((o) => o.id === value) ?? options[0];
   const isImageGenerationGlass = appearance === 'imageGenerationGlass';
 
@@ -128,6 +144,7 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
 
   useLayoutEffect(() => {
     if (!open) return;
+    dropdownRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus({ preventScroll: true });
     let frameId: number | undefined;
     const syncPosition = () => {
       if (triggerRef.current) setPos(measureDropdown(triggerRef.current));
@@ -136,11 +153,13 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
       if (frameId !== undefined) cancelAnimationFrame(frameId);
       frameId = requestAnimationFrame(syncPosition);
     };
-    const unsubscribe = reactFlowStore.subscribe(scheduleSync);
+    const unsubscribe = reactFlowStore?.subscribe(scheduleSync);
     window.addEventListener('resize', scheduleSync);
+    window.addEventListener('scroll', scheduleSync, true);
     return () => {
-      unsubscribe();
+      unsubscribe?.();
       window.removeEventListener('resize', scheduleSync);
+      window.removeEventListener('scroll', scheduleSync, true);
       if (frameId !== undefined) cancelAnimationFrame(frameId);
     };
   }, [open, reactFlowStore]);
@@ -153,8 +172,15 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
       if (dropdownRef.current?.contains(target)) return;
       setOpen(false);
     }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setOpen(false); triggerRef.current?.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
     document.addEventListener('mousedown', onOutsideDown, true);
-    return () => document.removeEventListener('mousedown', onOutsideDown, true);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onOutsideDown, true);
+    };
   }, [open]);
 
   const triggerContent = (
@@ -176,7 +202,7 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
         >
           {selected?.name ?? ''}
         </span>
-        {selected && MODEL_SUBTITLES[selected.id] && (
+        {!compact && selected && MODEL_SUBTITLES[selected.id] && (
           <span
             className={cn(!isImageGenerationGlass && 'flex items-center gap-1', isImageGenerationGlass && glassStyles.modelDescription)}
             style={isImageGenerationGlass ? undefined : { color: 'var(--color-white-muted)', fontSize: 9, fontStyle: 'italic', fontWeight: 600, lineHeight: 1.25, opacity: 0.7 }}
@@ -202,6 +228,8 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
   const dropdownOptions = options.map((opt) => (
     <button
       key={opt.id}
+      role="option"
+      aria-selected={opt.id === value}
       className={cn(
         'nodrag w-full flex items-center gap-1.5 px-2 py-1.5 text-xs',
         isImageGenerationGlass && glassStyles.dropdownOption,
@@ -223,7 +251,7 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
       onMouseEnter={() => setHovered(opt.id)}
       onMouseLeave={() => setHovered(null)}
       onMouseDown={(e) => e.stopPropagation()}
-      onClick={() => { onChange(opt.id); setOpen(false); }}
+      onClick={() => { onChange(opt.id); setOpen(false); triggerRef.current?.focus(); }}
     >
       <span
         className="flex items-center justify-center"
@@ -250,6 +278,10 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
     <div className="nodrag" style={{ position: 'relative', width: isImageGenerationGlass ? '100%' : undefined }}>
       <button
         ref={triggerRef}
+        title={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
         className={cn(
           'nodrag',
           isImageGenerationGlass
@@ -278,6 +310,21 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
       {open && typeof document !== 'undefined' && createPortal(
         <div
           ref={dropdownRef}
+          role="listbox"
+          aria-label={label}
+          onKeyDown={event => {
+            const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+            const index = options.indexOf(document.activeElement as HTMLButtonElement);
+            let nextIndex: number;
+            if (event.key === 'ArrowDown') nextIndex = (index + 1) % options.length;
+            else if (event.key === 'ArrowUp') nextIndex = (index - 1 + options.length) % options.length;
+            else if (event.key === 'Home') nextIndex = 0;
+            else if (event.key === 'End') nextIndex = options.length - 1;
+            else if (event.key === 'Tab') { setOpen(false); triggerRef.current?.focus(); return; }
+            else return;
+            event.preventDefault();
+            options[nextIndex]?.focus();
+          }}
           className={cn(
             'nodrag',
             isImageGenerationGlass && glassStyles.glassSurface,
@@ -285,15 +332,17 @@ export function ModelSelect({ options, value, onChange, appearance = 'imageGener
           )}
           style={{
             position: 'fixed',
-            top: pos.top,
-            left: pos.left,
-            width: pos.width,
+            top: placement === 'top' ? undefined : pos.top,
+            bottom: placement === 'top' ? pos.viewportHeight - pos.triggerTop + 3 : undefined,
+            maxHeight: placement === 'top' ? Math.max(80, pos.triggerTop - 16) : undefined,
+            left: compact ? Math.max(8, Math.min(pos.left, window.innerWidth - Math.min(340, window.innerWidth - 16) - 8)) : pos.left,
+            width: compact ? Math.min(340, window.innerWidth - 16) : pos.width,
             transform: `scale(${pos.scale})`,
-            transformOrigin: 'top left',
+            transformOrigin: placement === 'top' ? 'bottom left' : 'top left',
             background: isImageGenerationGlass ? undefined : 'var(--color-bg-surface)',
             borderRadius: 11,
             border: isImageGenerationGlass ? 'none' : '1px solid rgba(255,255,255,0.1)',
-            overflow: 'hidden',
+            overflow: 'auto',
             zIndex: 99999,
           }}
         >

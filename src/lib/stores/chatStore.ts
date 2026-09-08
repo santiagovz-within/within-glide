@@ -19,6 +19,7 @@ interface ChatStore {
   generations: Record<string, Generation>;
   addGeneration: (generation: Generation) => void;
   updateGeneration: (id: string, updates: Partial<Generation>) => void;
+  removeGeneration: (id: string) => void;
 
   // Input state
   mode: ChatMode;
@@ -72,6 +73,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }),
 
   mode: 'image',
+  removeGeneration: (id) => set(state => ({
+    generations: Object.fromEntries(Object.entries(state.generations).filter(([key]) => key !== id)),
+    messages: Object.fromEntries(Object.entries(state.messages).map(([sessionId, messages]) => [
+      sessionId, messages.map(message => ({ ...message, generation_ids: message.generation_ids?.filter(genId => genId !== id) ?? null })),
+    ])),
+  })),
   setMode: (mode) => {
     const defaultModel = mode === 'image'
       ? getDefaultImageModel().id
