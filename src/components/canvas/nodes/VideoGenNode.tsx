@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Film, AlertTriangle, Download, ChevronLeft, ChevronRight, Clock3 } from 'lucide-react';
 import Image from 'next/image';
@@ -56,12 +58,11 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const isGenerating = useGenerationStore((state) => !!state.jobs[activeJobId]);
   const videoHistory = data.videoHistory ?? [];
   const [histIdx, setHistIdx] = useState(() => Math.max(0, videoHistory.length - 1));
-  const prevHistLen = useRef(videoHistory.length);
-
-  useEffect(() => {
-    if (videoHistory.length > prevHistLen.current) setHistIdx(videoHistory.length - 1);
-    prevHistLen.current = videoHistory.length;
-  }, [videoHistory.length]);
+  const [historyLength, setHistoryLength] = useState(videoHistory.length);
+  if (historyLength !== videoHistory.length) {
+    setHistoryLength(videoHistory.length);
+    if (videoHistory.length > historyLength) setHistIdx(videoHistory.length - 1);
+  }
   const promptSectionRef = useRef<HTMLDivElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const startFrameRowRef = useRef<HTMLDivElement>(null);
@@ -573,16 +574,24 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         </div>
       )}
 
-      {displayVideoUrl && (
-        <div className={glassStyles.mediaFrame}>
-          <CanvasVideo
-            src={displayVideoUrl}
-            controls
-            className="w-full block nodrag"
-            style={{ aspectRatio: videoAspect }}
-          />
-        </div>
-      )}
+      <GenerationPreview
+        pending={isGenerating || data.status === 'processing'}
+        failed={hasFailure}
+        resultSrc={displayVideoUrl}
+        kind="video"
+        aspectRatio={videoAspect}
+      >
+        {displayVideoUrl && (
+          <div className={glassStyles.mediaFrame}>
+            <CanvasVideo
+              src={displayVideoUrl}
+              controls
+              className="w-full block nodrag"
+              style={{ aspectRatio: videoAspect }}
+            />
+          </div>
+        )}
+      </GenerationPreview>
 
       <TypedHandle
         type="source"

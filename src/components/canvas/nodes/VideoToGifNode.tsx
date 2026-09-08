@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Clapperboard, Download, X, Check } from 'lucide-react';
 import NextImage from 'next/image';
@@ -580,22 +582,30 @@ export function VideoToGifNode({ data, selected, id }: NodeProps & { data: Video
       )}
 
       {/* ── GIF preview ────────────────────────────────────────────────── */}
-      {gifUrl && !isConverting && (
-        <div className={glassStyles.mediaFrame}>
-          <CanvasImage
-            src={gifUrl}
-            alt="GIF preview"
-            className="w-full block nodrag"
-            style={{ height: 'auto' }}
-            onError={() => { setGifUrl(null); updateData({ gifUrl: undefined }); }}
-          />
-          {gifSize !== null && (
-            <p className={glassStyles.mediaCaption}>
-              {formatBytes(gifSize)}
-            </p>
-          )}
-        </div>
-      )}
+      <GenerationPreview
+        pending={isConverting}
+        failed={!!error}
+        resultSrc={gifUrl}
+        sizingSource={data.videoUrl}
+        sizingKind="video"
+      >
+        {gifUrl && (
+          <div className={glassStyles.mediaFrame}>
+            <CanvasImage
+              src={gifUrl}
+              alt="GIF preview"
+              className="w-full block nodrag"
+              style={{ height: 'auto' }}
+              onError={() => { setGifUrl(null); updateData({ gifUrl: undefined }); }}
+            />
+            {gifSize !== null && (
+              <p className={glassStyles.mediaCaption}>
+                {formatBytes(gifSize)}
+              </p>
+            )}
+          </div>
+        )}
+      </GenerationPreview>
     </NodeWrapper>
   );
 }

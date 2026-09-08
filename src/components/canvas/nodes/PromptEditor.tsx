@@ -65,11 +65,12 @@ const CHIP_STYLE: React.CSSProperties = {
   color: 'var(--tag-image-text)',
   background: 'var(--tag-image-bg)',
   borderRadius: 4,
-  // Fake vertical padding with offset shadows so the chip doesn't alter text
-  // metrics and drift from the invisible text underneath. The spread must not
-  // extend horizontally: a single space next to a chip is only ~3px wide and a
-  // 2px side spread would paint over it, hiding the word gap.
-  boxShadow: '0 2px 0 var(--tag-image-bg), 0 -2px 0 var(--tag-image-bg)',
+  // 3px of side padding, cancelled by a matching negative margin so the chip
+  // advances exactly like the invisible text underneath and never drifts from
+  // it. No vertical spread: the prompt line-height (see .promptContent) leaves
+  // the breathing room between chips on adjacent lines instead.
+  padding: '0 3px',
+  margin: '0 -3px',
   pointerEvents: 'auto',
   cursor: 'default',
 };

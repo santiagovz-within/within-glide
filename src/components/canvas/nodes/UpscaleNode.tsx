@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Maximize2, Download } from 'lucide-react';
 import Image from 'next/image';
@@ -273,19 +275,26 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
         </div>
       </div>
 
-      {inputImageUrl && data.outputImageUrl ? (
-        <div className={glassStyles.mediaFrame}>
-          <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
-        </div>
-      ) : inputImageUrl ? (
-        <div className={glassStyles.mediaFrame}>
-          <CanvasImage src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
-        </div>
-      ) : (
-        <div className={glassStyles.emptyState}>
-          Connect an image source
-        </div>
-      )}
+      <GenerationPreview
+        pending={isUpscaling || data.status === 'processing'}
+        failed={data.status === 'error'}
+        resultSrc={data.outputImageUrl}
+        sizingSource={inputImageUrl}
+      >
+        {inputImageUrl && data.outputImageUrl ? (
+          <div className={glassStyles.mediaFrame}>
+            <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
+          </div>
+        ) : inputImageUrl ? (
+          <div className={glassStyles.mediaFrame}>
+            <CanvasImage src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
+          </div>
+        ) : (
+          <div className={glassStyles.emptyState}>
+            Connect an image source
+          </div>
+        )}
+      </GenerationPreview>
 
       <TypedHandle
         type="source"

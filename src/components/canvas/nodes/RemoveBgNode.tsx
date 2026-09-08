@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Scissors, Download } from 'lucide-react';
 import Image from 'next/image';
@@ -145,32 +147,39 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
       />
 
       {/* ── Preview ─────────────────────────────────────────────────────── */}
-      {data.outputImageUrl ? (
-        // Output on checkerboard so transparency is visible
-        <div className={cn(glassStyles.mediaFrame, glassStyles.mediaCheckered)}>
-          <CanvasImage
-            src={data.outputImageUrl}
-            alt="Background removed"
-            className="w-full block"
-            style={{ height: 'auto' }}
-            draggable={false}
-          />
-        </div>
-      ) : inputImageUrl ? (
-        <div className={glassStyles.mediaFrame}>
-          <CanvasImage
-            src={inputImageUrl}
-            alt="Input"
-            className="w-full block"
-            style={{ height: 'auto' }}
-            draggable={false}
-          />
-        </div>
-      ) : (
-        <div className={glassStyles.emptyState}>
-          Connect an image source
-        </div>
-      )}
+      <GenerationPreview
+        pending={isProcessing || data.status === 'processing'}
+        failed={data.status === 'error'}
+        resultSrc={data.outputImageUrl}
+        sizingSource={inputImageUrl}
+      >
+        {data.outputImageUrl ? (
+          // Output on checkerboard so transparency is visible
+          <div className={cn(glassStyles.mediaFrame, glassStyles.mediaCheckered)}>
+            <CanvasImage
+              src={data.outputImageUrl}
+              alt="Background removed"
+              className="w-full block"
+              style={{ height: 'auto' }}
+              draggable={false}
+            />
+          </div>
+        ) : inputImageUrl ? (
+          <div className={glassStyles.mediaFrame}>
+            <CanvasImage
+              src={inputImageUrl}
+              alt="Input"
+              className="w-full block"
+              style={{ height: 'auto' }}
+              draggable={false}
+            />
+          </div>
+        ) : (
+          <div className={glassStyles.emptyState}>
+            Connect an image source
+          </div>
+        )}
+      </GenerationPreview>
     </NodeWrapper>
   );
 }

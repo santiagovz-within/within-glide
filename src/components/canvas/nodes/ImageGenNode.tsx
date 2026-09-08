@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Aperture, Download, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { SendToFigmaButton } from './SendToFigmaButton';
@@ -49,12 +51,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const isOutputConnected = storeEdges.some((edge) => edge.source === id && edge.sourceHandle === 'image');
   const genHistory = data.generationHistory ?? [];
   const [histIdx, setHistIdx] = useState(() => Math.max(0, genHistory.length - 1));
-  const prevHistLen = useRef(genHistory.length);
-
-  useEffect(() => {
-    if (genHistory.length > prevHistLen.current) setHistIdx(genHistory.length - 1);
-    prevHistLen.current = genHistory.length;
-  }, [genHistory.length]);
+  const [historyLength, setHistoryLength] = useState(genHistory.length);
+  if (historyLength !== genHistory.length) {
+    setHistoryLength(genHistory.length);
+    if (genHistory.length > historyLength) setHistIdx(genHistory.length - 1);
+  }
   const promptSectionRef = useRef<HTMLDivElement>(null);
   const rowsListRef = useRef<HTMLDivElement>(null);
   const [promptHandleTop, setPromptHandleTop] = useState(50);
@@ -646,7 +647,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         <div className={glassStyles.previewList}>
           {previewSlots.map((url, i) => (
             <div
-              key={`${isShowingActiveGeneration ? 'active' : `history-${histIdx}`}-${i}`}
+              key={i}
               className="relative"
               style={{
                 aspectRatio: previewAspectRatio,
@@ -656,54 +657,49 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
                 background: 'var(--color-bg-surface)',
               }}
             >
-              {url ? (
-                <>
-                  <CanvasImage
-                    src={url}
-                    alt={`Generated ${i + 1}`}
-                    className="w-full h-full object-cover nodrag"
-                    fill
+              <GenerationPreview
+                pending={!url && hasActiveSlotRequests && !data.generationErrors?.[i]}
+                failed={!url && (!hasActiveSlotRequests || !!data.generationErrors?.[i])}
+                resultSrc={url}
+                aspectRatio={previewAspectRatio}
+                fill
+              >
+                {url ? (
+                  <>
+                    <CanvasImage
+                      src={url}
+                      alt={`Generated ${i + 1}`}
+                      className="w-full h-full object-cover nodrag"
+                      fill
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleImageDownload(url, i)}
+                      disabled={downloadingImageIndex !== null}
+                      className="absolute bottom-2 right-2 flex items-center justify-center nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 6,
+                        background: '#fff',
+                        color: '#111',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.28)',
+                      }}
+                      title={`Download image ${i + 1}`}
+                      aria-label={`Download image ${i + 1}`}
+                    >
+                      {downloadingImageIndex === i
+                        ? <RefreshCw size={13} className="animate-spin" />
+                        : <Download size={13} />}
+                    </button>
+                  </>
+                ) : hasActiveSlotRequests && !data.generationErrors?.[i] ? null : (
+                  <GenerationFailureOverlay
+                    message={data.generationErrors?.[i]?.message ?? data.errorMessage}
+                    requestId={data.generationErrors?.[i]?.requestId}
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleImageDownload(url, i)}
-                    disabled={downloadingImageIndex !== null}
-                    className="absolute bottom-2 right-2 flex items-center justify-center nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-50"
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 6,
-                      background: '#fff',
-                      color: '#111',
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.28)',
-                    }}
-                    title={`Download image ${i + 1}`}
-                    aria-label={`Download image ${i + 1}`}
-                  >
-                    {downloadingImageIndex === i
-                      ? <RefreshCw size={13} className="animate-spin" />
-                      : <Download size={13} />}
-                  </button>
-                </>
-              ) : hasActiveSlotRequests ? (
-                <div className="relative flex h-full w-full items-center justify-center">
-                  <div
-                    className="absolute inset-0 animate-pulse"
-                    style={{ background: 'rgba(255,255,255,0.09)' }}
-                  />
-                  <span
-                    className="relative text-xs font-medium"
-                    style={{ color: 'var(--color-white-muted)' }}
-                  >
-                    Generating
-                  </span>
-                </div>
-              ) : (
-                <GenerationFailureOverlay
-                  message={data.generationErrors?.[i]?.message ?? data.errorMessage}
-                  requestId={data.generationErrors?.[i]?.requestId}
-                />
-              )}
+                )}
+              </GenerationPreview>
             </div>
           ))}
         </div>

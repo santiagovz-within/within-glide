@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Play, Download } from 'lucide-react';
 import { downloadFromUrl } from '@/lib/utils/download';
@@ -214,17 +216,25 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
         </div>
       )}
 
-      {data.videoUrl && data.status === 'completed' && (
-        <div className={glassStyles.mediaFrame}>
-          <CanvasVideo
-            src={data.videoUrl}
-            controls
-            className="w-full block nodrag"
-            style={{ height: 'auto' }}
-          />
-          <p className={glassStyles.mediaCaption}>Output ({upscaleFactor}x)</p>
-        </div>
-      )}
+      <GenerationPreview
+        pending={isProcessing || data.status === 'processing'}
+        failed={data.status === 'error'}
+        resultSrc={data.videoUrl}
+        kind="video"
+        sizingSource={inputVideoUrl}
+      >
+        {data.videoUrl && data.status === 'completed' && (
+          <div className={glassStyles.mediaFrame}>
+            <CanvasVideo
+              src={data.videoUrl}
+              controls
+              className="w-full block nodrag"
+              style={{ height: 'auto' }}
+            />
+            <p className={glassStyles.mediaCaption}>Output ({upscaleFactor}x)</p>
+          </div>
+        )}
+      </GenerationPreview>
 
       <TypedHandle
         type="source"

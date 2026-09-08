@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Maximize2, Download, Film, X, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
@@ -185,37 +187,45 @@ function VideoThumb({
 function ImageResultCard({ result, onRetry }: { result: BulkItemResult; onRetry: () => void }) {
   return (
     <div className="relative overflow-hidden" style={{ aspectRatio: '1', borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}>
-      {result.status === 'completed' && result.outputUrl ? (
-        <>
-          <CanvasImage src={result.outputUrl} alt="" focused={false} fill className="w-full h-full" style={{ objectFit: 'cover' }} />
-          <button
-            onClick={() => downloadFromUrl(result.outputUrl!)}
-            className="absolute bottom-1 right-1 nodrag"
-            style={{
-              width: 20, height: 20, borderRadius: 6,
-              background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Download size={10} color="#fff" />
-          </button>
-        </>
-      ) : result.status === 'failed' ? (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
-          <AlertCircle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
-          <button
-            onClick={onRetry}
-            className="nodrag flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded"
-            style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.75)' }}
-          >
-            <RefreshCw size={8} />
-            Retry
-          </button>
-        </div>
-      ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <RefreshCw size={16} className="animate-spin" style={{ color: PORT_COLORS.image }} />
-        </div>
-      )}
+      <GenerationPreview
+        pending={result.status === 'queued' || result.status === 'processing'}
+        failed={result.status === 'failed'}
+        resultSrc={result.outputUrl}
+        kind="image"
+        fill
+      >
+        {result.status === 'completed' && result.outputUrl ? (
+          <>
+            <CanvasImage src={result.outputUrl} alt="" focused={false} fill className="w-full h-full" style={{ objectFit: 'cover' }} />
+            <button
+              onClick={() => downloadFromUrl(result.outputUrl!)}
+              className="absolute bottom-1 right-1 nodrag"
+              style={{
+                width: 20, height: 20, borderRadius: 6,
+                background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Download size={10} color="#fff" />
+            </button>
+          </>
+        ) : result.status === 'failed' ? (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+            <AlertCircle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+            <button
+              onClick={onRetry}
+              className="nodrag flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.75)' }}
+            >
+              <RefreshCw size={8} />
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <RefreshCw size={16} className="animate-spin" style={{ color: PORT_COLORS.image }} />
+          </div>
+        )}
+      </GenerationPreview>
     </div>
   );
 }
@@ -225,49 +235,57 @@ function VideoResultCard({
 }: { result: BulkItemResult; onRetry: () => void; onExpand: () => void }) {
   return (
     <div className="relative overflow-hidden" style={{ aspectRatio: '1', borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}>
-      {result.status === 'completed' && result.outputUrl ? (
-        <>
-          <div className="w-full h-full cursor-pointer" onClick={onExpand}>
-            <CanvasVideo
-              src={result.outputUrl}
-              focused={false}
-              muted
-              fill
-              className="w-full h-full"
-              style={{ objectFit: 'cover', pointerEvents: 'none' }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
-              <Film size={14} color="rgba(255,255,255,0.85)" />
+      <GenerationPreview
+        pending={result.status === 'queued' || result.status === 'processing'}
+        failed={result.status === 'failed'}
+        resultSrc={result.outputUrl}
+        kind="video"
+        fill
+      >
+        {result.status === 'completed' && result.outputUrl ? (
+          <>
+            <div className="w-full h-full cursor-pointer" onClick={onExpand}>
+              <CanvasVideo
+                src={result.outputUrl}
+                focused={false}
+                muted
+                fill
+                className="w-full h-full"
+                style={{ objectFit: 'cover', pointerEvents: 'none' }}
+              />
+              <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
+                <Film size={14} color="rgba(255,255,255,0.85)" />
+              </div>
             </div>
+            <button
+              onClick={() => downloadFromUrl(result.outputUrl!)}
+              className="absolute bottom-1 right-1 nodrag"
+              style={{
+                width: 20, height: 20, borderRadius: 6,
+                background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Download size={10} color="#fff" />
+            </button>
+          </>
+        ) : result.status === 'failed' ? (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
+            <AlertCircle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+            <button
+              onClick={onRetry}
+              className="nodrag flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded"
+              style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.75)' }}
+            >
+              <RefreshCw size={8} />
+              Retry
+            </button>
           </div>
-          <button
-            onClick={() => downloadFromUrl(result.outputUrl!)}
-            className="absolute bottom-1 right-1 nodrag"
-            style={{
-              width: 20, height: 20, borderRadius: 6,
-              background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <Download size={10} color="#fff" />
-          </button>
-        </>
-      ) : result.status === 'failed' ? (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-1">
-          <AlertCircle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
-          <button
-            onClick={onRetry}
-            className="nodrag flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded"
-            style={{ background: 'rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.75)' }}
-          >
-            <RefreshCw size={8} />
-            Retry
-          </button>
-        </div>
-      ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <RefreshCw size={16} className="animate-spin" style={{ color: PORT_COLORS.video }} />
-        </div>
-      )}
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <RefreshCw size={16} className="animate-spin" style={{ color: PORT_COLORS.video }} />
+          </div>
+        )}
+      </GenerationPreview>
     </div>
   );
 }
@@ -973,15 +991,22 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
 
       {/* ── Single image: preview ── */}
       {!isBulk && inputMediaType === 'image' && (
-        inputImageUrl && data.outputImageUrl ? (
-          <div className={glassStyles.mediaFrame}>
-            <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
-          </div>
-        ) : inputImageUrl ? (
-          <div className={glassStyles.mediaFrame}>
-            <CanvasImage src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
-          </div>
-        ) : null
+        <GenerationPreview
+          pending={isRunning || data.status === 'processing'}
+          failed={data.status === 'error'}
+          resultSrc={data.outputImageUrl}
+          sizingSource={inputImageUrl}
+        >
+          {inputImageUrl && data.outputImageUrl ? (
+            <div className={glassStyles.mediaFrame}>
+              <ComparisonSlider beforeUrl={inputImageUrl} afterUrl={data.outputImageUrl} />
+            </div>
+          ) : inputImageUrl ? (
+            <div className={glassStyles.mediaFrame}>
+              <CanvasImage src={inputImageUrl} alt="Input" className="w-full block" style={{ height: 'auto' }} />
+            </div>
+          ) : null}
+        </GenerationPreview>
       )}
 
       {/* ── Single video: previews ── */}
@@ -993,12 +1018,20 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
               <p className={glassStyles.mediaCaption}>Input</p>
             </div>
           )}
-          {hasVideoOutput && (
-            <div className={glassStyles.mediaFrame}>
-              <CanvasVideo src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
-              <p className={glassStyles.mediaCaption}>Output ({upscaleFactor}x)</p>
-            </div>
-          )}
+          <GenerationPreview
+            pending={isRunning || data.status === 'processing'}
+            failed={data.status === 'error'}
+            resultSrc={data.outputVideoUrl}
+            kind="video"
+            sizingSource={inputVideoUrl}
+          >
+            {hasVideoOutput && (
+              <div className={glassStyles.mediaFrame}>
+                <CanvasVideo src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+                <p className={glassStyles.mediaCaption}>Output ({upscaleFactor}x)</p>
+              </div>
+            )}
+          </GenerationPreview>
         </div>
       )}
 

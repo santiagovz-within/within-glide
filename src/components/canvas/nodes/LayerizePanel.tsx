@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { useEffect, useRef, useState, type ButtonHTMLAttributes, type PointerEvent, type RefObject } from 'react';
 import { ArrowDownToLine, ChevronDown, ChevronUp, Download, Eye, EyeOff, ImagePlus, Layers, Loader2, Minus, Plus, RotateCcw } from 'lucide-react';
 import type { ModifyNodeData } from '@/types';
@@ -255,6 +257,18 @@ export function LayerizePanel({ id, data, connectedImage, sourceSlotRef, updateD
       // eslint-disable-next-line @next/next/no-img-element
       <img src={source} alt="Layerize source" className={styles.sourceImage} draggable={false} />
     ) : <button className={styles.upload} disabled={uploading} onClick={() => sourceInput.current?.click()}><ImagePlus size={22} />{uploading ? 'Uploading...' : 'Upload image'}</button>}
+    <GenerationPreview
+      transient
+      pending={busy || data.status === 'processing'}
+      failed={data.status === 'error'}
+      resultSrc={data.outputImageUrl}
+      sizingSource={source}
+    >
+      {data.outputImageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={data.outputImageUrl} alt="Generated composition" style={{ display: 'block', width: '100%', height: 'auto' }} />
+      )}
+    </GenerationPreview>
     {changedSource && <p className={styles.notice}>Source changed. Layerize to update the layers.</p>}
 
     {layers.length > 0 && <>

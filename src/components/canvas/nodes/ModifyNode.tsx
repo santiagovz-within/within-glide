@@ -1,5 +1,7 @@
 'use client';
 
+import { GenerationPreview } from './GenerationPreview';
+
 import { Position, type NodeProps } from '@xyflow/react';
 import { Sliders, Download, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
@@ -1216,11 +1218,18 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
                 </div>
               </div>
 
-              {data.outputImageUrl && (
-                <div className={glassStyles.mediaFrame}>
-                  <CanvasImage src={data.outputImageUrl} alt="Modified" className="w-full block nodrag" style={{ height: 'auto' }} />
-                </div>
-              )}
+              <GenerationPreview
+                pending={isGenerating || data.status === 'processing'}
+                failed={data.status === 'error'}
+                resultSrc={data.outputImageUrl}
+                aspectRatio={thumbnailAspect}
+              >
+                {data.outputImageUrl && (
+                  <div className={glassStyles.mediaFrame}>
+                    <CanvasImage src={data.outputImageUrl} alt="Modified" className="w-full block nodrag" style={{ height: 'auto' }} />
+                  </div>
+                )}
+              </GenerationPreview>
             </>
           )}
 
@@ -1301,11 +1310,18 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
                 </p>
               )}
 
-              {data.outputImageUrl && (
-                <div className={glassStyles.mediaFrame}>
-                  <CanvasImage src={data.outputImageUrl} alt="Expanded" className="w-full block nodrag" style={{ height: 'auto' }} />
-                </div>
-              )}
+              <GenerationPreview
+                pending={isGenerating || data.status === 'processing'}
+                failed={data.status === 'error'}
+                resultSrc={data.outputImageUrl}
+                aspectRatio={resizePlan ? `${resizePlan.outputW} / ${resizePlan.outputH}` : thumbnailAspect}
+              >
+                {data.outputImageUrl && (
+                  <div className={glassStyles.mediaFrame}>
+                    <CanvasImage src={data.outputImageUrl} alt="Expanded" className="w-full block nodrag" style={{ height: 'auto' }} />
+                  </div>
+                )}
+              </GenerationPreview>
             </>
           )}
         </>
@@ -1406,11 +1422,19 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           </div>
 
           {/* Output video */}
-          {hasVideoOutput && (
-            <div className={glassStyles.mediaFrame}>
-              <CanvasVideo src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
-            </div>
-          )}
+          <GenerationPreview
+            pending={isGenerating || data.status === 'processing'}
+            failed={data.status === 'error'}
+            resultSrc={data.outputVideoUrl}
+            kind="video"
+            aspectRatio={cssAspectRatio(outpaintAspect)}
+          >
+            {hasVideoOutput && (
+              <div className={glassStyles.mediaFrame}>
+                <CanvasVideo src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+              </div>
+            )}
+          </GenerationPreview>
         </>
       )}
 
