@@ -49,6 +49,17 @@ function syncRoundedCellGrid(root: HTMLDivElement, shader: HTMLCanvasElement) {
   root.style.setProperty('--reveal-rows', String(count(height)));
 }
 
+function syncRevealCoverage(root: HTMLDivElement, shader: HTMLCanvasElement) {
+  // img-fx fades the shader from 1 to 0 using the reveal's own easing. Fill
+  // the rounding mask's gaps with that same progress so it becomes solid
+  // before the native image takes over, rather than snapping off at the end.
+  const progress = 1 - Number(shader.style.opacity || '1');
+  root.style.setProperty(
+    '--reveal-fill',
+    String(Math.max(0, Math.min(1, progress))),
+  );
+}
+
 function getReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
@@ -127,16 +138,20 @@ export default function GenerationEffect({
     if (reducedMotion || !root || !shader) return;
     const sync = () => syncRoundedCellGrid(root, shader);
     sync();
+    syncRevealCoverage(root, shader);
     const resize = new ResizeObserver(sync);
     resize.observe(root);
-    const bitmapResize = new MutationObserver(sync);
-    bitmapResize.observe(shader, {
+    const shaderChanges = new MutationObserver((changes) => {
+      if (changes.some((change) => change.attributeName !== 'style')) sync();
+      syncRevealCoverage(root, shader);
+    });
+    shaderChanges.observe(shader, {
       attributes: true,
-      attributeFilter: ['width', 'height'],
+      attributeFilter: ['width', 'height', 'style'],
     });
     return () => {
       resize.disconnect();
-      bitmapResize.disconnect();
+      shaderChanges.disconnect();
     };
   }, [reducedMotion]);
 
