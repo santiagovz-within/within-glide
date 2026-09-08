@@ -6,7 +6,7 @@ import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
 import { SessionList } from '@/components/chat/SessionList';
 import { ChatInput } from '@/components/chat/ChatInput';
-import { GenerationCard } from '@/components/chat/GenerationCard';
+import { GenerationGrid } from '@/components/chat/GenerationGrid';
 import { GenerationModal } from '@/components/chat/GenerationModal';
 import { Images } from 'lucide-react';
 import styles from '@/components/chat/ImageVideo.module.css';
@@ -26,7 +26,7 @@ export default function ImageVideoPage() {
   } = useChatStore();
   const [selectedGen, setSelectedGen] = useState<Generation | null>(null);
   const [toast, setToast] = useState('');
-  const [columnCount, setColumnCount] = useState(4);
+  const [itemsPerRow, setItemsPerRow] = useState(4);
   const feedRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
 
@@ -36,7 +36,7 @@ export default function ImageVideoPage() {
     if (!feed || !dock) return;
     const observer = new ResizeObserver(() => {
       feed.style.setProperty('--composer-height', `${dock.offsetHeight}px`);
-      setColumnCount(feed.clientWidth <= 600 ? 2 : 4);
+      setItemsPerRow(feed.clientWidth <= 600 ? 2 : 4);
     });
     observer.observe(feed);
     observer.observe(dock);
@@ -311,7 +311,6 @@ export default function ImageVideoPage() {
   const activeGenerations = Object.values(generations)
     .filter(gen => gen.media_type !== 'prompt' && (generationIds.has(gen.id) || (activeSessionId && gen.source_type === 'chat' && gen.source_id === activeSessionId)))
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const columns = Array.from({ length: columnCount }, (_, column) => activeGenerations.filter((_, index) => index % columnCount === column));
 
   return (
     <div className={styles.workspace}>
@@ -320,15 +319,7 @@ export default function ImageVideoPage() {
         {toast && <div className={styles.toast} role="status">{toast}</div>}
         <div className={styles.scroll}>
           {activeGenerations.length > 0 ? (
-            <div className={styles.grid}>
-              {columns.map((column, index) => (
-                <div key={index} className={styles.column}>
-                  {column.map(gen => (
-                    <GenerationCard key={gen.id} generation={gen} onClick={() => setSelectedGen(gen)} onCopyPrompt={handleCopyPrompt} />
-                  ))}
-                </div>
-              ))}
-            </div>
+            <GenerationGrid generations={activeGenerations} itemsPerRow={itemsPerRow} onSelect={setSelectedGen} onCopyPrompt={handleCopyPrompt} />
           ) : (
             <div className={styles.empty}><Images size={24} /><span>{isGenerating ? 'Generating...' : 'No generations yet'}</span></div>
           )}

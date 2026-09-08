@@ -14,14 +14,16 @@ interface GenerationCardProps {
   onCopyPrompt: (prompt: string) => void;
 }
 
-function getAspectRatio(gen: Generation): string {
-  if (gen.width && gen.height) return `${gen.width} / ${gen.height}`;
+export function getGenerationAspectRatio(gen: Generation): number {
+  if (gen.width && gen.height && gen.width > 0 && gen.height > 0 && Number.isFinite(gen.width / gen.height)) {
+    return gen.width / gen.height;
+  }
   const ar = gen.parameters?.aspectRatio;
   if (typeof ar === 'string') {
     const [width, height] = ar.split(':').map(Number);
-    if (width > 0 && height > 0) return `${width} / ${height}`;
+    if (width > 0 && height > 0 && Number.isFinite(width / height)) return width / height;
   }
-  return '1 / 1';
+  return 1;
 }
 
 export function GenerationCard({ generation, onClick, onCopyPrompt }: GenerationCardProps) {
@@ -41,7 +43,7 @@ export function GenerationCard({ generation, onClick, onCopyPrompt }: Generation
   }, [generation.media_url, pending, failed]);
 
   return (
-    <article className={styles.tile} style={{ aspectRatio: getAspectRatio(generation) }}>
+    <article className={styles.tile} style={{ aspectRatio: getGenerationAspectRatio(generation) }}>
       {pending || failed ? (
         <div className={styles.status} role="status">
           {failed ? <AlertTriangle size={20} style={{ color: 'var(--color-error)' }} /> : <Loader2 size={20} className="animate-spin" />}
