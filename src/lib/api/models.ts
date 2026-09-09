@@ -676,7 +676,7 @@ export function getModel(id: string): ModelConfig | undefined {
 }
 
 export function getDefaultImageModel(): ModelConfig {
-  return MODELS['seedream-5'];
+  return MODELS['nano-banana-2'];
 }
 
 export function getDefaultVideoModel(): ModelConfig {
