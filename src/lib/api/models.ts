@@ -25,6 +25,17 @@ export const FAL_MODELS = {
     pricing: { kind: 'image-resolution', resolutionMultipliers: { '1K': 1, '2K': 1, '4K': 2 } },
     type: 'image' as const,
   },
+  'gpt-image-2-5': {
+    endpoint: 'openai/gpt-image-2.5/sunburst/text-to-image',
+    editEndpoint: 'openai/gpt-image-2.5/sunburst/edit',
+    editImageParam: 'image_urls',
+    hasOwnQuality: true,
+    maxReferenceImages: 16,
+    // Token-based billing depends on prompt, references, and output quality.
+    // Use actual Fal billing; a fixed per-resolution estimate is not available.
+    pricing: undefined,
+    type: 'image' as const,
+  },
   'seedream-5': {
     endpoint: 'bytedance/seedream/v5/pro/text-to-image',
     editEndpoint: 'bytedance/seedream/v5/pro/edit',
@@ -327,6 +338,20 @@ export const MODELS: Record<string, ModelConfig> = {
     // No documented way to address a specific input image; use plain language.
     promptReference: { kind: 'plain', template: 'the {ordinal} image attached' },
   },
+  'gpt-image-2-5': {
+    id: 'gpt-image-2-5',
+    name: 'GPT Image 2.5',
+    provider: 'fal',
+    type: 'image',
+    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+    supportedResolutions: ['1K', '2K', '4K'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 30,
+    maxReferenceImages: 16,
+    promptReference: { kind: 'plain', template: 'the {ordinal} image attached' },
+  },
   'seedream-5': {
     id: 'seedream-5',
     name: 'Seedream v5',
@@ -586,6 +611,7 @@ export const MODELS: Record<string, ModelConfig> = {
 
 export const IMAGE_MODELS = [
   MODELS['nano-banana-2'],
+  MODELS['gpt-image-2-5'],
   MODELS['seedream-5'],
   MODELS['nano-banana-pro'],
   MODELS['gpt-image-2'],

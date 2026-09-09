@@ -5,6 +5,7 @@ import { FAL_MODELS } from '@/lib/api/models';
 import { getFalStorageHeaders } from '@/lib/falStorage';
 import { describeFalError } from '@/lib/falErrors';
 import { getCustomImageSize, type FalPricingRule } from '@/lib/falPricing';
+import { getGptImage25Size } from '@/lib/gptImage25';
 import type { GenerateImageRequest } from '@/types';
 
 fal.config({ credentials: process.env.FAL_KEY });
@@ -278,8 +279,12 @@ export async function POST(request: NextRequest) {
       : undefined;
     // Models with a custom `image_size` (Seedream, Qwen) scale the shared UI
     // tiers into their own total-pixel range, which lives on the pricing rule.
-    const pricingRule = modelConfig.pricing as FalPricingRule;
-    const { width, height } = (usesImageSize && pricingRule.kind === 'custom-image-size'
+    const pricingRule = modelConfig.pricing as FalPricingRule | undefined;
+    const gptImage25Size = model === 'gpt-image-2-5' ? getGptImage25Size(aspectRatio, resolution) : null;
+    if (model === 'gpt-image-2-5' && !gptImage25Size) {
+      return NextResponse.json({ error: 'Invalid GPT Image 2.5 aspect ratio or resolution.' }, { status: 400 });
+    }
+    const { width, height } = gptImage25Size ?? (usesImageSize && pricingRule?.kind === 'custom-image-size'
       ? getCustomImageSize(aspectRatio, resolution, pricingRule)
       : null) ?? getImageSize(aspectRatio, resolution);
 

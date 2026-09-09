@@ -49,6 +49,7 @@ function measureDropdown(trigger: HTMLButtonElement): DropdownPosition {
 
 const MODEL_SUBTITLES: Record<string, string> = {
   'nano-banana-2': 'BEST & MOST CREATIVE MODEL',
+  'gpt-image-2-5': 'IMAGE GENERATION & EDITING',
   'seedream-5': 'EXCELLENT ALL-AROUND MODEL',
   'nano-banana-pro': 'VERY GOOD ALL-AROUND MODEL',
   'gpt-image-2': 'GOOD FOR TEXT & BRANDING DESIGN',
@@ -87,6 +88,7 @@ function ModelIcon({
         : <NanoBanana.Color size={size} />;
     case 'seedream-5':
       return <ByteDance.Color size={size} />;
+    case 'gpt-image-2-5':
     case 'gpt-image-2':
       return <OpenAI size={size} />;
     case 'qwen-image-3':
