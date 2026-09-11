@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Position, type NodeProps } from '@xyflow/react';
-import { ChevronLeft, ChevronRight, Clock3, Download, Film, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock3, Download, Film, Video, X } from 'lucide-react';
 import type { ReferenceVideoNodeData } from '@/types';
 import { buildReferenceVideoInput, getReferenceVideoModel, REFERENCE_VIDEO_MODELS, referenceDurationOptions } from '@/lib/api/referenceVideo';
 import { useFlowStore } from '@/lib/stores/flowStore';
@@ -141,7 +141,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   );
 
   return (
-    <NodeWrapper title="Reference to Video" icon={<Film size={14} />} status={data.status}
+    <NodeWrapper title="Reference to Video" icon={<Video size={14} />} status={data.status}
       errorMessage={data.errorMessage} selected={selected} minWidth={320} accentColor={PORT_COLORS.video}
       titlePosition="outside" appearance="imageGenerationGlass" footer={footer}>
       <TypedHandle type="target" position={Position.Left} id="prompt" portType="text"
