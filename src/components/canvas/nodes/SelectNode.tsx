@@ -48,7 +48,7 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
     const nd = sourceNode.data as ModifyNodeData;
     if (nd.outputImageUrl) availableImages = [nd.outputImageUrl];
     sourceAspect = nd.aspectRatio ?? '1:1';
-  } else if (sourceNode?.type === 'videoGenNode') {
+  } else if ((sourceNode?.type === 'videoGenNode' || sourceNode?.type === 'referenceVideoNode')) {
     const nd = sourceNode.data as VideoGenNodeData;
     videoUrl = nd.videoUrl;
     sourceAspect = nd.aspectRatio ?? '16:9';

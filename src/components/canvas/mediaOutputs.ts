@@ -25,6 +25,7 @@ const STATIC_MEDIA_SOURCE_HANDLES: Partial<
   imageInputNode: { image: 'image' },
   imageGenNode: { image: 'image' },
   videoGenNode: { video: 'video' },
+  referenceVideoNode: { video: 'video' },
   upscaleNode: { image: 'image' },
   selectNode: { image: 'image' },
   videoToGifNode: { image: 'gif' },
@@ -118,6 +119,7 @@ export function getNodeMediaUrls(
   }
 
   switch (node.type) {
+    case 'referenceVideoNode':
     case 'videoGenNode':
       return [(node.data as VideoGenNodeData).videoUrl].filter(Boolean) as string[];
     case 'videoInputNode':

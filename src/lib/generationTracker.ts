@@ -450,7 +450,7 @@ export async function progressBackgroundGenerations() {
 
 function recoveredKind(nodeType: NodeType): BackgroundGenerationKind | null {
   if (nodeType === 'imageGenNode') return 'image-generation';
-  if (nodeType === 'videoGenNode') return 'video-generation';
+  if (nodeType === 'videoGenNode' || nodeType === 'referenceVideoNode') return 'video-generation';
   return null;
 }
 
@@ -626,6 +626,7 @@ export async function startTrackedVideoGeneration(input: {
   flowId: string;
   flowTitle: string;
   nodeId: string;
+  nodeType?: 'videoGenNode' | 'referenceVideoNode';
   data: VideoGenNodeData;
   endpoint: string;
   payload: Record<string, unknown>;
@@ -634,7 +635,7 @@ export async function startTrackedVideoGeneration(input: {
     flowId: input.flowId,
     flowTitle: input.flowTitle,
     nodeId: input.nodeId,
-    nodeType: 'videoGenNode',
+    nodeType: input.nodeType ?? 'videoGenNode',
     kind: 'video-generation',
     slotCount: 1,
     videoHistory: input.data.videoHistory ?? [],

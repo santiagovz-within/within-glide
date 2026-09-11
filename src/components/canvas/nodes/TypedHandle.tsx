@@ -42,6 +42,10 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
   ...Object.fromEntries(
     Array.from({ length: 16 }, (_, i) => [`imageGenNode:ref_${i}:target`, 'image' as PortType])
   ),
+  'referenceVideoNode:prompt:target': 'text',
+  'referenceVideoNode:reference_images:target': 'image',
+  'referenceVideoNode:reference_videos:target': 'video',
+  'referenceVideoNode:video:source': 'video',
   'videoGenNode:prompt:target':            'text',
   'videoGenNode:start_frame:target':       'image',
   'videoGenNode:end_frame:target':         'image',

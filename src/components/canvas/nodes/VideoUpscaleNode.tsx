@@ -30,7 +30,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
   const sourceNode = incomingEdge ? storeNodes.find(n => n.id === incomingEdge.source) : undefined;
 
   let inputVideoUrl: string | undefined;
-  if (sourceNode?.type === 'videoGenNode') {
+  if ((sourceNode?.type === 'videoGenNode' || sourceNode?.type === 'referenceVideoNode')) {
     inputVideoUrl = (sourceNode.data as VideoGenNodeData).videoUrl;
   } else if (sourceNode?.type === 'videoInputNode') {
     inputVideoUrl = (sourceNode.data as VideoInputNodeData).videoUrl;

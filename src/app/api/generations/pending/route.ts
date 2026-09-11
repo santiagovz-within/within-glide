@@ -75,7 +75,7 @@ export async function GET() {
       const flowData = flow?.flow_data as FlowData | undefined;
       const node = flowData?.nodes?.find((candidate) => candidate.id === generation.node_id);
       if (!flow || !node || !generation.fal_request_id) return [];
-      if (node.type !== 'imageGenNode' && node.type !== 'videoGenNode') return [];
+      if (node.type !== 'imageGenNode' && node.type !== 'videoGenNode' && node.type !== 'referenceVideoNode') return [];
       const parameters = generation.parameters as Record<string, unknown> | null;
       const endpoint = resolveEndpoint(
         generation.model,

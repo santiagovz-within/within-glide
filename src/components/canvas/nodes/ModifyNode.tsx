@@ -536,6 +536,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
   if (inputMediaType === 'video' && sourceNode) {
     switch (sourceNode.type) {
+      case 'referenceVideoNode':
       case 'videoGenNode': {
         const nd = sourceNode.data as VideoGenNodeData;
         inputVideoUrl = nd.videoUrl;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fal } from '@fal-ai/client';
+import { buildReferenceVideoInput } from '@/lib/api/referenceVideo';
 import { FAL_MODELS } from '@/lib/api/models';
 import { getFalStorageHeaders } from '@/lib/falStorage';
 import { describeFalError } from '@/lib/falErrors';
@@ -23,6 +24,9 @@ interface GenerateRequestBody extends GenerateImageRequest {
   startFrameUrl?: string;
   endFrameUrl?: string;
   slotIndex?: number;
+  generationMode?: 'reference-to-video';
+  referenceDuration?: number | 'auto';
+  referenceVideoUrls?: string[];
 }
 
 function getImageSize(aspectRatio: string, resolution: string): { width: number; height: number } {
@@ -54,6 +58,35 @@ export async function POST(request: NextRequest) {
       sourceType,
       sourceId,
     });
+
+    if (body.generationMode === 'reference-to-video') {
+      let referenceRequest;
+      try {
+        referenceRequest = buildReferenceVideoInput({ ...body });
+      } catch (error) {
+        return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid reference inputs.' }, { status: 400 });
+      }
+      const { endpoint, input } = referenceRequest;
+      const { request_id } = await fal.queue.submit(endpoint, { input, headers: falHeaders });
+      const { data: gen, error: insertError } = await supabase.from('generations').insert({
+        user_id: user.id,
+        source_type: sourceType,
+        source_id: sourceId,
+        node_id: nodeId,
+        model,
+        prompt,
+        parameters: {
+          generationMode: 'reference-to-video', endpoint,
+          aspectRatio: input.aspect_ratio, resolution: input.resolution,
+          duration: input.duration, generateAudio: input.generate_audio ?? input.audio,
+          referenceVideoUrls: body.referenceVideoUrls ?? [],
+        },
+        reference_image_urls: referenceImageUrls,
+        media_type: 'video', media_url: '', status: 'processing', fal_request_id: request_id,
+      }).select().single();
+      if (insertError) throw new Error(`Could not save queued generation: ${insertError.message}`);
+      return NextResponse.json({ generationId: gen?.id, requestId: request_id, endpoint, status: 'pending' });
+    }
 
     if (modelConfig.type === 'video') {
       // Video generation — submit async job

@@ -25,6 +25,9 @@ import { PromptNode } from './nodes/PromptNode';
 import { ImageInputNode } from './nodes/ImageInputNode';
 import { ImageToPromptNode } from './nodes/ImageToPromptNode';
 import { ImageGenNode } from './nodes/ImageGenNode';
+import { ReferenceVideoNode } from './nodes/ReferenceVideoNode';
+import { getReferenceVideoModel } from '@/lib/api/referenceVideo';
+import { REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from './referenceVideoInputs';
 import { VideoGenNode } from './nodes/VideoGenNode';
 import { UpscaleNode } from './nodes/UpscaleNode';
 import { ModifyNode } from './nodes/ModifyNode';
@@ -57,6 +60,7 @@ const nodeTypes = {
   imageToPromptNode: ImageToPromptNode,
   imageGenNode: ImageGenNode,
   videoGenNode: VideoGenNode,
+  referenceVideoNode: ReferenceVideoNode,
   upscaleNode: UpscaleNode,
   modifyNode: ModifyNode,
   selectNode: SelectNode,
@@ -81,6 +85,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   imageToPromptNode:  { status: 'idle' },
   imageGenNode:       { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
   videoGenNode:       { model: 'seedance-2-5', aspectRatio: '16:9', duration: 5, status: 'idle' },
+  referenceVideoNode: { model: 'seedance-2-5', aspectRatio: 'auto', referenceDuration: 'auto', videoResolution: '720p', generateAudio: true, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
   modifyNode:         { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', status: 'idle' },
   selectNode:         {},
@@ -657,6 +662,25 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         return true;
       }
 
+      if (targetNode.type === 'referenceVideoNode' && conn.targetHandle !== 'prompt') {
+        const kind = conn.targetHandle === REFERENCE_IMAGE_HANDLE ? 'image'
+          : conn.targetHandle === REFERENCE_VIDEO_HANDLE ? 'video' : null;
+        if (!kind || srcType !== kind) return reject('Connect the matching image or video output.');
+        const config = getReferenceVideoModel(String(targetNode.data.model));
+        if (!config) return reject('Select a reference video model first.');
+        const references = useFlowStore.getState().edges.filter(e => e.target === targetNode.id
+          && (e.targetHandle === REFERENCE_IMAGE_HANDLE || e.targetHandle === REFERENCE_VIDEO_HANDLE));
+        const sameKind = references.filter(e => e.targetHandle === conn.targetHandle);
+        if (sameKind.some(e => e.source === conn.source && e.sourceHandle === conn.sourceHandle)) {
+          return reject('This reference is already connected.');
+        }
+        const limit = kind === 'image' ? config.maxImages : config.maxVideos;
+        if (sameKind.length >= limit || references.length >= config.maxReferences) {
+          return reject(`${config.name} accepts up to ${limit} ${kind} references and ${config.maxReferences} total.`);
+        }
+        return true;
+      }
+
       if (targetNode.type === 'imageGenNode' && conn.targetHandle?.startsWith('ref_')) {
         const referenceIndex = Number(conn.targetHandle.slice(4));
         const limit = getImageReferenceLimit((targetNode.data as ImageGenNodeData).model);
@@ -703,9 +727,10 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
 
   function getAutoConnectTargetHandle(sourceHandleId: string | null, targetNodeType: NodeType): string | null {
     if (sourceHandleId === 'prompt') {
-      if (targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode' || targetNodeType === 'modifyNode') return 'prompt';
+      if (targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode' || targetNodeType === 'referenceVideoNode' || targetNodeType === 'modifyNode') return 'prompt';
     }
     if (sourceHandleId === 'image') {
+      if (targetNodeType === 'referenceVideoNode') return REFERENCE_IMAGE_HANDLE;
       if (targetNodeType === 'videoGenNode')      return 'start_frame';
       if (targetNodeType === 'imageGenNode')      return 'ref_0';
       if (targetNodeType === 'upscaleNode')       return 'image';
@@ -717,6 +742,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
       if (targetNodeType === 'selectNode')        return 'input';
     }
     if (sourceHandleId === 'video') {
+      if (targetNodeType === 'referenceVideoNode') return REFERENCE_VIDEO_HANDLE;
       if (targetNodeType === 'outputNode')        return 'video';
       if (targetNodeType === 'videoToGifNode')    return 'video';
       if (targetNodeType === 'videoUpscaleNode')  return 'video_in';
@@ -857,7 +883,9 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
       const targetNode = freshNodes.find((n) => n.id === connection.target);
 
       // galleryOutputNode and upscaleMediaNode both accept multiple incoming edges.
-      if (targetNode?.type !== 'galleryOutputNode' && targetNode?.type !== 'upscaleMediaNode') {
+      const isReferenceInput = targetNode?.type === 'referenceVideoNode'
+        && (connection.targetHandle === REFERENCE_IMAGE_HANDLE || connection.targetHandle === REFERENCE_VIDEO_HANDLE);
+      if (targetNode?.type !== 'galleryOutputNode' && targetNode?.type !== 'upscaleMediaNode' && !isReferenceInput) {
         const existing = freshEdges.filter(
           (e) => e.target === connection.target && e.targetHandle === connection.targetHandle
         );
@@ -929,9 +957,11 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
       const draggedMediaType = getSourceMediaType(sourceNode, connection.sourceHandle);
       const isGallery = targetNode?.type === 'galleryOutputNode' && connection.targetHandle === 'input';
       const isUpscaleMedia = targetNode?.type === 'upscaleMediaNode' && connection.targetHandle === 'media';
+      const isReferenceVideo = targetNode?.type === 'referenceVideoNode'
+        && (connection.targetHandle === REFERENCE_IMAGE_HANDLE || connection.targetHandle === REFERENCE_VIDEO_HANDLE);
       const isImageGeneration = targetNode?.type === 'imageGenNode' && connection.targetHandle?.startsWith('ref_');
 
-      if (!sourceNode || !targetNode || !draggedMediaType || (!isGallery && !isUpscaleMedia && !isImageGeneration)) {
+      if (!sourceNode || !targetNode || !draggedMediaType || (!isGallery && !isUpscaleMedia && !isImageGeneration && !isReferenceVideo)) {
         connectSingle(connection);
         return;
       }
@@ -963,7 +993,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
 
       const plannedConnections: Connection[] = [];
 
-      if (isGallery || isUpscaleMedia) {
+      if (isGallery || isUpscaleMedia || isReferenceVideo) {
         const targetHandle = connection.targetHandle;
         const existingTargetEdges = freshEdges.filter(
           (edge) => edge.target === targetNode.id && edge.targetHandle === targetHandle
@@ -972,7 +1002,13 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
           existingTargetEdges.map((edge) => `${edge.source}:${edge.sourceHandle ?? ''}`)
         );
         const plannedSourceKeys = new Set<string>();
-        const capacity = isUpscaleMedia
+        const referenceConfig = isReferenceVideo ? getReferenceVideoModel(String(targetNode.data.model)) : undefined;
+        const referenceCount = freshEdges.filter(edge => edge.target === targetNode.id
+          && (edge.targetHandle === REFERENCE_IMAGE_HANDLE || edge.targetHandle === REFERENCE_VIDEO_HANDLE)).length;
+        const capacity = referenceConfig
+          ? Math.min((draggedMediaType === 'video' ? referenceConfig.maxVideos : referenceConfig.maxImages) - existingTargetEdges.length,
+            referenceConfig.maxReferences - referenceCount)
+          : isUpscaleMedia
           ? (draggedMediaType === 'video' ? 10 : 30) - existingTargetEdges.length
           : Number.POSITIVE_INFINITY;
 

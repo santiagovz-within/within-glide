@@ -87,6 +87,7 @@ export type NodeType =
   | 'imageToPromptNode'
   | 'imageGenNode'
   | 'videoGenNode'
+  | 'referenceVideoNode'
   | 'videoInputNode'
   | 'videoUpscaleNode'
   | 'upscaleNode'
@@ -205,7 +206,7 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   imageAspectRatio?: string;
   duration?: number;
   generateAudio?: boolean;
-  videoResolution?: '360p' | '720p' | '1080p' | '4k' | '480P' | '768P' | '2K';
+  videoResolution?: '360p' | '480p' | '720p' | '1080p' | '4k' | '480P' | '768P' | '1080P' | '2K';
   /** @deprecated Read only as a fallback for videos saved before videoResolution was introduced. */
   seedanceResolution?: '480p' | '720p' | '1080p' | '4k';
   prompt?: string;
@@ -221,6 +222,10 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   pendingRequestId?: string;
   pendingEndpoint?: string;
   label?: string;
+}
+
+export interface ReferenceVideoNodeData extends VideoGenNodeData {
+  referenceDuration?: number | 'auto';
 }
 
 export interface UpscaleNodeData extends Record<string, unknown> {
@@ -379,6 +384,7 @@ export type NodeData =
   | ImageToPromptNodeData
   | ImageGenNodeData
   | VideoGenNodeData
+  | ReferenceVideoNodeData
   | VideoInputNodeData
   | VideoUpscaleNodeData
   | UpscaleNodeData
