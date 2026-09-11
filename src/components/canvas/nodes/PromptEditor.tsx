@@ -11,8 +11,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useStoreApi } from '@xyflow/react';
-import { ImageIcon } from 'lucide-react';
-import { CanvasImage } from '@/components/canvas/CanvasMedia';
+import { Film, ImageIcon } from 'lucide-react';
+import { CanvasImage, CanvasVideo } from '@/components/canvas/CanvasMedia';
 import { cn } from '@/lib/utils/cn';
 import type { PromptTag } from '@/types';
 import {
@@ -25,7 +25,7 @@ import {
 } from '@/lib/promptTags';
 import glassStyles from './ImageGenerationGlass.module.css';
 
-// Prompt textarea with inline "@imageN" chips.
+// Prompt textarea with inline "@imageN" and "@videoN" chips.
 //
 // Rendering: the textarea's text is made transparent whenever a live tag exists
 // and a mirror <div> with identical typography is painted over it, colouring the
@@ -125,8 +125,8 @@ export function PromptEditor({
   const segments = useMemo(() => segmentPrompt(value, tags), [value, tags]);
   const hasChips = segments.some((s) => s.kind === 'tag');
   const showOverlay = hasChips || alwaysOverlay;
-  const urlByPort = useMemo(
-    () => new Map(taggable.map((i) => [i.portIndex, i.url])),
+  const inputByLabel = useMemo(
+    () => new Map(taggable.map((i) => [i.label, i])),
     [taggable],
   );
 
@@ -177,6 +177,10 @@ export function PromptEditor({
   // never leaves the highlight out of range.
   const activeIndex = Math.min(highlight, Math.max(0, options.length - 1));
 
+  useEffect(() => {
+    pickerRef.current?.querySelectorAll('button')[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
   const commit = useCallback(
     (nextText: string) => {
       onChange({ prompt: nextText, tags: syncTagsWithText(nextText, tags, taggable) });
@@ -216,7 +220,8 @@ export function PromptEditor({
     const nextCaret = mention.start + insert.length;
     requestAnimationFrame(() => {
       const t = textareaRef.current;
-      if (!t) return;
+      // Do not restore an old caret after the user has already typed again.
+      if (!t || t.value !== nextText) return;
       t.focus();
       t.setSelectionRange(nextCaret, nextCaret);
     });
@@ -242,7 +247,7 @@ export function PromptEditor({
     }
   }
 
-  const hoverUrl = hoverTag ? urlByPort.get(hoverTag.tag.portIndex) ?? '' : '';
+  const hoverInput = hoverTag ? inputByLabel.get(hoverTag.tag.label) : undefined;
 
   return (
     <div
@@ -257,6 +262,7 @@ export function PromptEditor({
           // module wins over utility classes — inline keeps the mirror pinned.
           style={{
             position: 'absolute',
+            zIndex: 2,
             inset: 0,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
@@ -320,7 +326,8 @@ export function PromptEditor({
             transform: `scale(${pickerAnchor.scale})`,
             transformOrigin: 'top left',
             borderRadius: 11,
-            overflow: 'hidden',
+            maxHeight: Math.max(80, Math.min(280, (window.innerHeight - pickerAnchor.top) / pickerAnchor.scale - 8)),
+            overflowY: 'auto',
             zIndex: 99999,
           }}
           onMouseDown={(e) => e.stopPropagation()}
@@ -337,7 +344,7 @@ export function PromptEditor({
             ) : (
               options.map((input, i) => (
                 <button
-                  key={input.portIndex}
+                  key={input.label}
                   type="button"
                   className="nodrag w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left"
                   style={{
@@ -350,7 +357,7 @@ export function PromptEditor({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pick(input)}
                 >
-                  <Thumb url={input.url} size={22} />
+                  <Thumb url={input.url} mediaType={input.mediaType} size={22} />
                   <span
                     className="text-[11px] font-semibold"
                     style={{ color: 'var(--tag-image-text)' }}
@@ -386,7 +393,7 @@ export function PromptEditor({
             boxShadow: 'var(--shadow-modal)',
           }}
         >
-          <Thumb url={hoverUrl} size={120} radius={8} />
+          <Thumb url={hoverInput?.url ?? ''} mediaType={hoverInput?.mediaType} size={120} radius={8} />
           <span
             className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
             style={{ color: 'var(--tag-image-text)', background: 'var(--tag-image-bg)' }}
@@ -400,7 +407,7 @@ export function PromptEditor({
   );
 }
 
-function Thumb({ url, size, radius = 5 }: { url: string; size: number; radius?: number }) {
+function Thumb({ url, size, radius = 5, mediaType = 'image' }: { url: string; size: number; radius?: number; mediaType?: 'image' | 'video' }) {
   return (
     <span
       className="flex items-center justify-center shrink-0 overflow-hidden"
@@ -413,9 +420,11 @@ function Thumb({ url, size, radius = 5 }: { url: string; size: number; radius?: 
       }}
     >
       {url ? (
-        <CanvasImage src={url} alt="" fill className="object-cover" style={{ width: size, height: size }} />
+        mediaType === 'video'
+          ? <CanvasVideo src={url} muted playsInline className="object-cover" style={{ width: size, height: size }} />
+          : <CanvasImage src={url} alt="" fill className="object-cover" style={{ width: size, height: size }} />
       ) : (
-        <ImageIcon size={Math.max(10, Math.round(size * 0.45))} />
+        mediaType === 'video' ? <Film size={Math.max(10, Math.round(size * 0.45))} /> : <ImageIcon size={Math.max(10, Math.round(size * 0.45))} />
       )}
     </span>
   );

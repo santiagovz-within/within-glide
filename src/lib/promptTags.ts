@@ -1,4 +1,4 @@
-// Inline media tagging for prompts: "@image1", "@image2", …
+// Inline media tagging for prompts: "@image1", "@video1", …
 //
 // A tag is a piece of prompt text ("@image2") plus a PromptTag record that pins
 // it to the reference port and connection it was picked from. The text alone is
@@ -15,6 +15,9 @@ export type { PromptReferenceStyle };
  * "email@image12". Group 1 is the 1-based number.
  */
 export const IMAGE_TAG_PATTERN = /(?<![\w])@image(\d+)(?![\w])/g;
+
+/** Modality and 1-based index, with the same standalone-token boundaries. */
+export const MEDIA_TAG_PATTERN = /(?<![\w])@(image|video)(\d+)(?![\w])/g;
 
 export function imageTagLabel(portIndex: number): string {
   return `image${portIndex + 1}`;
@@ -33,6 +36,7 @@ export function referenceHandleIndex(handle: string | null | undefined): number 
 
 /** A connected input the user can tag from the picker. */
 export interface TaggableInput {
+  mediaType?: 'image' | 'video';
   label: string;
   portIndex: number;
   /** Present for a generation node's own inputs; absent for positional (Prompt node) inputs. */
@@ -72,37 +76,43 @@ export function getTaggableInputs(
   return inputs.sort((a, b) => a.portIndex - b.portIndex);
 }
 
-/** Image Generation nodes fed by `promptNodeId`'s prompt output. */
+/** Generation nodes supporting reference tags fed by this prompt output. */
 export function getPromptTargets(promptNodeId: string, nodes: Node<NodeData>[], edges: Edge[]): Node<NodeData>[] {
   const targetIds = new Set(
     edges.filter((e) => e.source === promptNodeId && e.sourceHandle === 'prompt').map((e) => e.target),
   );
-  return nodes.filter((n) => targetIds.has(n.id) && n.type === 'imageGenNode');
+  return nodes.filter((n) => targetIds.has(n.id) && (n.type === 'imageGenNode' || n.type === 'referenceVideoNode'));
 }
 
 /**
  * Positional inputs for a Prompt node: the union of reference ports connected
- * on every Image Generation node it feeds. "@image2" then means port 2 on each
- * of those nodes. The thumbnail is the first image found for that port.
+ * on every image/reference-video generation node it feeds. Tags mean port N on each
+ * of those nodes. The thumbnail is the first media found for that modality and port.
  */
 export function getDownstreamTaggableInputs(
   promptNodeId: string,
   nodes: Node<NodeData>[],
   edges: Edge[],
+  resolveReferenceInputs?: (nodeId: string) => TaggableInput[],
 ): TaggableInput[] {
-  const byPort = new Map<number, TaggableInput>();
+  const byLabel = new Map<string, TaggableInput>();
   for (const target of getPromptTargets(promptNodeId, nodes, edges)) {
     const data = target.data as ImageGenNodeData;
-    for (const input of getTaggableInputs(target.id, edges, data.inputImageUrls)) {
-      const existing = byPort.get(input.portIndex);
+    const inputs = target.type === 'referenceVideoNode'
+      ? resolveReferenceInputs?.(target.id) ?? (['image', 'video'] as const).flatMap(kind =>
+        edges.filter(edge => edge.target === target.id && edge.targetHandle === `reference_${kind}s`)
+          .map((_, portIndex) => ({ label: `${kind}${portIndex + 1}`, portIndex, mediaType: kind, url: '' })))
+      : getTaggableInputs(target.id, edges, data.inputImageUrls);
+    for (const input of inputs) {
+      const existing = byLabel.get(input.label);
       if (!existing) {
-        byPort.set(input.portIndex, { label: input.label, portIndex: input.portIndex, url: input.url });
+        byLabel.set(input.label, { label: input.label, portIndex: input.portIndex, mediaType: input.mediaType, url: input.url });
       } else if (!existing.url && input.url) {
         existing.url = input.url;
       }
     }
   }
-  return [...byPort.values()].sort((a, b) => a.portIndex - b.portIndex);
+  return [...byLabel.values()].sort((a, b) => a.portIndex - b.portIndex);
 }
 
 export type PromptSegment =
@@ -115,8 +125,8 @@ export function segmentPrompt(text: string, tags: PromptTag[]): PromptSegment[] 
   const byLabel = new Map(tags.map((t) => [t.label, t]));
   const segments: PromptSegment[] = [];
   let last = 0;
-  for (const match of text.matchAll(IMAGE_TAG_PATTERN)) {
-    const tag = byLabel.get(`image${match[1]}`);
+  for (const match of text.matchAll(MEDIA_TAG_PATTERN)) {
+    const tag = byLabel.get(`${match[1]}${match[2]}`);
     if (!tag) continue;
     const start = match.index ?? 0;
     if (start > last) segments.push({ kind: 'text', text: text.slice(last, start) });
@@ -130,7 +140,7 @@ export function segmentPrompt(text: string, tags: PromptTag[]): PromptSegment[] 
 /** Labels ("image2") that appear as "@image2" in the text. */
 export function labelsInText(text: string): Set<string> {
   const labels = new Set<string>();
-  for (const match of text.matchAll(IMAGE_TAG_PATTERN)) labels.add(`image${match[1]}`);
+  for (const match of text.matchAll(MEDIA_TAG_PATTERN)) labels.add(`${match[1]}${match[2]}`);
   return labels;
 }
 
@@ -160,8 +170,8 @@ export function syncTagsWithText(
 
 /** Turn "@image2" back into plain "image2" everywhere in the text. */
 export function untagLabel(text: string, label: string): string {
-  const num = label.replace(/^image/, '');
-  return text.replace(new RegExp(`(?<![\\w])@image${num}(?![\\w])`, 'g'), `image${num}`);
+  return text.replace(MEDIA_TAG_PATTERN, (token, kind: string, num: string) =>
+    `${kind}${num}` === label ? label : token);
 }
 
 /**
@@ -315,11 +325,11 @@ export function reconcilePositionalTags(
   edges: Edge[],
 ): { prompt: string; tags: PromptTag[] } | null {
   if (tags.length === 0) return null;
-  const available = new Set(getDownstreamTaggableInputs(promptNodeId, nodes, edges).map((i) => i.portIndex));
+  const available = new Set(getDownstreamTaggableInputs(promptNodeId, nodes, edges).map((i) => i.label));
   let nextPrompt = prompt;
   const kept: PromptTag[] = [];
   for (const tag of tags) {
-    if (available.has(tag.portIndex)) kept.push(tag);
+    if (available.has(tag.label)) kept.push(tag);
     else nextPrompt = untagLabel(nextPrompt, tag.label);
   }
   if (kept.length === tags.length) return null;
@@ -341,4 +351,32 @@ export function findBrokenTags(
   const valid = reconcilePromptTags(nodeId, '', tags, edges)?.tags ?? tags;
   const validLabels = new Set(valid.map((t) => t.label));
   return tags.filter((t) => !validLabels.has(t.label) || !inputImageUrls?.[t.portIndex]);
+}
+
+/** Keep ordered media tags pinned, renumbering surviving connections in one pass. */
+export function reconcileMediaPromptTags(prompt: string, tags: PromptTag[], inputs: TaggableInput[]) {
+  const replacements = new Map<string, string>();
+  const kept: PromptTag[] = [];
+  let changed = false;
+  for (const tag of tags) {
+    const input = tag.edgeId
+      ? inputs.find(input => input.edgeId === tag.edgeId && input.sourceNodeId === tag.sourceNodeId
+        && input.label.startsWith(tag.label.startsWith('video') ? 'video' : 'image'))
+      : inputs.find(input => input.label === tag.label);
+    if (!input) {
+      replacements.set(tag.label, tag.label);
+      changed = true;
+      continue;
+    }
+    const next = tagFromInput(input);
+    kept.push(next);
+    replacements.set(tag.label, `@${next.label}`);
+    if (next.label !== tag.label || next.portIndex !== tag.portIndex || next.edgeId !== tag.edgeId
+      || next.sourceNodeId !== tag.sourceNodeId) changed = true;
+  }
+  if (!changed) return null;
+  return {
+    prompt: prompt.replace(MEDIA_TAG_PATTERN, (token, kind: string, num: string) => replacements.get(`${kind}${num}`) ?? token),
+    tags: kept,
+  };
 }

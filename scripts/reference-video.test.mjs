@@ -168,3 +168,69 @@ test('Pending-generation recovery includes the new node and keeps its original e
   assert.equal(generations[0].endpoint, endpoint);
   assert.equal(generations[0].requestId, 'request');
 });
+
+const tags = load('src/lib/promptTags.ts');
+test('Typed media tags use the shared chips and preserve independent image/video indexes', () => {
+  const inputs = [
+    { label: 'image1', portIndex: 0, edgeId: 'image-edge', sourceNodeId: 'image', url: 'a.png' },
+    { label: 'video1', portIndex: 0, edgeId: 'video-edge', sourceNodeId: 'video', url: 'v.mp4', mediaType: 'video' },
+  ];
+  const text = 'Animate @image1 like @video1; ignore email@video1 and @image1suffix.';
+  const live = tags.syncTagsWithText(text, [], inputs);
+  assert.equal(live.length, 2);
+  assert.deepEqual(tags.segmentPrompt(text, live).filter(s => s.kind === 'tag').map(s => s.text), ['@image1', '@video1']);
+  assert.equal(tags.syncTagsWithText(text, live, inputs), live);
+  assert.deepEqual(tags.syncTagsWithText('@video1', live, inputs).map(t => t.label), ['video1']);
+  assert.equal(tags.untagLabel('@video1 and @image1', 'video1'), 'video1 and @image1');
+  assert.equal(tags.compilePromptForModel('@image1', live, ['a.png']).prompt, 'the first image attached');
+});
+
+test('Tags remain tied to the same media after earlier references are removed or replaced', () => {
+  const original = [
+    { label: 'image1', portIndex: 0, edgeId: 'a', sourceNodeId: 'a', url: 'a.png' },
+    { label: 'image2', portIndex: 1, edgeId: 'b', sourceNodeId: 'b', url: 'b.png' },
+    { label: 'video1', portIndex: 0, edgeId: 'v', sourceNodeId: 'v', url: 'v.mp4', mediaType: 'video' },
+  ];
+  const text = '@image1 next to @image2, moving like @video1.';
+  const live = tags.syncTagsWithText(text, [], original);
+  const remaining = [{ ...original[1], portIndex: 0, label: 'image1' }, original[2]];
+  const fixed = tags.reconcileMediaPromptTags(text, live, remaining);
+  assert.equal(fixed.prompt, 'image1 next to @image1, moving like @video1.');
+  assert.deepEqual(fixed.tags.map(t => [t.label, t.edgeId]), [['image1', 'b'], ['video1', 'v']]);
+  assert.equal(tags.reconcileMediaPromptTags(fixed.prompt, fixed.tags, remaining), null);
+  const replaced = [{ ...remaining[0], edgeId: 'new', sourceNodeId: 'new' }, remaining[1]];
+  assert.equal(tags.reconcileMediaPromptTags(fixed.prompt, fixed.tags, replaced).prompt, 'image1 next to image1, moving like @video1.');
+});
+
+for (const [model, expectedPrompt] of [
+  ['seedance-2-5', 'Use @Image2 with @Video1 and @Image1.'],
+  ['seedance-2', 'Use @Image2 with @Video1 and @Image1.'],
+  ['google-omni-flash', 'Use <IMAGE_REF_1> with <VIDEO_REF_0> and <IMAGE_REF_0>.'],
+  ['minimax-h3-max', 'Use Image 2 with Video 1 and Image 1.'],
+  ['wan-3-prime', 'Use Image 2 with Video 1 and Image 1.'],
+]) {
+  test(`${model}: UI tags compile to API references while sending the actual files`, () => {
+    const { input } = build(request(model, { prompt: 'Use @image2 with @video1 and @image1.' }));
+    assert.equal(input.prompt, expectedPrompt);
+    const spec = models.find(m => m.id === model);
+    assert.deepEqual(input[spec.imageParam], ['https://example.com/a.png', 'https://example.com/b.png']);
+    assert.deepEqual(input[spec.videoParam], ['https://example.com/reference.mp4']);
+    assert.throws(() => build(request(model, { prompt: '@video2' })), /has no connected video/);
+    assert.throws(() => build(request(model, { prompt: '@image0' })), /has no connected image/);
+  });
+}
+
+test('Prompt nodes expose both modalities without conflating image1 and video1', () => {
+  const nodes = [{ id: 'ref', type: 'referenceVideoNode', data: {} }];
+  const edges = [
+    { id: 'p', source: 'prompt', sourceHandle: 'prompt', target: 'ref', targetHandle: 'prompt' },
+    { id: 'i', source: 'image', target: 'ref', targetHandle: 'reference_images' },
+    { id: 'v', source: 'video', target: 'ref', targetHandle: 'reference_videos' },
+  ];
+  const inputs = tags.getDownstreamTaggableInputs('prompt', nodes, edges);
+  assert.deepEqual(inputs.map(i => i.label), ['image1', 'video1']);
+  const live = tags.syncTagsWithText('@image1 @video1', [], inputs);
+  const fixed = tags.reconcilePositionalTags('prompt', '@image1 @video1', live, nodes, edges.filter(e => e.id !== 'v'));
+  assert.equal(fixed.prompt, '@image1 video1');
+  assert.deepEqual(fixed.tags.map(t => t.label), ['image1']);
+});

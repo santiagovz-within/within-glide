@@ -1,6 +1,11 @@
 import glassStyles from './ImageGenerationGlass.module.css';
 
 export function AspectRatioGlyph({ ratio }: { ratio: string }) {
+  if (['auto', 'adaptive'].includes(ratio.toLowerCase())) {
+    return <span className={glassStyles.aspectGlyphBox} aria-hidden>
+      <span className={glassStyles.aspectGlyph} style={{ width: 10, height: 10, borderRadius: '50%' }} />
+    </span>;
+  }
   const [width, height] = ratio.split(':').map(Number);
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return <span className={glassStyles.aspectGlyphBox} aria-hidden />;

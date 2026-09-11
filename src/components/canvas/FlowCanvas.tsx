@@ -27,7 +27,7 @@ import { ImageToPromptNode } from './nodes/ImageToPromptNode';
 import { ImageGenNode } from './nodes/ImageGenNode';
 import { ReferenceVideoNode } from './nodes/ReferenceVideoNode';
 import { getReferenceVideoModel } from '@/lib/api/referenceVideo';
-import { REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from './referenceVideoInputs';
+import { getReferenceVideoTaggableInputs, REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from './referenceVideoInputs';
 import { VideoGenNode } from './nodes/VideoGenNode';
 import { UpscaleNode } from './nodes/UpscaleNode';
 import { ModifyNode } from './nodes/ModifyNode';
@@ -49,9 +49,9 @@ import {
   getNodeMediaUrls,
   getSourceMediaType,
 } from './mediaOutputs';
-import type { NodeType, NodeData, ImageGenNodeData, ImageToPromptNodeData, MediaInputNodeData, PromptNodeData, PromptTag } from '@/types';
+import type { NodeType, NodeData, ReferenceVideoNodeData, ImageGenNodeData, ImageToPromptNodeData, MediaInputNodeData, PromptNodeData, PromptTag } from '@/types';
 import { getImageReferenceLimit } from '@/lib/api/models';
-import { reconcilePositionalTags, reconcilePromptTags, untagLabel } from '@/lib/promptTags';
+import { reconcileMediaPromptTags, reconcilePositionalTags, reconcilePromptTags, untagLabel } from '@/lib/promptTags';
 import { setPendingFile } from '@/lib/utils/pendingFiles';
 
 const nodeTypes = {
@@ -266,13 +266,19 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         // and its positional tags are validated there.
         if (d.promptConnected || !d.promptTags?.length) continue;
         const fixed = reconcilePromptTags(node.id, d.prompt ?? '', d.promptTags, edges);
-        if (fixed) updateNodeData(node.id, fixed);
+        if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
+      } else if (node.type === 'referenceVideoNode') {
+        const d = node.data as ReferenceVideoNodeData;
+        if (d.promptConnected || !d.promptTags?.length) continue;
+        const fixed = reconcileMediaPromptTags(d.prompt ?? '', d.promptTags,
+          getReferenceVideoTaggableInputs(node.id, allNodes, edges));
+        if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       } else if (node.type === 'promptNode') {
         const d = node.data as PromptNodeData;
         if (!d.promptTags?.length) continue;
         const fixed = reconcilePositionalTags(node.id, d.prompt ?? '', d.promptTags, allNodes, edges);
         // The Prompt node re-propagates to its targets when its tags change.
-        if (fixed) updateNodeData(node.id, fixed);
+        if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       }
     }
   }, [edges, updateNodeData]);

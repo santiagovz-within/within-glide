@@ -5,6 +5,7 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, Clock3, Download, Video, X } from 'lucide-react';
 import Image from 'next/image';
 import type { ReferenceVideoNodeData } from '@/types';
+import { reconcileMediaPromptTags } from '@/lib/promptTags';
 import { buildReferenceVideoInput, getReferenceVideoModel, REFERENCE_VIDEO_MODELS, referenceDurationOptions } from '@/lib/api/referenceVideo';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { generationJobId, useGenerationStore } from '@/lib/stores/generationStore';
@@ -12,9 +13,10 @@ import { startTrackedVideoGeneration } from '@/lib/generationTracker';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { cn } from '@/lib/utils/cn';
 import { CanvasImage, CanvasVideo } from '../CanvasMedia';
-import { getReferenceVideoInputs, REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from '../referenceVideoInputs';
+import { getReferenceVideoTaggableInputs, getReferenceVideoInputs, REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from '../referenceVideoInputs';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import { PromptEditor } from './PromptEditor';
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { AspectRatioGlyph } from './AspectRatioGlyph';
@@ -30,6 +32,10 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const isGenerating = useGenerationStore(state => !!state.jobs[activeJobId]);
   const config = getReferenceVideoModel(data.model) ?? REFERENCE_VIDEO_MODELS[0];
   const references = getReferenceVideoInputs(id, nodes, edges);
+  const taggable = getReferenceVideoTaggableInputs(id, nodes, edges);
+  const reconciled = data.promptConnected ? null : reconcileMediaPromptTags(data.prompt ?? '', data.promptTags ?? [], taggable);
+  const prompt = reconciled?.prompt ?? data.prompt ?? '';
+  const promptTags = reconciled?.tags ?? data.promptTags ?? [];
   const durationOptions = referenceDurationOptions(config);
   const duration = durationOptions.includes(data.referenceDuration ?? config.defaultDuration)
     ? data.referenceDuration ?? config.defaultDuration : config.defaultDuration;
@@ -80,7 +86,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
 
   function generationPayload() {
     return {
-      model: config.id, prompt: data.prompt ?? '', generationMode: 'reference-to-video',
+      model: config.id, prompt, generationMode: 'reference-to-video',
       aspectRatio, videoResolution: resolution, referenceDuration: duration,
       generateAudio: data.generateAudio ?? true,
       referenceImageUrls: references.images.map(reference => reference.url),
@@ -153,16 +159,17 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
       <TypedHandle type="target" position={Position.Left} id={REFERENCE_VIDEO_HANDLE} portType="video"
         offset={`${offsets[2]}px`} connected={references.videos.length > 0} title="Connect video references" />
 
-      <div ref={promptRef} className={cn(glassStyles.glassSurface, glassStyles.promptSection,
-        glassStyles.promptSurface, data.promptConnected && glassStyles.connectedTextPrompt)}>
-        {data.promptConnected ? (
-          <div className={cn(glassStyles.glassContent, glassStyles.connectedPrompt)} title={data.prompt}>Prompt connected</div>
-        ) : (
-          <textarea aria-label="Prompt" rows={3} placeholder="Describe the video and how to use your references…"
-            value={data.prompt ?? ''} onChange={event => updateData({ prompt: event.target.value })}
-            className={cn(glassStyles.glassContent, glassStyles.promptContent, 'outline-none nodrag nowheel')} />
-        )}
-      </div>
+      {data.promptConnected ? (
+        <div ref={promptRef} className={cn(glassStyles.glassSurface, glassStyles.promptSection,
+          glassStyles.promptSurface, glassStyles.connectedTextPrompt)}>
+          <div className={cn(glassStyles.glassContent, glassStyles.connectedPrompt)} title={prompt}>Prompt connected</div>
+        </div>
+      ) : (
+        <PromptEditor containerRef={promptRef} value={prompt} tags={promptTags} taggable={taggable}
+          placeholder="Describe the video. Type @ to add an image or video reference…"
+          emptyHint="Connect an image or video reference to tag it."
+          onChange={({ prompt, tags }) => updateData({ prompt, promptTags: tags })} />
+      )}
       <ModelSelect options={REFERENCE_VIDEO_MODELS} value={config.id} onChange={changeModel} />
       {config.audioParam && (
         <div className={glassStyles.rowBetween}>
@@ -175,22 +182,22 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         </div>
       )}
       <div className={glassStyles.grid3}>
-        <NodeSelect label="Aspect ratio" options={config.aspectRatios} value={aspectRatio}
-          onChange={value => updateData({ aspectRatio: value })} leadingIcon={<AspectRatioGlyph ratio={aspectRatio} />} />
+        <NodeSelect label="Aspect ratio" options={config.aspectRatios.map(value => ['auto', 'adaptive'].includes(value) ? 'Auto' : value)}
+          value={['auto', 'adaptive'].includes(aspectRatio) ? 'Auto' : aspectRatio}
+          onChange={value => updateData({ aspectRatio: value === 'Auto' ? config.defaultAspectRatio : value })}
+          leadingIcon={<AspectRatioGlyph ratio={aspectRatio} />} optionIcon={value => <AspectRatioGlyph ratio={value} />} />
         <NodeSelect label="Seconds to generate" options={durationOptions.map(value => value === 'auto' ? 'Auto' : `${value}s`)}
           value={duration === 'auto' ? 'Auto' : `${duration}s`} leadingIcon={<Clock3 size={10} />}
           onChange={value => updateData({ referenceDuration: value === 'Auto' ? 'auto' : Number.parseInt(value, 10) })} />
         <NodeSelect label="Resolution" options={config.resolutions} value={resolution}
           onChange={value => updateData({ videoResolution: value as ReferenceVideoNodeData['videoResolution'] })} />
       </div>
-      <p className={cn(glassStyles.microLabel, 'nodrag')} style={{ textTransform: 'none' }}>{config.referenceHint}</p>
+      <p className={cn(glassStyles.microLabel, 'nodrag')} style={{ textTransform: 'none' }}>Type @ to choose a connected image or video. References are included automatically.</p>
 
       {(['image', 'video'] as const).map(kind => {
         const items = kind === 'image' ? references.images : references.videos;
         const limit = kind === 'image' ? config.maxImages : config.maxVideos;
-        const referenceLabel = (index: number) => config.id === 'google-omni-flash'
-          ? `<${kind.toUpperCase()}_REF_${index}>`
-          : `${config.id.startsWith('seedance') ? '@' : ''}${kind === 'image' ? 'Image' : 'Video'}${config.id.startsWith('seedance') ? '' : ' '}${index + 1}`;
+        const referenceLabel = (index: number) => `@${kind}${index + 1}`;
         return (
           <div key={kind} className={glassStyles.referenceSection}>
             <div ref={kind === 'image' ? imageRef : videoRef}

@@ -10,6 +10,7 @@ import type { PromptNodeData, PaletteColor } from '@/types';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { cn } from '@/lib/utils/cn';
 import glassStyles from './ImageGenerationGlass.module.css';
+import { getReferenceVideoTaggableInputs } from '../referenceVideoInputs';
 import { PromptEditor } from './PromptEditor';
 import { getDownstreamTaggableInputs, syncTagsWithText } from '@/lib/promptTags';
 import type { PromptTag } from '@/types';
@@ -149,7 +150,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   // "@imageN" tags are positional here: port N on every Image Generation node
   // this prompt feeds. The picker lists the union of those nodes' inputs.
   const promptTags: PromptTag[] = data.promptTags ?? [];
-  const taggableInputs = getDownstreamTaggableInputs(id, storeNodes, storeEdges);
+  const taggableInputs = getDownstreamTaggableInputs(id, storeNodes, storeEdges, targetId => getReferenceVideoTaggableInputs(targetId, storeNodes, storeEdges));
   const promptTagCount = promptTags.length;
   const lastTagCount = useRef(promptTagCount);
 
@@ -329,7 +330,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
         onFocusChange={(focused) => (focused ? handleFocus() : handleBlur())}
         alwaysOverlay={hasColorRefs}
         renderText={hasColorRefs ? (text) => <ColorTextOverlay text={text} palette={palette} /> : undefined}
-        emptyHint="Connect this prompt to an Image Generation node with images to tag them."
+        emptyHint="Connect this prompt to an Image Generation or Reference to Video node with media references to tag them."
       />
 
       {/* Model + length selectors */}

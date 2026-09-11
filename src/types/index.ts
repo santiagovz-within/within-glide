@@ -163,7 +163,7 @@ export interface GenerationFailure {
 }
 
 /**
- * An inline `@imageN` reference inside a prompt. `label` is the text without
+ * An inline `@imageN` or `@videoN` reference inside a prompt. `label` is the text without
  * the "@" (e.g. "image1"); `portIndex` is the 0-based reference port.
  *
  * On an Image Generation node the tag is *pinned*: `edgeId`/`sourceNodeId`
@@ -225,6 +225,7 @@ export interface VideoGenNodeData extends Record<string, unknown> {
 }
 
 export interface ReferenceVideoNodeData extends VideoGenNodeData {
+  promptTags?: PromptTag[];
   referenceDuration?: number | 'auto';
 }
 

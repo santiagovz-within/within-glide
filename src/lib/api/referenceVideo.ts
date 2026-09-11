@@ -130,7 +130,7 @@ export function buildReferenceVideoInput(body: Record<string, unknown>) {
     throw new Error(`${model.name} accepts up to ${model.maxReferences} references in total.`);
   }
   const input: Record<string, unknown> = {
-    prompt,
+    prompt: compileReferenceVideoPrompt(prompt, model.id, imageUrls, videoUrls),
     aspect_ratio: aspectRatio,
     resolution,
     duration: duration === 'auto' ? (model.autoDuration === 'null' ? null : 'auto')
@@ -142,4 +142,18 @@ export function buildReferenceVideoInput(body: Record<string, unknown>) {
     ...(model.id === 'minimax-h3-max' ? { prompt_expansion_mode: 'balanced' } : {}),
   };
   return { endpoint: model.endpoint, input };
+}
+
+/** The arrays and the prompt share modality-specific positions; URLs remain real media inputs. */
+export function compileReferenceVideoPrompt(prompt: string, model: string, imageUrls: string[], videoUrls: string[]) {
+  return prompt.replace(/(?<![\w])@(image|video)(\d+)(?![\w])/g, (_token, kind: string, number: string) => {
+    const index = Number(number) - 1;
+    const urls = kind === 'image' ? imageUrls : videoUrls;
+    if (!Number.isInteger(index) || index < 0 || !urls[index]) {
+      throw new Error(`@${kind}${number} has no connected ${kind}. Connect it or remove the tag.`);
+    }
+    if (model === 'google-omni-flash') return `<${kind.toUpperCase()}_REF_${index}>`;
+    const modality = kind === 'image' ? 'Image' : 'Video';
+    return model.startsWith('seedance') ? `@${modality}${index + 1}` : `${modality} ${index + 1}`;
+  });
 }
