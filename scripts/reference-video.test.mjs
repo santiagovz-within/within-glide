@@ -51,7 +51,8 @@ for (const [id, endpoint, imageField, videoField, audioField] of expected) {
   });
   test(`${id}: settings boundaries, counts, incomplete references, image-only and video-only`, () => {
     const model = models.find(m => m.id === id);
-    for (const referenceDuration of [model.minDuration, model.maxDuration]) {
+    const choices = config.referenceDurationOptions(model);
+    for (const referenceDuration of [choices[0], choices.at(-1)]) {
       assert.doesNotThrow(() => build(request(id, { referenceDuration })));
     }
     for (const referenceDuration of [model.minDuration - 1, model.maxDuration + 1, 5.5, '5', NaN]) {
@@ -71,10 +72,20 @@ for (const [id, endpoint, imageField, videoField, audioField] of expected) {
     assert.doesNotThrow(() => build(request(id, { referenceVideoUrls: [] })));
   });
 }
-test('Auto duration matches each API and unsupported models reject it', () => {
-  for (const model of ['seedance-2', 'seedance-2-5']) assert.equal(build(request(model, { referenceDuration: 'auto' })).input.duration, 'auto');
-  assert.equal(build(request('wan-3-prime', { referenceDuration: 'auto' })).input.duration, null);
-  for (const model of ['google-omni-flash', 'minimax-h3-max']) assert.throws(() => build(request(model, { referenceDuration: 'auto' })), /duration/);
+test('Curated duration menus expose only the requested times and reject Auto', () => {
+  const full = [4, 5, 8, 10, 12, 15, 20, 25, 30];
+  for (const id of ['seedance-2-5', 'wan-3-prime', 'seedance-2']) {
+    const model = models.find(model => model.id === id);
+    const expected = id === 'seedance-2' ? full.filter(seconds => seconds <= 15) : full;
+    assert.deepEqual(config.referenceDurationOptions(model), expected);
+    for (const referenceDuration of expected) assert.doesNotThrow(() => build(request(id, { referenceDuration })));
+    for (const referenceDuration of ['auto', 2, 3, 6, 7, 9, 11, 13, 14, 16, 21, 29]) {
+      assert.throws(() => build(request(id, { referenceDuration })), /duration/);
+    }
+    assert.equal(Number(build(request(id)).input.duration), 5);
+  }
+  assert.deepEqual(config.referenceDurationOptions(models.find(model => model.id === 'google-omni-flash')), [3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(config.referenceDurationOptions(models.find(model => model.id === 'minimax-h3-max')), [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
   assert.throws(() => build(request('kling-3-pro')), /Unknown/);
 });
 

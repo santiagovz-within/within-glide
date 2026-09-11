@@ -9,6 +9,8 @@ export interface ReferenceVideoModel {
   minDuration: number;
   maxDuration: number;
   defaultDuration: number | 'auto';
+  /** Curated duration choices shown by this node and accepted on submission. */
+  durationOptions?: number[];
   defaultAspectRatio: string;
   defaultResolution: string;
   autoDuration?: 'auto' | 'null';
@@ -22,13 +24,16 @@ export interface ReferenceVideoModel {
   videoHint: string;
 }
 
+const REFERENCE_DURATION_CHOICES = [4, 5, 8, 10, 12, 15, 20, 25, 30];
+
 const seedanceAspects = ['auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
 export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
   {
     id: 'seedance-2-5', name: 'Seedance 2.5',
     endpoint: 'bytedance/seedance-2.5/reference-to-video',
     aspectRatios: seedanceAspects, resolutions: ['480p', '720p', '1080p'],
-    minDuration: 4, maxDuration: 30, defaultDuration: 'auto',
+    minDuration: 4, maxDuration: 30, defaultDuration: 5,
+    durationOptions: REFERENCE_DURATION_CHOICES,
     defaultAspectRatio: 'auto', defaultResolution: '720p', autoDuration: 'auto',
     audioParam: 'generate_audio', imageParam: 'image_urls', videoParam: 'video_urls',
     maxImages: 30, maxVideos: 10, maxReferences: 50,
@@ -39,7 +44,8 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
     id: 'seedance-2', name: 'Seedance 2.0',
     endpoint: 'bytedance/seedance-2.0/reference-to-video',
     aspectRatios: seedanceAspects, resolutions: ['480p', '720p', '1080p', '4k'],
-    minDuration: 4, maxDuration: 15, defaultDuration: 'auto',
+    minDuration: 4, maxDuration: 15, defaultDuration: 5,
+    durationOptions: REFERENCE_DURATION_CHOICES.filter(seconds => seconds <= 15),
     defaultAspectRatio: 'auto', defaultResolution: '720p', autoDuration: 'auto',
     audioParam: 'generate_audio', imageParam: 'image_urls', videoParam: 'video_urls',
     maxImages: 9, maxVideos: 3, maxReferences: 12,
@@ -75,6 +81,7 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
     aspectRatios: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16'],
     resolutions: ['480p', '720p', '1080p'],
     minDuration: 2, maxDuration: 30, defaultDuration: 5,
+    durationOptions: REFERENCE_DURATION_CHOICES,
     defaultAspectRatio: 'adaptive', defaultResolution: '1080p', autoDuration: 'null',
     audioParam: 'audio', imageParam: 'reference_image_urls', videoParam: 'reference_video_urls',
     maxImages: 10, maxVideos: 5, maxReferences: 15,
@@ -88,6 +95,7 @@ export function getReferenceVideoModel(model: string) {
 }
 
 export function referenceDurationOptions(model: ReferenceVideoModel): Array<number | 'auto'> {
+  if (model.durationOptions) return model.durationOptions;
   return [
     ...(model.autoDuration ? ['auto' as const] : []),
     ...Array.from({ length: model.maxDuration - model.minDuration + 1 }, (_, i) => model.minDuration + i),
@@ -110,7 +118,7 @@ export function buildReferenceVideoInput(body: Record<string, unknown>) {
     throw new Error(`${model.name} does not support that resolution.`);
   }
   if (!referenceDurationOptions(model).includes(duration as number | 'auto')) {
-    throw new Error(`${model.name} duration must be ${model.minDuration}–${model.maxDuration} seconds${model.autoDuration ? ' or Auto' : ''}.`);
+    throw new Error(`${model.name} duration must be one of: ${referenceDurationOptions(model).map(value => value === 'auto' ? 'Auto' : `${value}s`).join(', ')}.`);
   }
   if (body.generateAudio !== undefined && typeof body.generateAudio !== 'boolean') {
     throw new Error('Generate audio must be a boolean.');
