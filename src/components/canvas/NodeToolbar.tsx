@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useLayoutEffect } from 'react';
-import { Type, Aperture, Film, Zap, Grid, Layers, Sliders, Pointer, Wand2, Clapperboard, Scissors, FileImage } from 'lucide-react';
+import { Type, Aperture, Film, Video, Zap, Grid, Layers, Sliders, Pointer, Wand2, Clapperboard, Scissors, FileImage } from 'lucide-react';
 import type { NodeType } from '@/types';
 
 interface NodeOption {
@@ -16,7 +16,7 @@ const NODE_OPTIONS: NodeOption[] = [
   { type: 'mediaInputNode',    label: 'Media Input',      icon: <FileImage size={14} />,  category: 'Input'    },
   { type: 'imageToPromptNode', label: 'Image to Prompt',  icon: <Wand2 size={14} />,      category: 'Input'    },
   { type: 'imageGenNode',      label: 'Image Generation', icon: <Aperture size={14} />,   category: 'Generate' },
-  { type: 'referenceVideoNode', label: 'Reference to Video', icon: <Film size={14} />, category: 'Generate' },
+  { type: 'referenceVideoNode', label: 'Reference to Video', icon: <Video size={14} />, category: 'Generate' },
   { type: 'videoGenNode',      label: 'Video Generation', icon: <Film size={14} />,       category: 'Generate' },
   { type: 'upscaleMediaNode',  label: 'Upscale Media',    icon: <Zap size={14} />,      category: 'Enhance'  },
   { type: 'modifyNode',        label: 'Modify',           icon: <Sliders size={14} />,  category: 'Enhance'  },
