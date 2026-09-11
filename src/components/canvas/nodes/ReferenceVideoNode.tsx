@@ -2,7 +2,8 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Position, type NodeProps } from '@xyflow/react';
-import { ChevronLeft, ChevronRight, Clock3, Download, Film, Video, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock3, Download, Video, X } from 'lucide-react';
+import Image from 'next/image';
 import type { ReferenceVideoNodeData } from '@/types';
 import { buildReferenceVideoInput, getReferenceVideoModel, REFERENCE_VIDEO_MODELS, referenceDurationOptions } from '@/lib/api/referenceVideo';
 import { useFlowStore } from '@/lib/stores/flowStore';
@@ -127,7 +128,8 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
       <button onClick={generate} disabled={isGenerating || hasFailure || !!validationMessage || !currentFlow}
         className={cn(glassStyles.glassSurface, glassStyles.button, glassStyles.generateButton, 'nodrag disabled:opacity-40')}>
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
-          <Film size={12} />{isGenerating ? 'Generating…' : 'Generate'}
+          <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
+          {isGenerating ? 'Generating…' : 'Generate'}
         </span>
       </button>
       {hasFailure && <RegenerateGate onChangesApplied={() => updateData({ status: 'idle', errorMessage: undefined, errorRequestId: undefined })} />}
