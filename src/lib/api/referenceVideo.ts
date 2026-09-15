@@ -1,9 +1,13 @@
+import type { FalPricingRule } from '@/lib/falPricing';
+
 // Source schemas: https://fal.ai/models/{endpoint}/api (including OpenAPI bounds).
+// Pricing: https://fal.ai/models/{endpoint} (live base rates come from the pricing API).
 // Kept separate from text/image-to-video: references do not select a start frame.
 export interface ReferenceVideoModel {
   id: string;
   name: string;
   endpoint: string;
+  pricing: FalPricingRule;
   aspectRatios: string[];
   resolutions: string[];
   minDuration: number;
@@ -31,6 +35,10 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
   {
     id: 'seedance-2-5', name: 'Seedance 2.5',
     endpoint: 'bytedance/seedance-2.5/reference-to-video',
+    pricing: {
+      kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000,
+      resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 0.0234 / 0.0214 },
+    },
     aspectRatios: seedanceAspects, resolutions: ['480p', '720p', '1080p'],
     minDuration: 4, maxDuration: 30, defaultDuration: 5,
     durationOptions: REFERENCE_DURATION_CHOICES,
@@ -43,6 +51,10 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
   {
     id: 'seedance-2', name: 'Seedance 2.0',
     endpoint: 'bytedance/seedance-2.0/reference-to-video',
+    pricing: {
+      kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000,
+      resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 1, '4k': 0.008 / 0.014 },
+    },
     aspectRatios: seedanceAspects, resolutions: ['480p', '720p', '1080p', '4k'],
     minDuration: 4, maxDuration: 15, defaultDuration: 5,
     durationOptions: REFERENCE_DURATION_CHOICES.filter(seconds => seconds <= 15),
@@ -55,6 +67,7 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
   {
     id: 'google-omni-flash', name: 'Gemini Omni Flash 1.1',
     endpoint: 'google/gemini-omni-flash/v1.1/reference-to-video',
+    pricing: { kind: 'video-seconds', resolutionMultipliers: { '360p': 0.3, '720p': 1, '1080p': 1.5, '4k': 3 } },
     aspectRatios: ['16:9', '9:16'], resolutions: ['360p', '720p', '1080p', '4k'],
     minDuration: 3, maxDuration: 10, defaultDuration: 8,
     defaultAspectRatio: '16:9', defaultResolution: '720p',
@@ -66,6 +79,15 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
   {
     id: 'minimax-h3-max', name: 'MiniMax H3 Max',
     endpoint: 'minimax/h3-max/reference-to-video',
+    pricing: {
+      kind: 'video-reference-tokens',
+      resolutionMultipliers: { '480P': 5 / 8, '768P': 1, '1080P': 2 },
+      includedReferenceTokens: 4096,
+      // $0.02/1K reference tokens relative to the endpoint's $0.08/s base rate.
+      referenceTokenRateMultiplier: 0.02 / 0.08 / 1000,
+      // Fal publishes 480p/768p reference rates; approximate 1080p by pixel area.
+      referenceVideoTokensPerSecond: { '480P': 2886, '768P': 7459.2, '1080P': 7459.2 * (1080 / 768) ** 2 },
+    },
     aspectRatios: ['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
     resolutions: ['480P', '768P', '1080P'],
     minDuration: 5, maxDuration: 15, defaultDuration: 5,
@@ -78,6 +100,8 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
   {
     id: 'wan-3-prime', name: 'Wan 3 Prime',
     endpoint: 'alibaba/wan-3.0-prime/reference-to-video',
+    // Use the same 1080p pricing API base rate as Wan's other video endpoints.
+    pricing: { kind: 'video-seconds', resolutionMultipliers: { '480p': 0.068 / 0.28, '720p': 0.14 / 0.28, '1080p': 1 } },
     aspectRatios: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16'],
     resolutions: ['480p', '720p', '1080p'],
     minDuration: 2, maxDuration: 30, defaultDuration: 5,

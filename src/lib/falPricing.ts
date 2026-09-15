@@ -54,6 +54,19 @@ export type FalPricingRule =
       resolutionRateMultipliers?: Record<string, number>;
     }
   | { kind: 'video-frame-megapixels' }
+  | {
+      kind: 'seedance-reference';
+      fps: number;
+      tokensPerUnit: number;
+      resolutionRateMultipliers: Record<string, number>;
+    }
+  | {
+      kind: 'video-reference-tokens';
+      resolutionMultipliers: Record<string, number>;
+      includedReferenceTokens: number;
+      referenceTokenRateMultiplier: number;
+      referenceVideoTokensPerSecond: Record<string, number>;
+    }
   | { kind: 'topaz-video' };
 
 export interface FalMediaMetadata {
@@ -71,6 +84,9 @@ export interface FalCostEstimateInput {
   outputCount?: number;
   /** Reference/style images attached to the request, when the rate depends on it. */
   referenceImageCount?: number;
+  /** Null entries mean reference metadata is still loading or unavailable. */
+  referenceImages?: Array<FalMediaMetadata | null>;
+  referenceVideos?: Array<FalMediaMetadata | null>;
   scaleFactor?: number;
   /** Sub-model selected for endpoints that expose one (e.g. Topaz "Wonder 3"). */
   modelVariant?: string;
@@ -166,6 +182,28 @@ export function getVideoDimensions(
 
 function megapixels(width: number, height: number): number {
   return width * height / 1_000_000;
+}
+
+/** Seedance preserves roughly the same pixel area across aspect ratios. */
+function getSeedanceReferenceDimensions(aspectRatio = 'auto', resolution = '720p'): FalMediaMetadata | null {
+  // Source: https://fal.ai/models/bytedance/seedance-2.5/reference-to-video
+  const sizes: Record<string, [number, number]> = resolution === '480p'
+    ? { '21:9': [992, 432], '16:9': [864, 496], '4:3': [752, 560], '1:1': [640, 640], '3:4': [560, 752], '9:16': [496, 864] }
+    : { '21:9': [1470, 630], '16:9': [1280, 720], '4:3': [1112, 834], '1:1': [960, 960], '3:4': [834, 1112], '9:16': [720, 1280] };
+  // Auto's eventual ratio is model-selected; use the standard 16:9 area for estimates.
+  const size = sizes[aspectRatio === 'auto' ? '16:9' : aspectRatio];
+  if (!size) return null;
+  const scale = resolution === '1080p' ? 1.5 : resolution === '4k' ? 3 : 1;
+  return { width: Math.round(size[0] * scale), height: Math.round(size[1] * scale) };
+}
+
+function referenceVideoDuration(videos: FalCostEstimateInput['referenceVideos']): number | null {
+  let duration = 0;
+  for (const video of videos ?? []) {
+    if (!positive(video?.duration)) return null;
+    duration += video.duration;
+  }
+  return duration;
 }
 
 function getOutputDimensions(input: FalCostEstimateInput): FalMediaMetadata | null {
@@ -288,6 +326,36 @@ export function estimateFalCost(
       if (!positive(rateMultiplier)) break;
       const tokens = dimensions.width * dimensions.height * input.duration * rule.fps / 1024;
       billableUnits = (tokens / rule.tokensPerUnit) * rateMultiplier * outputCount;
+      break;
+    }
+
+    case 'seedance-reference': {
+      if (!positive(input.duration)) break;
+      const dimensions = getSeedanceReferenceDimensions(input.aspectRatio, input.resolution);
+      const referenceDuration = referenceVideoDuration(input.referenceVideos);
+      const rateMultiplier = rule.resolutionRateMultipliers[input.resolution ?? ''];
+      if (!dimensions || referenceDuration === null || !positive(rateMultiplier)) break;
+      // Video references bill input + output seconds at 60% of the base token rate.
+      const tokens = dimensions.width * dimensions.height * (input.duration + referenceDuration) * rule.fps / 1024;
+      billableUnits = tokens / rule.tokensPerUnit * rateMultiplier * (referenceDuration > 0 ? 0.6 : 1) * outputCount;
+      break;
+    }
+
+    case 'video-reference-tokens': {
+      if (!positive(input.duration)) break;
+      const resolutionMultiplier = rule.resolutionMultipliers[input.resolution ?? ''];
+      const referenceDuration = referenceVideoDuration(input.referenceVideos);
+      if (!positive(resolutionMultiplier) || referenceDuration === null) break;
+      let imageTokens = 0;
+      for (const image of input.referenceImages ?? []) {
+        if (!image || !positive(image.width) || !positive(image.height)) return null;
+        imageTokens += image.width * image.height / 1024;
+      }
+      const videoTokenRate = rule.referenceVideoTokensPerSecond[input.resolution ?? ''];
+      if (referenceDuration > 0 && !positive(videoTokenRate)) break;
+      const referenceTokens = imageTokens + referenceDuration * (videoTokenRate ?? 0);
+      billableUnits = (input.duration * resolutionMultiplier
+        + Math.max(0, referenceTokens - rule.includedReferenceTokens) * rule.referenceTokenRateMultiplier) * outputCount;
       break;
     }
 

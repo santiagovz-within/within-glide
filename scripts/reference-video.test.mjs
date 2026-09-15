@@ -245,3 +245,73 @@ test('Prompt nodes expose both modalities without conflating image1 and video1',
   assert.equal(fixed.prompt, '@image1 video1');
   assert.deepEqual(fixed.tags.map(t => t.label), ['image1']);
 });
+
+const { estimateFalCost, formatFalCostEstimate } = load('src/lib/falPricing.ts');
+const pricingModels = load('src/lib/api/models.ts', {
+  '@/lib/promptTags': tags,
+  './referenceVideo': config,
+  '@/lib/layerize': { LAYERIZE_ENDPOINT: 'fal-ai/qwen-image-layered' },
+});
+const basePrices = {
+  'seedance-2-5': 0.0214, 'seedance-2': 0.014,
+  'google-omni-flash': 0.10, 'minimax-h3-max': 0.08, 'wan-3-prime': 0.28,
+};
+function estimate(modelId, changes = {}) {
+  const model = models.find(model => model.id === modelId);
+  return estimateFalCost(
+    { endpointId: model.endpoint, unitPrice: basePrices[modelId], currency: 'USD', unit: 'unit' },
+    pricingModels.getFalPricingRule(model.endpoint),
+    { endpoint: model.endpoint, resolution: model.defaultResolution, aspectRatio: model.defaultAspectRatio,
+      duration: 5, referenceImages: [], referenceVideos: [], ...changes },
+  );
+}
+
+test('All reference models are registered for pricing and estimate every offered resolution/aspect ratio', () => {
+  for (const model of models) {
+    assert.ok(pricingModels.getFalPricingEndpointIds().includes(model.endpoint));
+    for (const resolution of model.resolutions) {
+      for (const aspectRatio of model.aspectRatios) {
+        const cost = estimate(model.id, { resolution, aspectRatio });
+        assert.ok(Number.isFinite(cost) && cost > 0, `${model.id}: ${resolution} ${aspectRatio}`);
+      }
+    }
+    assert.equal(estimate(model.id, { duration: undefined }), null);
+  }
+});
+
+test('Seedance bills combined input/output seconds with the reference video discount', () => {
+  const clip = { width: 1280, height: 720, duration: 8 };
+  assert.equal(formatFalCostEstimate(estimate('seedance-2-5', { duration: 10 })), '~$4.62');
+  assert.equal(formatFalCostEstimate(estimate('seedance-2-5', { duration: 10, referenceVideos: [clip] })), '~$4.99');
+  assert.equal(formatFalCostEstimate(estimate('seedance-2-5', { duration: 30, referenceVideos: [{ ...clip, duration: 10 }] })), '~$11.09');
+  assert.equal(estimate('seedance-2', { referenceVideos: [clip, clip] }), estimate('seedance-2', { referenceVideos: [{ ...clip, duration: 16 }] }));
+  // Portrait must keep the same pixel area as landscape, including the default Auto estimate.
+  assert.equal(estimate('seedance-2', { aspectRatio: '9:16' }), estimate('seedance-2'));
+  assert.ok(estimate('seedance-2', { resolution: '480p' }) < estimate('seedance-2'));
+  assert.ok(estimate('seedance-2', { resolution: '4k' }) > estimate('seedance-2', { resolution: '1080p' }));
+  assert.equal(estimate('seedance-2', { generateAudio: false }), estimate('seedance-2', { generateAudio: true }));
+});
+
+test('MiniMax pools image/video reference tokens and deducts the included allowance once', () => {
+  const image = { width: 1024, height: 1024 };
+  const video = { width: 1280, height: 720, duration: 5 };
+  assert.equal(formatFalCostEstimate(estimate('minimax-h3-max', { referenceImages: [image, image], referenceVideos: [video] })), '~$1.10');
+  assert.equal(estimate('minimax-h3-max', { referenceImages: Array(4).fill(image) }), 0.4);
+  assert.equal(formatFalCostEstimate(estimate('minimax-h3-max', { referenceImages: Array(5).fill(image) })), '~$0.42');
+  assert.equal(formatFalCostEstimate(estimate('minimax-h3-max', { resolution: '1080P' })), '~$0.80');
+});
+
+test('Reference metadata failures never display an incomplete total; per-second models need no metadata', () => {
+  for (const referenceVideos of [[null], [{ width: 1, height: 1 }], [{ width: 1, height: 1, duration: NaN }]]) {
+    for (const model of ['seedance-2', 'seedance-2-5', 'minimax-h3-max']) {
+      assert.equal(estimate(model, { referenceVideos }), null);
+    }
+  }
+  assert.equal(estimate('minimax-h3-max', { referenceImages: [null] }), null);
+  assert.equal(formatFalCostEstimate(estimate('google-omni-flash', { duration: 10, resolution: '360p', referenceVideos: [null] })), '~$0.30');
+  assert.equal(formatFalCostEstimate(estimate('google-omni-flash', { duration: 10, resolution: '1080p' })), '~$1.50');
+  assert.equal(formatFalCostEstimate(estimate('wan-3-prime', { resolution: '720p', referenceVideos: [null] })), '~$0.70');
+  assert.equal(formatFalCostEstimate(estimate('wan-3-prime', { resolution: '480p' })), '~$0.34');
+  assert.equal(estimateFalCost(undefined, models[0].pricing, { endpoint: models[0].endpoint }), null);
+  assert.equal(formatFalCostEstimate(null), null);
+});

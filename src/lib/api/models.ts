@@ -246,6 +246,9 @@ export const FAL_NODE_ENDPOINTS = {
 } as const;
 
 export function getFalPricingRule(endpoint: string): FalPricingRule | undefined {
+  const referenceModel = REFERENCE_VIDEO_MODELS.find(model => model.endpoint === endpoint);
+  if (referenceModel) return referenceModel.pricing;
+
   for (const config of Object.values(FAL_MODELS)) {
     if (
       config.endpoint === endpoint

@@ -12,6 +12,7 @@ import { generationJobId, useGenerationStore } from '@/lib/stores/generationStor
 import { startTrackedVideoGeneration } from '@/lib/generationTracker';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { cn } from '@/lib/utils/cn';
+import { useMediaMetadata } from '@/lib/useMediaMetadata';
 import { CanvasImage, CanvasVideo } from '../CanvasMedia';
 import { getReferenceVideoTaggableInputs, getReferenceVideoInputs, REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from '../referenceVideoInputs';
 import { NodeWrapper } from './NodeWrapper';
@@ -21,6 +22,7 @@ import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { AspectRatioGlyph } from './AspectRatioGlyph';
 import { GenerationPreview } from './GenerationPreview';
+import FalCostEstimate from './FalCostEstimate';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
 import glassStyles from './ImageGenerationGlass.module.css';
 
@@ -42,6 +44,23 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const aspectRatio = config.aspectRatios.includes(data.aspectRatio) ? data.aspectRatio : config.defaultAspectRatio;
   const resolution = data.videoResolution && config.resolutions.includes(data.videoResolution)
     ? data.videoResolution : config.defaultResolution;
+  const pricesReferenceImages = config.pricing.kind === 'video-reference-tokens';
+  const pricesReferenceVideos = pricesReferenceImages || config.pricing.kind === 'seedance-reference';
+  const imageMetadata = useMediaMetadata(
+    pricesReferenceImages ? references.images.map(reference => reference.url ?? '') : [], 'image',
+  );
+  const videoMetadata = useMediaMetadata(
+    pricesReferenceVideos ? references.videos.map(reference => reference.url ?? '') : [], 'video',
+  );
+  const costEstimateInput = {
+    endpoint: config.endpoint,
+    aspectRatio,
+    resolution,
+    duration: typeof duration === 'number' ? duration : undefined,
+    generateAudio: data.generateAudio ?? true,
+    referenceImages: references.images.map(reference => imageMetadata.get(reference.url ?? '') ?? null),
+    referenceVideos: references.videos.map(reference => videoMetadata.get(reference.url ?? '') ?? null),
+  };
   const videoHistory = data.videoHistory ?? [];
   const [historyIndex, setHistoryIndex] = useState(Math.max(0, videoHistory.length - 1));
   const [historyLength, setHistoryLength] = useState(videoHistory.length);
@@ -136,6 +155,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
           {isGenerating ? 'Generating…' : 'Generate'}
+          <FalCostEstimate input={costEstimateInput} />
         </span>
       </button>
       {hasFailure && <RegenerateGate onChangesApplied={() => updateData({ status: 'idle', errorMessage: undefined, errorRequestId: undefined })} />}
