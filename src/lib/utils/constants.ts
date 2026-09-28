@@ -5,6 +5,7 @@ export const ASPECT_RATIOS = [
   { value: '4:3', label: '4:3 Standard' },
   { value: '3:4', label: '3:4 Portrait' },
   { value: '4:5', label: '4:5 Instagram' },
+  { value: '5:4', label: '5:4 Landscape' },
   { value: '21:9', label: '21:9 Cinematic' },
 ] as const;
 

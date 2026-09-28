@@ -16,12 +16,14 @@ export function getGptImage25Size(
   const minPixels = 655_360;
   const maxPixels = 8_294_400;
   const scale = Math.sqrt(Math.min(maxPixels, Math.max(minPixels, pixels)) / pixels);
-  if (ratio === 4 / 5) {
-    // Exact 4:5 with both edges divisible by 16 requires 64×80 blocks.
+  if (ratio === 4 / 5 || ratio === 5 / 4) {
+    // Exact 4:5 / 5:4 with both edges divisible by 16 requires 64×80 / 80×64 blocks.
     // Fit whole blocks within the tier and pixel cap instead of rounding
     // each edge separately, which would change the requested aspect ratio.
-    const blocks = Math.floor(height * scale / 80);
-    return { width: blocks * 64, height: blocks * 80 };
+    const blocks = Math.floor(Math.max(width, height) * scale / 80);
+    return ratio < 1
+      ? { width: blocks * 64, height: blocks * 80 }
+      : { width: blocks * 80, height: blocks * 64 };
   }
   // Round upward at the minimum and downward otherwise so quantization cannot
   // cross the pixel limits. Both dimensions must be multiples of 16.
