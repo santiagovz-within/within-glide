@@ -2,9 +2,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { getGptImage25Size } from '../src/lib/gptImage25.ts';
+import { nearestAspectRatio } from '../src/lib/utils/aspectRatio.ts';
 
 test('all offered aspect ratios and resolution tiers fit the Fal image size limits', () => {
-  for (const aspectRatio of ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']) {
+  for (const aspectRatio of ['1:1', '16:9', '9:16', '4:3', '3:4', '4:5', '3:2', '2:3']) {
     for (const resolution of ['1K', '2K', '4K']) {
       const { width, height } = getGptImage25Size(aspectRatio, resolution);
       const [w, h] = aspectRatio.split(':').map(Number);
@@ -16,6 +17,19 @@ test('all offered aspect ratios and resolution tiers fit the Fal image size limi
       assert.ok(Math.abs(width / height - w / h) / (w / h) < 0.025);
     }
   }
+});
+
+test('4:5 stays exact at every resolution and is recognized by downstream nodes', () => {
+  let previousPixels = 0;
+  for (const resolution of ['1K', '2K', '4K']) {
+    const { width, height } = getGptImage25Size('4:5', resolution);
+    assert.equal(width * 5, height * 4);
+    assert.ok(width * height > previousPixels);
+    assert.equal(nearestAspectRatio(width, height), '4:5');
+    previousPixels = width * height;
+  }
+  assert.equal(nearestAspectRatio(1080, 1350), '4:5');
+  assert.equal(nearestAspectRatio(768, 1024), '3:4');
 });
 
 test('scales small widescreen and large square requests into the accepted pixel range', () => {
