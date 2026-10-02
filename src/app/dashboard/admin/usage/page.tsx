@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { BarChart2, RefreshCw, Image, Film } from 'lucide-react';
+import { SPENDING_PERIODS, spendingWindow, type SpendingPeriod, type UserSpendingData } from '@/lib/adminSpending';
+import styles from './usage.module.css';
 
 interface UsageData {
   totalGenerations: number;
@@ -78,7 +80,7 @@ function modelColor(model: string): string {
   return fallbacks[h % fallbacks.length];
 }
 
-function BarRow({ label, value, max, gradient, color }: { label: string; value: number; max: number; gradient?: boolean; color?: string }) {
+function BarRow({ label, value, max, gradient, color, valueLabel }: { label: string; value: number; max: number; gradient?: boolean; color?: string; valueLabel?: string }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
     <div className="flex items-center gap-3 py-1.5">
@@ -110,8 +112,8 @@ function BarRow({ label, value, max, gradient, color }: { label: string; value: 
             />
           )}
         </div>
-        <span className="text-xs tabular-nums w-8 text-right" style={{ color: 'var(--color-white)' }}>
-          {value}
+        <span className={`text-xs tabular-nums shrink-0 text-right ${valueLabel ? 'min-w-20' : 'w-8'}`} style={{ color: 'var(--color-white)' }}>
+          {valueLabel ?? value}
         </span>
       </div>
     </div>
@@ -152,6 +154,175 @@ const TZ_TABS = [
 ] as const;
 
 type TzKey = typeof TZ_TABS[number]['key'];
+
+const SPENDING_LABELS = { day: 'Day', month: 'Month', year: 'Year', all: 'All time' };
+
+function formatSpending(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD', minimumFractionDigits: 2,
+    maximumFractionDigits: value > 0 && value < 0.01 ? 4 : 2,
+  }).format(value);
+}
+
+function UserSpending() {
+  const [period, setPeriod] = useState<SpendingPeriod>('day');
+  const [selections, setSelections] = useState(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return { day: today, month: today.slice(0, 7), year: today.slice(0, 4) };
+  });
+  const [data, setData] = useState<UserSpendingData | null>(null);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const selection = period === 'all' ? undefined : selections[period];
+  const today = new Date().toISOString().slice(0, 10);
+  let validationError = '';
+  try {
+    spendingWindow(period, new Date(), selection);
+  } catch (error) {
+    validationError = error instanceof Error ? error.message : 'Select a valid period.';
+  }
+
+  useEffect(() => {
+    if (validationError) return;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const params = new URLSearchParams({ spendingPeriod: period });
+        if (selection !== undefined) params.set('spendingDate', selection);
+        const response = await fetch(`/api/admin/usage?${params}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Failed to load spending data');
+        const result: UserSpendingData = await response.json();
+        if (!controller.signal.aborted) setData(result);
+      } catch {
+        if (!controller.signal.aborted) setError('Failed to load spending data');
+      }
+    }
+    load();
+    return () => controller.abort();
+  }, [period, selection, validationError, retry]);
+
+  function selectPeriod(next: SpendingPeriod) {
+    if (next === period) return;
+    setData(null);
+    setError('');
+    setPeriod(next);
+  }
+
+  const periodIndex = SPENDING_PERIODS.indexOf(period);
+  const dateLabel = data?.start
+    ? new Intl.DateTimeFormat('en-US', {
+      timeZone: 'UTC', year: 'numeric', ...(period !== 'year' ? { month: 'short' as const } : {}),
+      ...(period === 'day' ? { day: 'numeric' as const } : {}),
+    }).format(new Date(data.start))
+    : null;
+
+  return (
+    <>
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-white)' }}>User Spending</h2>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-white-muted)' }}>
+            {period === 'all' ? 'All retained history' : dateLabel ?? SPENDING_LABELS[period]} · UTC · Highest spend first
+          </p>
+        </div>
+        <div className="w-64 max-w-full px-2.5 py-2 rounded-lg" style={{ background: 'var(--color-bg-surface)' }}>
+          <input
+            type="range"
+            min={0}
+            max={SPENDING_PERIODS.length - 1}
+            step={1}
+            value={periodIndex}
+            onChange={event => selectPeriod(SPENDING_PERIODS[Number(event.target.value)])}
+            aria-label="Spending period"
+            aria-valuetext={SPENDING_LABELS[period]}
+            aria-controls="user-spending-results"
+            className="block w-full h-4 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4"
+            style={{ accentColor: 'var(--color-accent)', outlineColor: 'var(--color-accent)' }}
+          />
+          <div className="flex justify-between mt-1">
+            {SPENDING_PERIODS.map(option => (
+              <button
+                key={option}
+                onClick={() => selectPeriod(option)}
+                aria-pressed={period === option}
+                className="px-1.5 py-0.5 rounded-md text-xs font-medium transition-colors"
+                style={{
+                  background: period === option ? 'var(--color-bg-elevated)' : 'transparent',
+                  color: period === option ? 'var(--color-white)' : 'var(--color-white-muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                {SPENDING_LABELS[option]}
+              </button>
+            ))}
+          </div>
+          {period !== 'all' && (
+            <label className="flex items-center gap-2 mt-2 text-xs" style={{ color: 'var(--color-white-muted)' }}>
+              <span>{period === 'day' ? 'Date' : SPENDING_LABELS[period]}</span>
+              <input
+                type={period === 'day' ? 'date' : period === 'month' ? 'month' : 'number'}
+                value={selection}
+                min={period === 'day' ? '0001-01-01' : period === 'month' ? '0001-01' : 1}
+                max={period === 'day' ? today : period === 'month' ? today.slice(0, 7) : Number(today.slice(0, 4))}
+                step={1}
+                aria-label={period === 'day' ? 'Spending date' : `Spending ${period}`}
+                aria-invalid={Boolean(validationError)}
+                aria-describedby={validationError ? 'spending-date-error' : undefined}
+                onChange={event => {
+                  setData(null);
+                  setError('');
+                  setSelections(previous => ({ ...previous, [period]: event.target.value }));
+                }}
+                className={`${styles.datePicker} min-w-0 flex-1 rounded-md px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2`}
+                style={{ background: 'var(--color-bg-elevated)', color: 'var(--color-white)', border: 'var(--border-default)', outlineColor: 'var(--color-accent)' }}
+              />
+            </label>
+          )}
+        </div>
+      </div>
+      <div id="user-spending-results" aria-live="polite" aria-busy={!data && !error && !validationError}>
+        {validationError ? (
+          <p id="spending-date-error" className="text-xs" style={{ color: 'var(--color-white-muted)' }}>{validationError}</p>
+        ) : error ? (
+          <div className="flex items-center gap-3 text-xs">
+            <p role="alert" style={{ color: 'var(--color-error)' }}>{error}</p>
+            <button
+              onClick={() => { setError(''); setRetry(value => value + 1); }}
+              className="px-2.5 py-1 rounded-md font-medium"
+              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white)', cursor: 'pointer' }}
+            >Retry</button>
+          </div>
+        ) : !data ? (
+          <div className="flex items-center gap-2 py-4 text-xs" style={{ color: 'var(--color-white-muted)' }}>
+            <RefreshCw size={14} className="animate-spin" /> Loading spending data…
+          </div>
+        ) : (
+          <>
+            <div className="mb-4">
+              <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--color-white-muted)' }}>Recorded spend · USD</p>
+              <p className="text-3xl font-semibold tabular-nums" style={{ color: 'var(--color-white)' }}>{formatSpending(data.totalCostUsd)}</p>
+            </div>
+            {data.users.length === 0 ? (
+              <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No recorded spending for this period</p>
+            ) : (
+              <div className="max-h-80 overflow-auto">
+                {data.users.map((user, index) => (
+                  <BarRow key={user.userId} label={`${index + 1}. ${user.username}`} value={user.costUsd}
+                    max={data.users[0].costUsd} valueLabel={formatSpending(user.costUsd)} gradient />
+                ))}
+              </div>
+            )}
+            <p className="text-xs mt-4" style={{ color: 'var(--color-white-muted)' }}>
+              Recorded generation costs + realtime usage.
+              {data.unpricedGenerations > 0 && ` ${data.unpricedGenerations.toLocaleString()} completed generation${data.unpricedGenerations === 1 ? '' : 's'} without recorded costs excluded.`}
+              {' '}History includes retained records only; deleted generations are excluded.
+            </p>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
 
 export default function AdminUsagePage() {
   const [data, setData]       = useState<UsageData | null>(null);
@@ -245,6 +416,10 @@ export default function AdminUsagePage() {
             </p>
           </div>
         </div>
+      </div>
+
+      <div style={{ ...cardStyle, marginBottom: 16 }}>
+        <UserSpending />
       </div>
 
       {/* Charts row */}

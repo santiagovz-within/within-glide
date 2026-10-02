@@ -1,0 +1,7 @@
+.datePicker {
+  color-scheme: dark;
+}
+
+:global([data-theme='light']) .datePicker {
+  color-scheme: light;
+}

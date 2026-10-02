@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { InvalidSpendingSelection, SPENDING_PERIODS, type SpendingPeriod } from '@/lib/adminSpending';
+import { getUserSpending } from './spending';
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -14,11 +16,28 @@ async function requireAdmin() {
 }
 
 // GET /api/admin/usage — aggregate generation stats for admins
-export async function GET() {
+export async function GET(request: NextRequest) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const supabase = createAdminClient();
+
+  const spendingPeriod = request.nextUrl.searchParams.get('spendingPeriod');
+  if (spendingPeriod !== null) {
+    if (!SPENDING_PERIODS.includes(spendingPeriod as SpendingPeriod)) {
+      return NextResponse.json({ error: 'Invalid spending period' }, { status: 400 });
+    }
+    try {
+      const selection = request.nextUrl.searchParams.get('spendingDate') ?? undefined;
+      return NextResponse.json(await getUserSpending(supabase, spendingPeriod as SpendingPeriod, selection));
+    } catch (error) {
+      if (error instanceof InvalidSpendingSelection) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      console.error('[admin/usage] Could not load spending:', error);
+      return NextResponse.json({ error: 'Failed to load spending data' }, { status: 500 });
+    }
+  }
 
   // ── Accurate headline counts via COUNT(*) — not affected by max_rows ───────
   // Supabase's PostgREST caps .limit() at max_rows (default 1000), so we must
