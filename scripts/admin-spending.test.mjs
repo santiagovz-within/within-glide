@@ -151,11 +151,11 @@ test('spending requests retain admin authorization and validate period values', 
   assert.equal((await GET(request('day'))).status, 403);
   assert.equal(reads, 0);
   isAdmin = true;
-  assert.equal((await GET(request('week'))).status, 400);
+  assert.equal((await GET(request('quarter'))).status, 400);
   assert.equal(reads, 0);
   assert.equal((await GET(request('day', '2025-02-30'))).status, 400);
   assert.deepEqual(await (await GET(request('month', '2025-12'))).json(), { period: 'month', selection: '2025-12' });
-  for (const period of helpers.SPENDING_PERIODS) {
+  for (const period of [...helpers.SPENDING_PERIODS, 'week']) {
     const response = await GET(request(period));
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { period });
@@ -207,4 +207,80 @@ test('historical rankings include the chosen period only for both cost sources',
   assert.equal((await getUserSpending(database(tables), 'month', '2025-12')).totalCostUsd, 20);
   assert.equal((await getUserSpending(database(tables), 'year', '2025')).totalCostUsd, 22);
   assert.equal((await getUserSpending(database(tables), 'all')).totalCostUsd, 78);
+});
+
+test('daily buckets reconcile with user totals and mark missing costs on their own date', async () => {
+  const result = await getUserSpending(database({
+    generations: [
+      generation('1', 'alice', 18, '2025-12-01T00:00:00.000Z'),
+      generation('2', 'bob', 100, '2025-12-02T12:00:00.000Z'),
+      { ...generation('3', 'bob', null, '2025-12-02T23:59:59.999Z'), billing: { costUsd: 2 } },
+      generation('4', 'alice', null, '2025-12-03T00:00:00.000Z'),
+    ],
+    realtime_usage: [
+      { user_id: 'bob', cost_usd: '2.5', usage_date: '2025-12-01' },
+      { user_id: 'alice', cost_usd: 3, usage_date: '2025-12-02' },
+    ],
+  }), 'month', '2025-12');
+  assert.deepEqual(result.dailySpend, [
+    { date: '2025-12-01', costUsd: 20.5, unpricedGenerations: 0 },
+    { date: '2025-12-02', costUsd: 105, unpricedGenerations: 0 },
+    { date: '2025-12-03', costUsd: 0, unpricedGenerations: 1 },
+  ]);
+  assert.equal(result.dailySpend.reduce((sum, day) => sum + day.costUsd, 0), result.totalCostUsd);
+  assert.equal(result.dailySpend.reduce((sum, day) => sum + day.unpricedGenerations, 0), result.unpricedGenerations);
+});
+
+test('weeks start Monday and cross month/year boundaries for both sources', async () => {
+  const now = new Date('2026-01-10T12:00:00Z');
+  assert.deepEqual(helpers.spendingWindow('week', now, '2026-01-01'), {
+    start: '2025-12-29T00:00:00.000Z', end: '2026-01-05T00:00:00.000Z',
+  });
+  assert.deepEqual(helpers.spendingWindow('week', now, '2026-01-04'), helpers.spendingWindow('week', now, '2026-01-01'));
+  const result = await getUserSpending(database({
+    generations: [generation('1', 'a', 50, '2025-12-21T23:59:59.999Z'), generation('2', 'a', 18, '2025-12-22T00:00:00.000Z'), generation('3', 'b', 100, '2025-12-28T23:59:59.999Z'), generation('4', 'b', 75, '2025-12-29T00:00:00.000Z')],
+    realtime_usage: [{ user_id: 'a', cost_usd: 2, usage_date: '2025-12-28' }, { user_id: 'a', cost_usd: 3, usage_date: '2025-12-29' }],
+  }), 'week', '2025-12-24');
+  assert.equal(result.totalCostUsd, 120);
+  assert.deepEqual(result.dailySpend.map(day => day.date), ['2025-12-22', '2025-12-28']);
+});
+
+test('calendar averages include zero-spend days, exclude future dates, and mark today partial', () => {
+  const calendar = helpers.buildSpendingCalendar('month', '2026-10', [
+    { date: '2026-10-01', costUsd: 18, unpricedGenerations: 0 },
+    { date: '2026-10-03', costUsd: 100, unpricedGenerations: 2 },
+    { date: '2026-10-05', costUsd: 7, unpricedGenerations: 0 },
+    { date: '2026-10-06', costUsd: 500, unpricedGenerations: 0 },
+    { date: '2026-09-30', costUsd: 500, unpricedGenerations: 0 },
+  ], '2026-10-05T12:00:00.000Z');
+  assert.equal(calendar.days.length, 31);
+  assert.equal(calendar.elapsedDays, 5);
+  assert.equal(calendar.totalCostUsd, 125);
+  assert.equal(calendar.averageCostUsd, 25);
+  assert.equal(calendar.peak.date, '2026-10-03');
+  assert.equal(calendar.days[1].costUsd, 0);
+  assert.equal(calendar.days[4].today, true);
+  assert.equal(calendar.days[5].future, true);
+  assert.equal(calendar.days[5].costUsd, 0);
+  assert.equal(calendar.unpricedGenerations, 2);
+});
+
+test('full historical calendars include leap days, empty months, and six-row months', () => {
+  const calendar = helpers.buildSpendingCalendar('month', '2024-02', [
+    { date: '2024-02-29', costUsd: 29, unpricedGenerations: 0 },
+  ], fixedNow.toISOString());
+  assert.equal(calendar.days.length, 29);
+  assert.equal(calendar.elapsedDays, 29);
+  assert.equal(calendar.averageCostUsd, 1);
+  assert.equal(calendar.leadingDays, 3);
+  const empty = helpers.buildSpendingCalendar('month', '2025-03', [], fixedNow.toISOString());
+  assert.equal(empty.days.length, 31);
+  assert.equal(empty.leadingDays, 5);
+  assert.equal(Math.ceil((empty.leadingDays + empty.days.length) / 7), 6);
+  assert.equal(empty.averageCostUsd, 0);
+  assert.equal(empty.peak, null);
+  const week = helpers.buildSpendingCalendar('week', '2025-12-31', [], fixedNow.toISOString());
+  assert.equal(week.days[0].date, '2025-12-29');
+  assert.equal(week.days[6].date, '2026-01-04');
+  assert.equal(week.elapsedDays, 4);
 });

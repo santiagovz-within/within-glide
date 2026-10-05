@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { InvalidSpendingSelection, SPENDING_PERIODS, type SpendingPeriod } from '@/lib/adminSpending';
+import { InvalidSpendingSelection, isSpendingPeriod } from '@/lib/adminSpending';
 import { getUserSpending } from './spending';
 
 async function requireAdmin() {
@@ -24,12 +24,12 @@ export async function GET(request: NextRequest) {
 
   const spendingPeriod = request.nextUrl.searchParams.get('spendingPeriod');
   if (spendingPeriod !== null) {
-    if (!SPENDING_PERIODS.includes(spendingPeriod as SpendingPeriod)) {
+    if (!isSpendingPeriod(spendingPeriod)) {
       return NextResponse.json({ error: 'Invalid spending period' }, { status: 400 });
     }
     try {
       const selection = request.nextUrl.searchParams.get('spendingDate') ?? undefined;
-      return NextResponse.json(await getUserSpending(supabase, spendingPeriod as SpendingPeriod, selection));
+      return NextResponse.json(await getUserSpending(supabase, spendingPeriod, selection));
     } catch (error) {
       if (error instanceof InvalidSpendingSelection) {
         return NextResponse.json({ error: error.message }, { status: 400 });

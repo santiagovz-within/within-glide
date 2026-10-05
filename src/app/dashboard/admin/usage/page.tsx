@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { BarChart2, RefreshCw, Image, Film } from 'lucide-react';
-import { SPENDING_PERIODS, spendingWindow, type SpendingPeriod, type UserSpendingData } from '@/lib/adminSpending';
+import { SPENDING_PERIODS, spendingWindow, type UserSpendingData } from '@/lib/adminSpending';
 import styles from './usage.module.css';
+import SpendingCalendar from './SpendingCalendar';
 
 interface UsageData {
   totalGenerations: number;
@@ -156,6 +157,7 @@ const TZ_TABS = [
 type TzKey = typeof TZ_TABS[number]['key'];
 
 const SPENDING_LABELS = { day: 'Day', month: 'Month', year: 'Year', all: 'All time' };
+type RankingPeriod = typeof SPENDING_PERIODS[number];
 
 function formatSpending(value: number) {
   return new Intl.NumberFormat('en-US', {
@@ -165,7 +167,7 @@ function formatSpending(value: number) {
 }
 
 function UserSpending() {
-  const [period, setPeriod] = useState<SpendingPeriod>('day');
+  const [period, setPeriod] = useState<RankingPeriod>('day');
   const [selections, setSelections] = useState(() => {
     const today = new Date().toISOString().slice(0, 10);
     return { day: today, month: today.slice(0, 7), year: today.slice(0, 4) };
@@ -201,7 +203,7 @@ function UserSpending() {
     return () => controller.abort();
   }, [period, selection, validationError, retry]);
 
-  function selectPeriod(next: SpendingPeriod) {
+  function selectPeriod(next: RankingPeriod) {
     if (next === period) return;
     setData(null);
     setError('');
@@ -320,6 +322,7 @@ function UserSpending() {
           </>
         )}
       </div>
+      <SpendingCalendar />
     </>
   );
 }

@@ -5,3 +5,91 @@
 :global([data-theme='light']) .datePicker {
   color-scheme: light;
 }
+
+.calendarNav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--color-white-muted);
+  cursor: pointer;
+}
+
+.calendarNav:hover:not(:disabled) {
+  background: var(--color-bg-surface);
+  color: var(--color-white);
+}
+
+.calendarNav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.calendar {
+  width: 100%;
+  min-width: 620px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 4px;
+}
+
+.calendar th {
+  text-align: left;
+  padding: 0 8px 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-white-muted);
+}
+
+.calendar th:last-child {
+  width: 13%;
+}
+
+.calendarDay {
+  height: 68px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--color-bg-surface);
+}
+
+.lowSpend {
+  background: color-mix(in srgb, var(--color-accent) 9%, var(--color-bg-surface));
+}
+
+.mediumSpend {
+  background: color-mix(in srgb, var(--color-accent) 24%, var(--color-bg-surface));
+}
+
+.highSpend {
+  background: color-mix(in srgb, var(--color-warning) 22%, var(--color-bg-surface));
+}
+
+.futureDay {
+  background: transparent;
+  border: var(--border-default);
+  opacity: 0.5;
+}
+
+.weekTotal {
+  background: transparent;
+  border-left: var(--border-default);
+  border-radius: 0;
+}
+
+.todayLabel {
+  font-size: 9px;
+  color: var(--color-accent);
+}
+
+.legendSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: var(--border-default);
+}
+
+.legendSwatch:not(.lowSpend):not(.mediumSpend):not(.highSpend) {
+  background: var(--color-bg-surface);
+}
