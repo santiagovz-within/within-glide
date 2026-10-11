@@ -83,7 +83,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   promptNode:         { prompt: '' },
   imageInputNode:     {},
   imageToPromptNode:  { status: 'idle' },
-  imageGenNode:       { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
+  imageGenNode:       { model: 'nano-banana-2-1', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
   videoGenNode:       { model: 'seedance-2-5', aspectRatio: '16:9', duration: 5, status: 'idle' },
   referenceVideoNode: { model: 'seedance-2-5', aspectRatio: 'auto', referenceDuration: 5, videoResolution: '720p', generateAudio: true, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
