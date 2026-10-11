@@ -48,9 +48,10 @@ All generation runs through the [FAL AI](https://fal.ai) platform.
 
 | Model | Type |
 |-------|------|
+| GPT Image 2.5 (OpenAI) | Image generation and editing |
+| Nano Banana 2.1 (Google) | Image generation and editing (up to 4K) |
 | Nano Banana 2 | Image generation |
 | Nano Banana Pro | Image generation |
-| GPT Image 2.5 (OpenAI) | Image generation and editing |
 | Seedream v5 (ByteDance) | Image generation and editing |
 | GPT Image 2 (OpenAI) | Image generation |
 | Qwen Image 3.0 (Alibaba) | Image generation and editing |

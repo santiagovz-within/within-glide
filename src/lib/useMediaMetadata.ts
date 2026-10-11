@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { FalMediaMetadata } from '@/lib/falPricing';
+import { resolveMediaUrl } from '@/lib/utils/mediaUtils';
 
 const metadataCache = new Map<string, Promise<FalMediaMetadata | null>>();
 
@@ -37,7 +38,15 @@ function getMetadata(url: string, mediaType: 'image' | 'video'): Promise<FalMedi
   const key = `${mediaType}:${url}`;
   const cached = metadataCache.get(key);
   if (cached) return cached;
-  const pending = mediaType === 'image' ? loadImageMetadata(url) : loadVideoMetadata(url);
+  // Saved canvas assets are often gcs: references, which a browser cannot
+  // load directly. Resolve them just like the visible canvas previews do.
+  const pending = resolveMediaUrl(url)
+    .then(resolved => mediaType === 'image' ? loadImageMetadata(resolved) : loadVideoMetadata(resolved))
+    .catch(() => null)
+    .then(metadata => {
+      if (!metadata) metadataCache.delete(key);
+      return metadata;
+    });
   metadataCache.set(key, pending);
   return pending;
 }

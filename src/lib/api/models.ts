@@ -8,6 +8,21 @@ import { LAYERIZE_ENDPOINT } from '@/lib/layerize';
 export const GOOGLE_IMAGE_MODELS: Record<string, string> = {};
 
 export const FAL_MODELS = {
+  'nano-banana-2-1': {
+    endpoint: 'google/nano-banana-2.1',
+    editEndpoint: 'google/nano-banana-2.1/edit',
+    usesAspectRatio: true,
+    supportsResolution: true,
+    editImageParam: 'image_urls',
+    // Fal endpoint pricing, checked 2026-10-10. Estimate excludes unpredictable
+    // thinking/search tokens; actual billing still comes from Fal.
+    // https://fal.ai/models/google/nano-banana-2.1/edit
+    pricing: {
+      kind: 'image-tokens', inputUsdPerMillion: 1.764, outputUsdPerMillion: 35.294,
+      outputTokens: { '1K': 1120, '2K': 1680, '4K': 3780 }, referenceImageTokens: 1120,
+    },
+    type: 'image' as const,
+  },
   'nano-banana-2': {
     endpoint: 'fal-ai/nano-banana-2',
     editEndpoint: 'fal-ai/nano-banana-2/edit',
@@ -312,6 +327,20 @@ export function getFalPricingEndpointIds(): string[] {
 }
 
 export const MODELS: Record<string, ModelConfig> = {
+  'nano-banana-2-1': {
+    id: 'nano-banana-2-1',
+    name: 'Nano Banana 2.1',
+    provider: 'fal',
+    type: 'image',
+    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '4:5', '5:4', '3:2', '2:3'],
+    supportedResolutions: ['1K', '2K', '4K'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 8,
+    maxReferenceImages: 14,
+    promptReference: { kind: 'plain', template: 'the {ordinal} image attached' },
+  },
   'nano-banana-2': {
     id: 'nano-banana-2',
     name: 'Nano Banana 2',
@@ -614,8 +643,9 @@ export const MODELS: Record<string, ModelConfig> = {
 };
 
 export const IMAGE_MODELS = [
-  MODELS['nano-banana-2'],
   MODELS['gpt-image-2-5'],
+  MODELS['nano-banana-2-1'],
+  MODELS['nano-banana-2'],
   MODELS['seedream-5'],
   MODELS['nano-banana-pro'],
   MODELS['gpt-image-2'],

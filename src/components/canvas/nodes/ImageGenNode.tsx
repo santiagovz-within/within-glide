@@ -312,8 +312,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
           {isGenerating ? 'Generating…' : 'Generate'}
-          <FalCostEstimate input={pricingEndpoint ? {
+          <FalCostEstimate description={data.model === 'nano-banana-2-1'
+            ? 'Estimated USD cost from Fal token rates: output resolution, prompt length, and reference images. Excludes variable thinking and web-search tokens; actual cost may be higher.'
+            : undefined} input={pricingEndpoint ? {
             endpoint: pricingEndpoint,
+            prompt: data.prompt ?? '',
             aspectRatio: selectedAspectRatio,
             resolution: selectedResolution,
             outputCount: requestedImageCount,

@@ -12,6 +12,13 @@ export type FalPricingRule =
       referenceMultiplier?: number;
     }
   | { kind: 'image-resolution'; resolutionMultipliers: Record<string, number> }
+  | {
+      kind: 'image-tokens';
+      inputUsdPerMillion: number;
+      outputUsdPerMillion: number;
+      outputTokens: Record<string, number>;
+      referenceImageTokens: number;
+    }
   | ({
       /**
        * Image models that take a custom `image_size` (Seedream, Qwen). The UI
@@ -65,7 +72,8 @@ export type FalPricingRule =
       resolutionMultipliers: Record<string, number>;
       includedReferenceTokens: number;
       referenceTokenRateMultiplier: number;
-      referenceVideoTokensPerSecond: Record<string, number>;
+      /** Published 24 fps, 16:9 reference examples, indexed by clip seconds. */
+      referenceVideoTokens: Record<string, Record<number, number>>;
     }
   | { kind: 'topaz-video' };
 
@@ -77,6 +85,7 @@ export interface FalMediaMetadata {
 
 export interface FalCostEstimateInput {
   endpoint: string;
+  prompt?: string;
   resolution?: string;
   aspectRatio?: string;
   duration?: number;
@@ -239,8 +248,19 @@ export function estimateFalCost(
   rule: FalPricingRule | undefined,
   input: FalCostEstimateInput,
 ): number | null {
-  if (!price || !rule || !positive(price.unitPrice)) return null;
+  if (!rule) return null;
   const outputCount = positive(input.outputCount) ? input.outputCount : 1;
+  if (rule.kind === 'image-tokens') {
+    const imageTokens = rule.outputTokens[input.resolution ?? '1K'];
+    if (!positive(imageTokens)) return null;
+    // Approximate prompt tokenization. Thinking/search usage is only known
+    // after generation and is excluded, as in Fal's published examples.
+    const promptTokens = input.prompt === undefined ? 100 : Math.ceil(input.prompt.length / 4);
+    const referenceTokens = Math.max(0, input.referenceImageCount ?? 0) * rule.referenceImageTokens;
+    return outputCount * ((promptTokens + referenceTokens) * rule.inputUsdPerMillion
+      + imageTokens * rule.outputUsdPerMillion) / 1_000_000;
+  }
+  if (!price || price.currency !== 'USD' || !positive(price.unitPrice)) return null;
   let billableUnits: number | null = null;
 
   switch (rule.kind) {
@@ -349,11 +369,27 @@ export function estimateFalCost(
       let imageTokens = 0;
       for (const image of input.referenceImages ?? []) {
         if (!image || !positive(image.width) || !positive(image.height)) return null;
-        imageTokens += image.width * image.height / 1024;
+        // MiniMax normalizes the short edge to 32 tokens: image size itself
+        // does not change billing (both 1024² and 2048² cost 1,024 tokens).
+        imageTokens += Math.ceil(32 * Math.max(image.width / image.height, image.height / image.width)) * 32;
       }
-      const videoTokenRate = rule.referenceVideoTokensPerSecond[input.resolution ?? ''];
-      if (referenceDuration > 0 && !positive(videoTokenRate)) break;
-      const referenceTokens = imageTokens + referenceDuration * (videoTokenRate ?? 0);
+      const tokenExamples = rule.referenceVideoTokens[input.resolution ?? ''];
+      if (referenceDuration > 0 && !tokenExamples) break;
+      let videoTokens = 0;
+      for (const video of input.referenceVideos ?? []) {
+        if (!video || !positive(video.width) || !positive(video.height)) return null;
+        const seconds = Math.min(video.duration!, input.duration);
+        const samples = [[0, 0], ...Object.entries(tokenExamples).map(([seconds, tokens]) => [Number(seconds), tokens])]
+          .sort((a, b) => a[0] - b[0]);
+        const upperIndex = samples.findIndex(([duration]) => duration >= seconds);
+        if (upperIndex < 1) return null;
+        const [lowerSeconds, lowerTokens] = samples[upperIndex - 1];
+        const [upperSeconds, upperTokens] = samples[upperIndex];
+        // Interpolate Fal's 24 fps examples. Other frame rates and shapes
+        // can differ; do not pretend that this is a measured token count.
+        videoTokens += lowerTokens + (upperTokens - lowerTokens) * (seconds - lowerSeconds) / (upperSeconds - lowerSeconds);
+      }
+      const referenceTokens = imageTokens + videoTokens;
       billableUnits = (input.duration * resolutionMultiplier
         + Math.max(0, referenceTokens - rule.includedReferenceTokens) * rule.referenceTokenRateMultiplier) * outputCount;
       break;

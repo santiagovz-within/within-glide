@@ -51,6 +51,7 @@ const NODE_COLORS: Record<string, string> = {
 
 // Deterministic per-model colors
 const MODEL_COLOR_MAP: Record<string, string> = {
+  'nano-banana-2-1': '#8b5cf6',
   'nano-banana-2':   '#a855f7',
   'nano-banana-pro': '#c084fc',
   'seedream-5':      '#fb7185',

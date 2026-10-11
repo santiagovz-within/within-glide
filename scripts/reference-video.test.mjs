@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 function load(path, dependencies = {}) {
   const source = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
   const { outputText } = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   });
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(
@@ -295,10 +295,116 @@ test('Seedance bills combined input/output seconds with the reference video disc
 test('MiniMax pools image/video reference tokens and deducts the included allowance once', () => {
   const image = { width: 1024, height: 1024 };
   const video = { width: 1280, height: 720, duration: 5 };
-  assert.equal(formatFalCostEstimate(estimate('minimax-h3-max', { referenceImages: [image, image], referenceVideos: [video] })), '~$1.10');
+  assert.equal(formatFalCostEstimate(estimate('minimax-h3-max', { referenceImages: [image, image], referenceVideos: [video] })), '~$1.00');
   assert.equal(estimate('minimax-h3-max', { referenceImages: Array(4).fill(image) }), 0.4);
   assert.equal(formatFalCostEstimate(estimate('minimax-h3-max', { referenceImages: Array(5).fill(image) })), '~$0.42');
   assert.equal(formatFalCostEstimate(estimate('minimax-h3-max', { resolution: '1080P' })), '~$0.80');
+});
+
+test('MiniMax matches published image-shape and mixed-reference examples regardless of upload size', () => {
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+  for (const side of [1024, 2048, 4096]) {
+    close(estimate('minimax-h3-max', { referenceImages: Array(5).fill({ width: side, height: side }) }), 0.42048);
+  }
+  close(estimate('minimax-h3-max', { referenceImages: Array(3).fill({ width: 800, height: 600 }) }), 0.40064);
+  close(estimate('minimax-h3-max', { referenceImages: Array(3).fill({ width: 1080, height: 1920 }) }), 0.42752);
+  const referenceImages = Array(2).fill({ width: 2048, height: 2048 });
+  const referenceVideos = [{ width: 1280, height: 720, duration: 5 }];
+  for (const [resolution, expected] of [['480P', 0.45864], ['768P', 1.00416], ['1080P', 1.40416]]) {
+    close(estimate('minimax-h3-max', { resolution, referenceImages, referenceVideos }), expected);
+    close(estimate('minimax-h3-max', { resolution, referenceImages, referenceVideos: [{ ...referenceVideos[0], duration: 15 }] }), expected);
+  }
+  close(estimate('minimax-h3-max', { duration: 10, referenceImages: [{ width: 1024, height: 1024 }], referenceVideos }), 1.38368);
+  close(estimate('minimax-h3-max', { duration: 15, referenceImages: Array(4).fill({ width: 1024, height: 1024 }),
+    referenceVideos: [{ width: 1920, height: 1080, duration: 15 }] }), 3.25632);
+});
+
+test('Nano Banana 2.1 estimates generation/edit tokens, prompt size, resolutions, and repeated outputs', () => {
+  for (const endpoint of ['google/nano-banana-2.1', 'google/nano-banana-2.1/edit']) {
+    const rule = pricingModels.getFalPricingRule(endpoint);
+    for (const [resolution, expected] of [['1K', 0.03970568], ['2K', 0.05947032], ['4K', 0.13358772]]) {
+      const cost = estimateFalCost(undefined, rule, { endpoint, resolution, prompt: 'a'.repeat(400) });
+      assert.ok(Math.abs(cost - expected) < 1e-9);
+      const edited = estimateFalCost(undefined, rule, { endpoint, resolution, prompt: 'a'.repeat(400), referenceImageCount: 2, outputCount: 4 });
+      assert.ok(Math.abs(edited - (expected + 0.00395136) * 4) < 1e-9);
+    }
+    const short = estimateFalCost(undefined, rule, { endpoint, resolution: '1K', prompt: 'a'.repeat(400) });
+    const long = estimateFalCost(undefined, rule, { endpoint, resolution: '1K', prompt: 'a'.repeat(4400) });
+    assert.ok(Math.abs(long - short - 0.001764) < 1e-9);
+    assert.equal(estimateFalCost(undefined, rule, { endpoint, resolution: '8K' }), null);
+  }
+});
+
+test('Generate button estimates survive unavailable/incomplete live pricing and prefer available live rates', () => {
+  const pricing = load('src/lib/falPricing.ts');
+  let state = { prices: {}, status: 'unavailable', load: async () => {} };
+  const hook = load('src/lib/useFalCostEstimate.ts', {
+    react: { useEffect() {} },
+    '@/lib/falPricing': pricing,
+    '@/lib/api/models': pricingModels,
+    '@/lib/api/referenceVideo': config,
+    '@/lib/stores/falPricingStore': { useFalPricingStore: selector => selector(state) },
+  });
+  for (const model of models) {
+    const input = { endpoint: model.endpoint, resolution: model.defaultResolution,
+      aspectRatio: model.defaultAspectRatio, duration: 5, referenceImages: [], referenceVideos: [] };
+    const fallback = hook.useFalCostEstimateValue(input);
+    assert.ok(fallback > 0, model.name);
+    const live = config.getReferenceVideoEstimatePrice(model.endpoint);
+    state = { ...state, status: 'ready', prices: { [model.endpoint]: { ...live, unitPrice: live.unitPrice * 2 } } };
+    assert.equal(hook.useFalCostEstimateValue(input), fallback * 2);
+    state = { ...state, prices: {} };
+    assert.equal(hook.useFalCostEstimateValue([input, input]), fallback * 2);
+  }
+  const component = load('src/components/canvas/nodes/FalCostEstimate.tsx', {
+    '@/lib/useFalCostEstimate': hook,
+    './ImageGenerationGlass.module.css': { default: { costEstimate: 'cost' } },
+  }).default;
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { createElement } = require('react');
+  const imageInput = { endpoint: 'google/nano-banana-2.1', resolution: '4K', outputCount: 4 };
+  assert.match(renderToStaticMarkup(createElement(component, { input: imageInput })), /~\$0\.53/);
+  const videoInput = { endpoint: 'alibaba/wan-3.0-prime/reference-to-video', resolution: '720p', duration: 5 };
+  assert.match(renderToStaticMarkup(createElement(component, { input: videoInput })), /~\$0\.70/);
+  assert.match(renderToStaticMarkup(createElement(component, { input: null, unavailableText: 'Estimate unavailable' })), /Estimate unavailable/);
+});
+
+test('Pricing metadata resolves saved GCS references before loading image/video elements', async t => {
+  const resolved = [], loaded = [];
+  let state;
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  t.after(() => {
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow); else delete globalThis.window;
+    if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument); else delete globalThis.document;
+  });
+  class Image {
+    naturalWidth = 2048;
+    naturalHeight = 2048;
+    set src(url) { loaded.push(url); queueMicrotask(() => this.onload()); }
+  }
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { Image } });
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: { createElement: () => ({
+    videoWidth: 1280, videoHeight: 720, duration: 5,
+    set src(url) { loaded.push(url); },
+    load() { queueMicrotask(() => this.onloadedmetadata()); },
+  }) } });
+  // Exercise the hook with stubbed React state/effects, outside a React tree.
+  const { useMediaMetadata: readMetadata } = load('src/lib/useMediaMetadata.ts', {
+    react: { useMemo: fn => fn(), useState: initial => [state ?? initial, value => { state = value; }], useEffect: fn => fn() },
+    '@/lib/utils/mediaUtils': { resolveMediaUrl: async ref => { resolved.push(ref); return 'https://media.example/' + ref.slice(4); } },
+  });
+  for (const kind of ['image', 'video']) {
+    state = undefined;
+    const ref = `gcs:uploads/${kind}`;
+    readMetadata([ref, ref], kind);
+    await new Promise(resolve => setImmediate(resolve));
+    const metadata = readMetadata([ref], kind).get(ref);
+    assert.equal(metadata.width, kind === 'image' ? 2048 : 1280);
+    if (kind === 'video') assert.equal(metadata.duration, 5);
+  }
+  assert.deepEqual(resolved, ['gcs:uploads/image', 'gcs:uploads/video']);
+  assert.deepEqual(loaded, ['https://media.example/uploads/image', 'https://media.example/uploads/video']);
 });
 
 test('Reference metadata failures never display an incomplete total; per-second models need no metadata', () => {

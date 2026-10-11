@@ -155,7 +155,10 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
           {isGenerating ? 'Generating…' : 'Generate'}
-          <FalCostEstimate input={costEstimateInput} />
+          <FalCostEstimate input={costEstimateInput} unavailableText="Estimate unavailable"
+            description={config.id === 'minimax-h3-max'
+              ? 'Estimated USD cost including the shared reference allowance. Video references use Fal’s 24 fps, 16:9 examples, capped at output duration; other frame rates and shapes may differ.'
+              : 'Estimated USD cost using live Fal pricing when available, otherwise published endpoint rates. Auto aspect ratio uses a 16:9 estimate. Seedance includes input video duration and the video-reference discount.'} />
         </span>
       </button>
       {hasFailure && <RegenerateGate onChangesApplied={() => updateData({ status: 'idle', errorMessage: undefined, errorRequestId: undefined })} />}
