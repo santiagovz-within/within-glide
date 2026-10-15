@@ -119,15 +119,26 @@ export function PromptEditor({
   const pickerRef = useRef<HTMLDivElement>(null);
   const reactFlowStore = useStoreApi();
 
+  // React Flow can render the previous node value before its store catches up
+  // with an edit. Control the textarea locally so that intermediate render
+  // cannot rewrite its value and move the caret. A changed prop still applies
+  // external edits (for example undo or reference reordering).
+  const [draft, setDraft] = useState({ text: value, source: value });
+  if (value !== draft.source) {
+    setDraft({ text: value, source: value });
+  }
+  const text = draft.text;
+  const draftTags = useMemo(() => syncTagsWithText(text, tags, taggable), [text, tags, taggable]);
+
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [highlight, setHighlight] = useState(0);
   const [pickerAnchor, setPickerAnchor] = useState<Anchor | null>(null);
   const [hoverTag, setHoverTag] = useState<{ tag: PromptTag; rect: DOMRect } | null>(null);
 
-  const segments = useMemo(() => segmentPrompt(value, tags), [value, tags]);
+  const segments = useMemo(() => segmentPrompt(text, draftTags), [text, draftTags]);
   const hasChips = segments.some((s) => s.kind === 'tag');
   const showOverlay = hasChips || alwaysOverlay;
-  const missingLabels = new Set(missingPromptTags(tags, taggable).map(tag => tag.label));
+  const missingLabels = new Set(missingPromptTags(draftTags, taggable).map(tag => tag.label));
 
   const options = useMemo(() => {
     if (!mention) return [];
@@ -137,7 +148,7 @@ export function PromptEditor({
 
   useLayoutEffect(() => {
     if (textareaRef.current) autoResize(textareaRef.current);
-  }, [value]);
+  }, [text]);
 
   // Keep the picker glued to the textarea while the canvas pans/zooms.
   useLayoutEffect(() => {
@@ -182,9 +193,10 @@ export function PromptEditor({
 
   const commit = useCallback(
     (nextText: string) => {
-      onChange({ prompt: nextText, tags: syncTagsWithText(nextText, tags, taggable) });
+      setDraft(previous => ({ ...previous, text: nextText }));
+      onChange({ prompt: nextText, tags: syncTagsWithText(nextText, draftTags, taggable) });
     },
-    [onChange, tags, taggable],
+    [onChange, draftTags, taggable],
   );
 
   function refreshMention(el: HTMLTextAreaElement) {
@@ -206,14 +218,15 @@ export function PromptEditor({
   function pick(input: TaggableInput) {
     const el = textareaRef.current;
     if (!el || !mention) return;
-    const caret = el.selectionStart ?? value.length;
+    const caret = el.selectionStart ?? text.length;
     const insert = `@${input.label} `;
-    const nextText = value.slice(0, mention.start) + insert + value.slice(caret);
+    const nextText = text.slice(0, mention.start) + insert + text.slice(caret);
     const nextTags = syncTagsWithText(
       nextText,
-      [...tags.filter(tag => tag.label !== input.label), tagFromInput(input)],
+      [...draftTags.filter(tag => tag.label !== input.label), tagFromInput(input)],
       taggable,
     );
+    setDraft(previous => ({ ...previous, text: nextText }));
     onChange({ prompt: nextText, tags: nextTags });
     setMention(null);
     const nextCaret = mention.start + insert.length;
@@ -293,7 +306,7 @@ export function PromptEditor({
               <span key={i}>{renderText ? renderText(seg.text) : seg.text}</span>
             ),
           )}
-          {value.endsWith('\n') ? '\u200b' : null}
+          {text.endsWith('\n') ? '\u200b' : null}
         </div>
       )}
 
@@ -302,7 +315,7 @@ export function PromptEditor({
         className={cn(glassStyles.glassContent, glassStyles.promptContent, 'outline-none nodrag')}
         rows={2}
         placeholder={placeholder}
-        value={value}
+        value={text}
         onFocus={() => onFocusChange?.(true)}
         onBlur={() => onFocusChange?.(false)}
         onChange={handleChange}
