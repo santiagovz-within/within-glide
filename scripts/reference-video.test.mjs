@@ -89,8 +89,9 @@ test('Curated duration menus expose only the requested times and reject Auto', (
   assert.throws(() => build(request('kling-3-pro')), /Unknown/);
 });
 
+const tags = load('src/lib/promptTags.ts');
 const media = load('src/components/canvas/mediaOutputs.ts', { './nodes/TypedHandle': { PORT_TYPE_MAP: {} } });
-const graph = load('src/components/canvas/referenceVideoInputs.ts', { './mediaOutputs': media });
+const graph = load('src/components/canvas/referenceVideoInputs.ts', { './mediaOutputs': media, '@/lib/promptTags': tags });
 test('Graph references follow edge order, current outputs, reconnects and deletions', () => {
   const nodes = [
     { id: 'a', type: 'imageGenNode', data: { generatedImages: ['a.png', 'unused.png'] } },
@@ -180,7 +181,6 @@ test('Pending-generation recovery includes the new node and keeps its original e
   assert.equal(generations[0].requestId, 'request');
 });
 
-const tags = load('src/lib/promptTags.ts');
 test('Typed media tags use the shared chips and preserve independent image/video indexes', () => {
   const inputs = [
     { label: 'image1', portIndex: 0, edgeId: 'image-edge', sourceNodeId: 'image', url: 'a.png' },
@@ -206,11 +206,13 @@ test('Tags remain tied to the same media after earlier references are removed or
   const live = tags.syncTagsWithText(text, [], original);
   const remaining = [{ ...original[1], portIndex: 0, label: 'image1' }, original[2]];
   const fixed = tags.reconcileMediaPromptTags(text, live, remaining);
-  assert.equal(fixed.prompt, 'image1 next to @image1, moving like @video1.');
-  assert.deepEqual(fixed.tags.map(t => [t.label, t.edgeId]), [['image1', 'b'], ['video1', 'v']]);
+  assert.equal(fixed.prompt, text);
+  assert.deepEqual(fixed.tags.map(t => [t.label, t.edgeId]), [['image1', 'a'], ['image2', 'b'], ['video1', 'v']]);
+  assert.deepEqual(tags.missingPromptTags(fixed.tags, remaining).map(t => t.label), ['image1']);
   assert.equal(tags.reconcileMediaPromptTags(fixed.prompt, fixed.tags, remaining), null);
   const replaced = [{ ...remaining[0], edgeId: 'new', sourceNodeId: 'new' }, remaining[1]];
-  assert.equal(tags.reconcileMediaPromptTags(fixed.prompt, fixed.tags, replaced).prompt, 'image1 next to image1, moving like @video1.');
+  assert.equal(tags.reconcileMediaPromptTags(fixed.prompt, fixed.tags, replaced), null);
+  assert.deepEqual(tags.missingPromptTags(fixed.tags, replaced).map(t => t.label), ['image1', 'image2']);
 });
 
 for (const [model, expectedPrompt] of [
@@ -242,8 +244,8 @@ test('Prompt nodes expose both modalities without conflating image1 and video1',
   assert.deepEqual(inputs.map(i => i.label), ['image1', 'video1']);
   const live = tags.syncTagsWithText('@image1 @video1', [], inputs);
   const fixed = tags.reconcilePositionalTags('prompt', '@image1 @video1', live, nodes, edges.filter(e => e.id !== 'v'));
-  assert.equal(fixed.prompt, '@image1 video1');
-  assert.deepEqual(fixed.tags.map(t => t.label), ['image1']);
+  assert.equal(fixed, null);
+  assert.deepEqual(live.map(t => t.label), ['image1', 'video1']);
 });
 
 const { estimateFalCost, formatFalCostEstimate } = load('src/lib/falPricing.ts');

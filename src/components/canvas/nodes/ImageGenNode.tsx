@@ -11,6 +11,7 @@ import { downloadAllFromUrls, downloadFromUrl } from '@/lib/utils/download';
 import { CanvasImage } from '@/components/canvas/CanvasMedia';
 import { NodeWrapper } from './NodeWrapper';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
+import { imageReferencePortCount } from '../imageReferenceInputs';
 import { ReferenceInputRow } from './ReferenceInputRow';
 import { DisconnectInputButton } from './DisconnectInputButton';
 import { acknowledgeImageFailure, preserveImageBatch } from '@/lib/imageGenerationResults';
@@ -27,7 +28,7 @@ import {
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { PromptEditor } from './PromptEditor';
-import { compilePromptForModel, findBrokenTags, getTaggableInputs } from '@/lib/promptTags';
+import { compilePromptForModel, findBrokenTags, getTaggableInputs, syncTagsWithText } from '@/lib/promptTags';
 import { ASPECT_RATIOS } from '@/lib/utils/constants';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { generationJobId, useGenerationStore } from '@/lib/stores/generationStore';
@@ -68,12 +69,12 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
   const isFocused = useRef(false);
-  const promptTags = data.promptTags ?? [];
+  const taggableInputs = getTaggableInputs(id, storeEdges, data.inputImageUrls);
+  const promptTags = syncTagsWithText(data.prompt ?? '', data.promptTags ?? [], taggableInputs);
   const promptTagCount = promptTags.length;
   const lastTagCount = useRef(promptTagCount);
   useEffect(() => {
-    // External prompt changes are ignored while typing — except when a chip
-    // was untagged (connection removed), which rewrites the text and must win.
+    // External prompt changes are ignored while typing, except tag edits.
     const tagsChanged = lastTagCount.current !== promptTagCount;
     lastTagCount.current = promptTagCount;
     if (!isFocused.current || tagsChanged) setLocalPrompt(data.prompt ?? '');
@@ -98,7 +99,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const usesStyleReference = usesStyleReferences(data.model);
   const maxReferenceImages = getImageReferenceLimit(data.model);
   const portCount = isMultiImageModel
-    ? Math.min(Math.max(data.imagePortCount ?? 1, 1), maxReferenceImages)
+    ? imageReferencePortCount(id, storeEdges, maxReferenceImages)
     : 0;
   const connectedReferenceHandles = new Set(
     storeEdges
@@ -106,10 +107,10 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       .map((edge) => edge.targetHandle)
   );
   const connectedCount = connectedReferenceHandles.size;
-  const taggableInputs = getTaggableInputs(id, storeEdges, data.inputImageUrls);
+  const hasPendingInputs = taggableInputs.some(input => !input.url);
 
   const hasEditVariant = !!falConfig && 'editEndpoint' in falConfig;
-  const connectedImageCount = (data.inputImageUrls ?? []).filter(Boolean).length;
+  const connectedImageCount = taggableInputs.length;
   const hasImageInput = connectedImageCount > 0;
   const isEditMode = hasEditVariant && hasImageInput;
   const requestedImageCount = Math.min(4, Math.max(1, Math.round(data.numImages)));
@@ -197,12 +198,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   function handleGenerate() {
     if (isGenerating || !currentFlow) return;
 
-    // Refuse to run with a chip that points at nothing the model will receive.
-    // Tags inherited from a connected Prompt node are positional and may refer
-    // to ports this node doesn't fill; those are sent as plain words instead.
-    const broken = data.promptConnected
-      ? []
-      : findBrokenTags(id, promptTags, useFlowStore.getState().edges, data.inputImageUrls);
+    if (hasPendingInputs) {
+      setTagError('A connected image is still uploading or has no media. Wait for it before generating.');
+      return;
+    }
+    const broken = findBrokenTags(id, promptTags, useFlowStore.getState().edges, data.inputImageUrls);
     if (broken.length > 0) {
       const labels = broken.map((t) => `@${t.label}`).join(', ');
       setTagError(
@@ -225,7 +225,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     // the compacted list above, so the text and the images sent always agree.
     const { prompt: compiledPrompt } = compilePromptForModel(
       data.prompt ?? '',
-      data.promptTags ?? [],
+      promptTags,
       data.inputImageUrls,
       getPromptReferenceStyle(data.model),
     );
@@ -308,9 +308,10 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   const footer = (
     <div className={glassStyles.footerStack}>
+      {hasPendingInputs && <p className={glassStyles.microLabel}>Waiting for connected image uploads</p>}
       <button
         onClick={handleGenerate}
-        disabled={isGenerating || hasFailure || (data.status === 'processing' && hasPendingRequests)}
+        disabled={isGenerating || hasFailure || hasPendingInputs || (data.status === 'processing' && hasPendingRequests)}
         title={hasFailure ? 'Change the prompt or inputs, then confirm below to regenerate' : undefined}
         className={cn(
           glassStyles.glassSurface,

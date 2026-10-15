@@ -17,7 +17,7 @@ function load(path, dependencies = {}) {
 }
 const tags = load('src/lib/promptTags.ts');
 const media = load('src/components/canvas/mediaOutputs.ts', { './nodes/TypedHandle': { PORT_TYPE_MAP: {} } });
-const references = load('src/components/canvas/referenceVideoInputs.ts', { './mediaOutputs': media });
+const references = load('src/components/canvas/referenceVideoInputs.ts', { './mediaOutputs': media, '@/lib/promptTags': tags });
 const { reorderInputConnections: reorder } = load('src/components/canvas/reorderInputConnections.ts', {
   '@/lib/promptTags': tags, './referenceVideoInputs': references,
 });
@@ -141,4 +141,82 @@ test('Background partial completion saves a history version before acknowledgeme
   assert.equal(events[0].detail.imageUrl, 'a.png');
   assert.deepEqual(results.acknowledgeImageFailure(nodeData).generationHistory, saved.data.generationHistory);
   assert.deepEqual(generationState.jobs, {});
+});
+
+const { imageReferencePortCount } = load('src/components/canvas/imageReferenceInputs.ts');
+test('Uploading references reserve image ports immediately, including sparse ports and model limits', () => {
+  const edges = [edge('uploading', 'ref_0')];
+  assert.equal(imageReferencePortCount('target', edges, 14), 2);
+  assert.equal(tags.getTaggableInputs('target', edges, [])[0].url, '');
+  assert.equal(imageReferencePortCount('target', [...edges, edge('second-upload', 'ref_1')], 14), 3);
+  assert.equal(imageReferencePortCount('target', [edge('sparse-upload', 'ref_3')], 14), 5);
+  assert.equal(imageReferencePortCount('target', [edge('last-upload', 'ref_13')], 14), 14);
+  assert.equal(imageReferencePortCount('target', [], 14), 1);
+});
+
+test('Disconnected image tags retain their text and identity; only the missing binding is flagged', () => {
+  const prompt = 'Combine @image1 with @image2';
+  const live = [tag('a', 0), tag('b', 1)];
+  const remaining = [edge('b', 'ref_1')];
+  assert.equal(tags.reconcilePromptTags('target', prompt, live, remaining), null);
+  assert.deepEqual(tags.findBrokenTags('target', live, remaining, ['', 'b.png']).map(t => t.label), ['image1']);
+  const replaced = [edge('other', 'ref_0'), ...remaining];
+  assert.deepEqual(tags.findBrokenTags('target', live, replaced, ['other.png', 'b.png']).map(t => t.label), ['image1']);
+  const reconnected = [{ ...edge('new-a', 'ref_0'), source: 'a' }, ...remaining];
+  const fixed = tags.reconcilePromptTags('target', prompt, live, reconnected);
+  assert.equal(fixed.prompt, prompt);
+  assert.equal(fixed.tags[0].edgeId, 'new-a');
+  assert.deepEqual(tags.findBrokenTags('target', fixed.tags, reconnected, ['a.png', 'b.png']), []);
+});
+
+test('Reference labels survive list compaction and still compile to the right provider input positions', () => {
+  const prompt = 'Use @image2 like @video1';
+  const live = [tag('b', 1), tag('v', 0, 'video')];
+  const nodes = [imageSource('b'), { id: 'v', type: 'videoInputNode', data: { videoUrl: 'v.mp4' } },
+    { id: 'target', type: 'referenceVideoNode', data: { prompt, promptTags: live } }];
+  const edges = [edge('b', 'reference_images'), edge('v', 'reference_videos')];
+  const inputs = references.getReferenceVideoTaggableInputs('target', nodes, edges);
+  assert.deepEqual(inputs.map(i => [i.label, i.portIndex]), [['image2', 0], ['video1', 0]]);
+  const fixed = tags.reconcileMediaPromptTags(prompt, live, inputs);
+  assert.equal(fixed.prompt, prompt);
+  assert.equal(tags.compileMediaPromptTags(prompt, fixed.tags, inputs), 'Use @image1 like @video1');
+  assert.deepEqual(tags.missingPromptTags(fixed.tags, inputs), []);
+});
+
+test('Missing reference labels cannot be reused by new inputs or duplicated during reorder', () => {
+  const live = [tag('a', 0), tag('missing', 1), tag('c', 2)];
+  const inputs = [
+    { ...tag('c', 0), url: 'c.png' }, { ...tag('a', 1), url: 'a.png' }, { ...tag('new', 2), url: 'new.png' },
+  ];
+  const labeled = tags.labelInputsForTags(inputs, live);
+  assert.deepEqual(labeled.map(i => i.label), ['image3', 'image1', 'image4']);
+  const fixed = tags.reconcileMediaPromptTags('@image1 @image2 @image3', live, inputs, true);
+  assert.equal(fixed.prompt, '@image1 @image2 @image3');
+  assert.equal(new Set(fixed.tags.map(t => t.label)).size, 3);
+  assert.deepEqual(tags.missingPromptTags(fixed.tags, inputs).map(t => t.label), ['image2']);
+});
+
+test('Copied tags remap internal and upstream connections while preserving missing associations', () => {
+  const live = [tag('internal', 0), tag('upstream', 1), tag('missing', 2)];
+  const copied = tags.remapCopiedPromptTags(live, new Map([['internal', 'copied-source']]),
+    new Map([['internal', 'copied-internal'], ['upstream', 'copied-upstream']]));
+  assert.deepEqual(copied, [
+    { ...live[0], edgeId: 'copied-internal', sourceNodeId: 'copied-source' },
+    { ...live[1], edgeId: 'copied-upstream' }, live[2],
+  ]);
+  const inputs = copied.slice(0, 2).map(t => ({ ...t, url: 'media.png' }));
+  assert.deepEqual(tags.missingPromptTags(copied, inputs).map(t => t.label), ['image3']);
+  assert.equal(live[0].edgeId, 'internal');
+});
+
+test('Typed or pasted tags remain chips without references; video frame tags retain their roles', () => {
+  const typed = tags.syncTagsWithText('@image1 @video2', [], []);
+  assert.deepEqual(typed.map(t => t.label), ['image1', 'video2']);
+  assert.equal(tags.segmentPrompt('@image1 @video2', typed).filter(s => s.kind === 'tag').length, 2);
+  assert.equal(tags.missingPromptTags(typed, []).length, 2);
+  const inputs = tags.getVideoFrameTaggableInputs('target', [edge('a', 'start_frame'), edge('b', 'end_frame')],
+    { startFrameUrl: 'a.png', endFrameUrl: 'b.png' });
+  const live = tags.syncTagsWithText('Move from @image1 to @image2', [], inputs);
+  assert.equal(tags.compileMediaPromptTags('Move from @image1 to @image2', live, inputs, true), 'Move from the start frame to the end frame');
+  assert.deepEqual(tags.missingPromptTags(live, inputs.slice(1)).map(t => t.label), ['image1']);
 });

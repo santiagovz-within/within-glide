@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
-import type { TaggableInput } from '@/lib/promptTags';
-import type { NodeData } from '@/types';
+import { labelInputsForTags, type TaggableInput } from '@/lib/promptTags';
+import type { NodeData, ReferenceVideoNodeData } from '@/types';
 import { getNodeMediaUrls } from './mediaOutputs';
 
 export const REFERENCE_IMAGE_HANDLE = 'reference_images';
@@ -21,10 +21,12 @@ export function getReferenceVideoInputs(nodeId: string, nodes: Node<NodeData>[],
   };
 }
 
-export function getReferenceVideoTaggableInputs(nodeId: string, nodes: Node<NodeData>[], edges: Edge[]): TaggableInput[] {
+export function getReferenceVideoTaggableInputs(nodeId: string, nodes: Node<NodeData>[], edges: Edge[], preserveLabels = true): TaggableInput[] {
   const references = getReferenceVideoInputs(nodeId, nodes, edges);
-  return (['image', 'video'] as const).flatMap(kind =>
+  const inputs = (['image', 'video'] as const).flatMap(kind =>
     (kind === 'image' ? references.images : references.videos).map((reference, portIndex) => ({
       ...reference, portIndex, label: `${kind}${portIndex + 1}`, mediaType: kind, url: reference.url ?? '',
     })));
+  const data = nodes.find(node => node.id === nodeId)?.data as ReferenceVideoNodeData | undefined;
+  return preserveLabels && !data?.promptConnected ? labelInputsForTags(inputs, data?.promptTags ?? []) : inputs;
 }

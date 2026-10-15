@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
 import type { ImageGenNodeData, NodeData, ReferenceVideoNodeData, VideoGenNodeData } from '@/types';
-import { getTaggableInputs, reconcileMediaPromptTags, referenceHandleIndex } from '@/lib/promptTags';
+import { getTaggableInputs, getVideoFrameTaggableInputs, reconcileMediaPromptTags, referenceHandleIndex } from '@/lib/promptTags';
 import { getReferenceVideoTaggableInputs } from './referenceVideoInputs';
 
 /** Only references in the same node and modality can exchange positions. */
@@ -41,7 +41,7 @@ export function reorderInputConnections(nodes: Node<NodeData>[], edges: Edge[], 
     nextEdges = edges.map(edge => groupIds.has(edge.id) ? reordered[index++] : edge);
     const current = data as ReferenceVideoNodeData;
     const fixed = !current.promptConnected && reconcileMediaPromptTags(current.prompt ?? '', current.promptTags ?? [],
-      getReferenceVideoTaggableInputs(nodeId, nodes, nextEdges));
+      getReferenceVideoTaggableInputs(nodeId, nodes, nextEdges, false), true);
     if (fixed) data = { ...current, prompt: fixed.prompt, promptTags: fixed.tags };
   } else {
     // These nodes use numbered/semantic handles, so move the connections between
@@ -55,11 +55,14 @@ export function reorderInputConnections(nodes: Node<NodeData>[], edges: Edge[], 
         inputImageUrls[referenceHandleIndex(group[index].targetHandle)!] = current.inputImageUrls?.[referenceHandleIndex(edge.targetHandle)!] ?? '';
       });
       const fixed = !current.promptConnected && reconcileMediaPromptTags(current.prompt ?? '', current.promptTags ?? [],
-        getTaggableInputs(nodeId, nextEdges, inputImageUrls));
+        getTaggableInputs(nodeId, nextEdges, inputImageUrls), true);
       data = { ...current, inputImageUrls, ...(fixed ? { prompt: fixed.prompt, promptTags: fixed.tags } : {}) };
     } else {
       const current = data as VideoGenNodeData;
-      data = { ...current, startFrameUrl: current.endFrameUrl, endFrameUrl: current.startFrameUrl };
+      const swapped = { ...current, startFrameUrl: current.endFrameUrl, endFrameUrl: current.startFrameUrl };
+      const fixed = !current.promptConnected && reconcileMediaPromptTags(current.prompt ?? '', current.promptTags ?? [],
+        getVideoFrameTaggableInputs(nodeId, nextEdges, swapped), true);
+      data = { ...swapped, ...(fixed ? { prompt: fixed.prompt, promptTags: fixed.tags } : {}) };
     }
   }
   return { nodes: nodes.map(candidate => candidate.id === nodeId ? { ...candidate, data } : candidate), edges: nextEdges };

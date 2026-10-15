@@ -200,6 +200,9 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
 
   const processImage = useCallback(async (file: File) => {
     maybeRemoveOldEdges('image');
+    mediaTypeRef.current = 'image';
+    dispatchUpdate({ mediaType: 'image', imageUrl: undefined, videoUrl: undefined });
+    document.dispatchEvent(new CustomEvent('node:image-propagate', { detail: { sourceNodeId: id, imageUrl: null } }));
     setPendingFile(file);
     setError(null);
 
@@ -263,6 +266,9 @@ export function MediaInputNode({ data, selected, id }: NodeProps & { data: Media
     }
 
     maybeRemoveOldEdges('video');
+    mediaTypeRef.current = 'video';
+    dispatchUpdate({ mediaType: 'video', videoUrl: undefined, imageUrl: undefined });
+    document.dispatchEvent(new CustomEvent('node:video-propagate', { detail: { sourceNodeId: id, videoUrl: null } }));
     setPendingFile(file);
     setError(null);
 

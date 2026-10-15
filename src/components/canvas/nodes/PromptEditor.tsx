@@ -20,6 +20,8 @@ import {
   segmentPrompt,
   syncTagsWithText,
   tagFromInput,
+  resolvePromptTag,
+  missingPromptTags,
   type PromptSegment,
   type TaggableInput,
 } from '@/lib/promptTags';
@@ -125,10 +127,7 @@ export function PromptEditor({
   const segments = useMemo(() => segmentPrompt(value, tags), [value, tags]);
   const hasChips = segments.some((s) => s.kind === 'tag');
   const showOverlay = hasChips || alwaysOverlay;
-  const inputByLabel = useMemo(
-    () => new Map(taggable.map((i) => [i.label, i])),
-    [taggable],
-  );
+  const missingLabels = new Set(missingPromptTags(tags, taggable).map(tag => tag.label));
 
   const options = useMemo(() => {
     if (!mention) return [];
@@ -212,7 +211,7 @@ export function PromptEditor({
     const nextText = value.slice(0, mention.start) + insert + value.slice(caret);
     const nextTags = syncTagsWithText(
       nextText,
-      tags.some((t) => t.label === input.label) ? tags : [...tags, tagFromInput(input)],
+      [...tags.filter(tag => tag.label !== input.label), tagFromInput(input)],
       taggable,
     );
     onChange({ prompt: nextText, tags: nextTags });
@@ -247,7 +246,7 @@ export function PromptEditor({
     }
   }
 
-  const hoverInput = hoverTag ? inputByLabel.get(hoverTag.tag.label) : undefined;
+  const hoverInput = hoverTag ? resolvePromptTag(hoverTag.tag, taggable) : undefined;
 
   return (
     <div
@@ -275,7 +274,9 @@ export function PromptEditor({
               <span key={i}>
                 {joinsPrevious(segments, i) ? WORD_JOINER : null}
                 <span
-                  className={glassStyles.promptChip}
+                  className={cn(glassStyles.promptChip, missingLabels.has(seg.tag.label) && glassStyles.promptChipMissing)}
+                  data-reference-state={missingLabels.has(seg.tag.label) ? 'missing' : 'linked'}
+                  title={missingLabels.has(seg.tag.label) ? `@${seg.tag.label}: reference missing or still uploading` : undefined}
                   onMouseEnter={(e) => setHoverTag({ tag: seg.tag, rect: e.currentTarget.getBoundingClientRect() })}
                   onMouseLeave={() => setHoverTag(null)}
                   onMouseDown={(e) => {
@@ -400,6 +401,9 @@ export function PromptEditor({
           >
             @{hoverTag.tag.label}
           </span>
+          {!hoverInput?.url && <span className="text-[10px]" style={{ color: 'var(--color-error)' }}>
+            {hoverInput ? 'Waiting for media' : 'Reference missing — reconnect it or choose a reference with @'}
+          </span>}
         </div>,
         document.body,
       )}

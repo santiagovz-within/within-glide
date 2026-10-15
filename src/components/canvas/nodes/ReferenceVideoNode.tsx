@@ -5,7 +5,7 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { ChevronLeft, ChevronRight, Clock3, Download, Video } from 'lucide-react';
 import Image from 'next/image';
 import type { ReferenceVideoNodeData } from '@/types';
-import { reconcileMediaPromptTags } from '@/lib/promptTags';
+import { reconcileMediaPromptTags, missingPromptTags, syncTagsWithText, compileMediaPromptTags } from '@/lib/promptTags';
 import { buildReferenceVideoInput, getReferenceVideoModel, REFERENCE_VIDEO_MODELS, referenceDurationOptions } from '@/lib/api/referenceVideo';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { generationJobId, useGenerationStore } from '@/lib/stores/generationStore';
@@ -40,7 +40,8 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const taggable = getReferenceVideoTaggableInputs(id, nodes, edges);
   const reconciled = data.promptConnected ? null : reconcileMediaPromptTags(data.prompt ?? '', data.promptTags ?? [], taggable);
   const prompt = reconciled?.prompt ?? data.prompt ?? '';
-  const promptTags = reconciled?.tags ?? data.promptTags ?? [];
+  const promptTags = reconciled?.tags ?? syncTagsWithText(prompt, data.promptTags ?? [], taggable);
+  const missingTags = missingPromptTags(promptTags, taggable);
   const durationOptions = referenceDurationOptions(config);
   const duration = durationOptions.includes(data.referenceDuration ?? config.defaultDuration)
     ? data.referenceDuration ?? config.defaultDuration : config.defaultDuration;
@@ -108,7 +109,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
 
   function generationPayload() {
     return {
-      model: config.id, prompt, generationMode: 'reference-to-video',
+      model: config.id, prompt: compileMediaPromptTags(prompt, promptTags, taggable), generationMode: 'reference-to-video',
       aspectRatio, videoResolution: resolution, referenceDuration: duration,
       generateAudio: data.generateAudio ?? true,
       referenceImageUrls: references.images.map(reference => reference.url),
@@ -118,7 +119,9 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   }
 
   let validationMessage: string | undefined;
-  if ([...references.images, ...references.videos].some(reference => !reference.url)) {
+  if (missingTags.length) {
+    validationMessage = `Missing reference: ${missingTags.map(tag => `@${tag.label}`).join(', ')}. Reconnect it, wait for its upload, or edit the tag.`;
+  } else if ([...references.images, ...references.videos].some(reference => !reference.url)) {
     validationMessage = 'A connected reference has no media yet. Upload or generate it before continuing.';
   } else {
     try { buildReferenceVideoInput(generationPayload()); }
@@ -221,7 +224,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
       {(['image', 'video'] as const).map(kind => {
         const items = kind === 'image' ? references.images : references.videos;
         const limit = kind === 'image' ? config.maxImages : config.maxVideos;
-        const referenceLabel = (index: number) => `@${kind}${index + 1}`;
+        const referenceLabel = (index: number) => `@${taggable.find(input => input.edgeId === items[index].edgeId)?.label ?? `${kind}${index + 1}`}`;
         return (
           <div key={kind} className={glassStyles.referenceSection}>
             <div ref={kind === 'image' ? imageRef : videoRef}

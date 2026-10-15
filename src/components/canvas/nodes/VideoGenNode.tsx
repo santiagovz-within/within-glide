@@ -10,6 +10,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import { PromptEditor } from './PromptEditor';
+import { getVideoFrameTaggableInputs, syncTagsWithText, missingPromptTags, compileMediaPromptTags } from '@/lib/promptTags';
 import { ReferenceInputRow } from './ReferenceInputRow';
 import { DisconnectInputButton } from './DisconnectInputButton';
 import type { VideoGenNodeData, ImageInputNodeData, ImageGenNodeData, MediaInputNodeData } from '@/types';
@@ -49,11 +51,6 @@ function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
 }
 
-function autoResize(el: HTMLTextAreaElement) {
-  el.style.height = 'auto';
-  el.style.height = `${el.scrollHeight}px`;
-}
-
 export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGenNodeData }) {
   const currentFlow = useFlowStore((state) => state.currentFlow);
   const activeJobId = currentFlow ? generationJobId(currentFlow.id, id) : '';
@@ -66,7 +63,6 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     if (videoHistory.length > historyLength) setHistIdx(videoHistory.length - 1);
   }
   const promptSectionRef = useRef<HTMLDivElement>(null);
-  const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const startFrameRowRef = useRef<HTMLDivElement>(null);
   const endFrameRowRef = useRef<HTMLDivElement>(null);
   const [promptHandleTop, setPromptHandleTop] = useState(50);
@@ -79,9 +75,6 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     if (!isFocused.current) setLocalPrompt(data.prompt ?? '');
   }, [data.prompt]);
 
-  useEffect(() => {
-    if (promptTextareaRef.current) autoResize(promptTextareaRef.current);
-  }, [localPrompt]);
 
   const isKling     = data.model === 'kling-3-pro';
   const isSeedanceFull = data.model === 'seedance-2';
@@ -146,6 +139,14 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const startFrameEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'start_frame');
   const endFrameEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'end_frame');
   const startFrameSource = startFrameEdge ? storeNodes.find(n => n.id === startFrameEdge.source) : undefined;
+  const taggableInputs = getVideoFrameTaggableInputs(id, storeEdges, data);
+  const promptTags = syncTagsWithText(data.prompt ?? '', data.promptTags ?? [], taggableInputs);
+  const missingTags = missingPromptTags(promptTags, taggableInputs);
+  const hasPendingInputs = taggableInputs.some(input => !input.url);
+  const inputWarning = missingTags.length
+    ? `Missing reference: ${missingTags.map(tag => `@${tag.label}`).join(', ')}. Reconnect it, wait for its upload, or edit the tag.`
+    : hasPendingInputs ? 'Waiting for connected image uploads' : undefined;
+
 
   // Derive aspect ratio from source node data synchronously
   const derivedAspect = (() => {
@@ -258,7 +259,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   }
 
   function handleGenerate() {
-    if (isGenerating || !currentFlow) return;
+    if (isGenerating || !currentFlow || inputWarning) return;
     if (needsCostConfirmation) {
       setConfirmingCost(true);
       return;
@@ -272,7 +273,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   }
 
   function startGeneration() {
-    if (isGenerating || !currentFlow) return;
+    if (isGenerating || !currentFlow || inputWarning) return;
 
     const endpoint = getFalEndpoint();
     useFlowStore.getState().consumeGcsOnlyEligibility();
@@ -284,7 +285,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       endpoint,
       payload: {
         model: data.model,
-        prompt: data.prompt ?? '',
+        prompt: compileMediaPromptTags(data.prompt ?? '', promptTags, taggableInputs, true),
         aspectRatio: data.aspectRatio,
         duration: selectedDuration,
         startFrameUrl: data.startFrameUrl,
@@ -323,9 +324,10 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
   const footer = (
     <div className={glassStyles.footerStack}>
+      {inputWarning && <p className={glassStyles.microLabel} role="status">{inputWarning}</p>}
       <button
         onClick={handleGenerate}
-        disabled={isGenerating || hasFailure}
+        disabled={isGenerating || hasFailure || !!inputWarning}
         title={
           hasFailure
             ? 'Change the prompt or inputs, then confirm below to regenerate'
@@ -417,36 +419,20 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       )}
 
       {/* Prompt */}
-      <div
-        ref={promptSectionRef}
-        className={cn(
-          glassStyles.glassSurface,
-          glassStyles.promptSection,
-          glassStyles.promptSurface,
-          data.promptConnected && glassStyles.connectedTextPrompt,
-        )}
-      >
-        {data.promptConnected ? (
-          <div className={cn(
-            glassStyles.glassContent,
-            glassStyles.connectedPrompt,
-          )}>
+      {data.promptConnected ? (
+        <div ref={promptSectionRef} className={cn(glassStyles.glassSurface, glassStyles.promptSection,
+          glassStyles.promptSurface, glassStyles.connectedTextPrompt)}>
+          <div className={cn(glassStyles.glassContent, glassStyles.connectedPrompt)}>
             Prompt connected
             {promptEdge && <DisconnectInputButton edgeId={promptEdge.id} label="prompt" style={{ height: 20 }} />}
           </div>
-        ) : (
-          <textarea
-            ref={promptTextareaRef}
-            className={cn(glassStyles.glassContent, glassStyles.promptContent, 'outline-none nodrag')}
-            rows={2}
-            placeholder="Write your prompt here…"
-            value={localPrompt}
-            onFocus={() => { isFocused.current = true; }}
-            onBlur={() => { isFocused.current = false; }}
-            onChange={(e) => { const v = e.target.value; setLocalPrompt(v); autoResize(e.target); updateData({ prompt: v }); }}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <PromptEditor containerRef={promptSectionRef} value={localPrompt} tags={promptTags} taggable={taggableInputs}
+          placeholder="Describe the video. Type @ to reference a frame…"
+          onFocusChange={focused => { isFocused.current = focused; }}
+          onChange={({ prompt, tags }) => { setLocalPrompt(prompt); updateData({ prompt, promptTags: tags }); }} />
+      )}
 
       {/* Model selector */}
       <ModelSelect options={VIDEO_MODELS} value={data.model} onChange={handleModelChange} />

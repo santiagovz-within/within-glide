@@ -167,8 +167,8 @@ export interface GenerationFailure {
  * the "@" (e.g. "image1"); `portIndex` is the 0-based reference port.
  *
  * On an Image Generation node the tag is *pinned*: `edgeId`/`sourceNodeId`
- * identify the exact connection it was picked from, and the tag is dropped if
- * that connection changes. On a Prompt node the tag is *positional* (no
+ * identify the exact connection it was picked from. Missing connections retain
+ * their tags and are highlighted until repaired. On a Prompt node the tag is *positional* (no
  * edgeId): it means "port N of whichever generation node this prompt feeds".
  */
 export interface PromptTag {
@@ -211,6 +211,7 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   seedanceResolution?: '480p' | '720p' | '1080p' | '4k';
   prompt?: string;
   promptConnected?: boolean;
+  promptTags?: PromptTag[];
   startFrameUrl?: string;
   endFrameUrl?: string;
   videoUrl?: string;
@@ -225,7 +226,6 @@ export interface VideoGenNodeData extends Record<string, unknown> {
 }
 
 export interface ReferenceVideoNodeData extends VideoGenNodeData {
-  promptTags?: PromptTag[];
   referenceDuration?: number | 'auto';
 }
 
@@ -454,6 +454,7 @@ export interface GenerateVideoRequest {
   duration?: number;
   videoResolution?: VideoGenNodeData['videoResolution'];
   generateAudio?: boolean;
+  promptTags?: PromptTag[];
   startFrameUrl?: string;
   endFrameUrl?: string;
 }

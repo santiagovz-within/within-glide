@@ -219,6 +219,12 @@
   overflow-wrap: break-word;
 }
 
+.promptChipMissing .promptChipText {
+  text-decoration: underline wavy var(--color-error);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
 textarea.promptContent {
   display: block;
   min-height: 40px;

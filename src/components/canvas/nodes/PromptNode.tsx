@@ -154,9 +154,8 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
   const promptTagCount = promptTags.length;
   const lastTagCount = useRef(promptTagCount);
 
-  // Sync localPrompt from Zustand when not focused (external changes). An
-  // untag (target disconnected) rewrites the text and must win even while
-  // typing; it also has to reach the targets, so re-propagate.
+  // Sync external prompt edits when not focused and propagate tag edits.
+  // Disconnected references retain their tags; the editor marks them missing.
   useEffect(() => {
     const tagsChanged = lastTagCount.current !== promptTagCount;
     lastTagCount.current = promptTagCount;

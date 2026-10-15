@@ -49,9 +49,9 @@ import {
   getNodeMediaUrls,
   getSourceMediaType,
 } from './mediaOutputs';
-import type { NodeType, NodeData, ReferenceVideoNodeData, ImageGenNodeData, ImageToPromptNodeData, MediaInputNodeData, PromptNodeData, PromptTag } from '@/types';
+import type { NodeType, NodeData, ReferenceVideoNodeData, ImageGenNodeData, ImageToPromptNodeData, MediaInputNodeData, PromptNodeData, PromptTag, VideoGenNodeData } from '@/types';
 import { getImageReferenceLimit } from '@/lib/api/models';
-import { reconcileMediaPromptTags, reconcilePositionalTags, reconcilePromptTags, untagLabel } from '@/lib/promptTags';
+import { reconcileMediaPromptTags, reconcilePositionalTags, reconcilePromptTags, remapCopiedPromptTags, getVideoFrameTaggableInputs } from '@/lib/promptTags';
 import { setPendingFile } from '@/lib/utils/pendingFiles';
 
 const nodeTypes = {
@@ -84,8 +84,8 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   imageInputNode:     {},
   imageToPromptNode:  { status: 'idle' },
   imageGenNode:       { model: 'nano-banana-2-1', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
-  videoGenNode:       { model: 'seedance-2-5', aspectRatio: '16:9', duration: 5, status: 'idle' },
-  referenceVideoNode: { model: 'seedance-2-5', aspectRatio: 'auto', referenceDuration: 5, videoResolution: '720p', generateAudio: true, status: 'idle' },
+  videoGenNode:       { model: 'wan-3-prime', aspectRatio: '16:9', duration: 5, status: 'idle' },
+  referenceVideoNode: { model: 'wan-3-prime', aspectRatio: 'adaptive', referenceDuration: 5, videoResolution: '1080p', generateAudio: true, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
   modifyNode:         { model: 'nano-banana-2', aspectRatio: '1:1', resolution: '1K', status: 'idle' },
   selectNode:         {},
@@ -139,17 +139,8 @@ function pasteCleanData(nodeType: string | undefined, data: NodeData): NodeData 
   // Reset array input ports
   if ('inputImageUrls' in d) d.inputImageUrls = [];
   if ('imagePortCount' in d) d.imagePortCount = 0;
-  // A pasted node has none of the original's connections, so its inline
-  // "@imageN" chips point at nothing: untag them (keep the words, drop the "@").
-  if (Array.isArray(d.promptTags) && d.promptTags.length > 0) {
-    if (typeof d.prompt === 'string') {
-      d.prompt = (d.promptTags as PromptTag[]).reduce(
-        (text, tag) => untagLabel(text, tag.label),
-        d.prompt,
-      );
-    }
-    d.promptTags = [];
-  }
+  // Prompt text and tags survive paste; connection IDs are remapped once the
+  // copied internal and upstream edges have been created.
   // Reset processing status
   if ('status' in d) d.status = 'idle';
   return d as NodeData;
@@ -186,7 +177,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
   const [isDragOver, setIsDragOver]     = useState(false);
   const reactFlowWrapper                = useRef<HTMLDivElement>(null);
   const connectionToastTimer            = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clipboardRef                    = useRef<{ nodes: Node<NodeData>[]; edges: Edge[]; incomingEdges: Edge[] } | null>(null);
+  const clipboardRef                    = useRef<{ nodes: Node<NodeData>[]; edges: Edge[]; incomingEdges: Edge[]; edgeOrder: string[] } | null>(null);
   const undoStack                       = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] }[]>([]);
   const MAX_UNDO                        = 30;
   const nodesRef                        = useRef(nodes);
@@ -253,10 +244,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
-  // Whenever connections change, untag "@imageN" chips whose connection is
-  // gone or replaced. Runs on every edge change (delete, replace, model
-  // switch, node removal, undo) so a chip never points at different media,
-  // and autosave never persists a stale mapping.
+  // Keep tag associations current while retaining missing references for repair.
   useEffect(() => {
     const allNodes = useFlowStore.getState().nodes;
     for (const node of allNodes) {
@@ -264,19 +252,23 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         const d = node.data as ImageGenNodeData;
         // While a Prompt node feeds this node, the Prompt node owns the text
         // and its positional tags are validated there.
-        if (d.promptConnected || !d.promptTags?.length) continue;
-        const fixed = reconcilePromptTags(node.id, d.prompt ?? '', d.promptTags, edges);
+        if (d.promptConnected) continue;
+        const fixed = reconcilePromptTags(node.id, d.prompt ?? '', d.promptTags ?? [], edges);
         if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       } else if (node.type === 'referenceVideoNode') {
         const d = node.data as ReferenceVideoNodeData;
-        if (d.promptConnected || !d.promptTags?.length) continue;
-        const fixed = reconcileMediaPromptTags(d.prompt ?? '', d.promptTags,
+        if (d.promptConnected) continue;
+        const fixed = reconcileMediaPromptTags(d.prompt ?? '', d.promptTags ?? [],
           getReferenceVideoTaggableInputs(node.id, allNodes, edges));
+        if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
+      } else if (node.type === 'videoGenNode') {
+        const d = node.data as VideoGenNodeData;
+        if (d.promptConnected) continue;
+        const fixed = reconcileMediaPromptTags(d.prompt ?? '', d.promptTags ?? [], getVideoFrameTaggableInputs(node.id, edges, d));
         if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       } else if (node.type === 'promptNode') {
         const d = node.data as PromptNodeData;
-        if (!d.promptTags?.length) continue;
-        const fixed = reconcilePositionalTags(node.id, d.prompt ?? '', d.promptTags, allNodes, edges);
+        const fixed = reconcilePositionalTags(node.id, d.prompt ?? '', d.promptTags ?? [], allNodes, edges);
         // The Prompt node re-propagates to its targets when its tags change.
         if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       }
@@ -495,7 +487,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         const incomingEdges = edgesRef.current.filter(
           (edge) => !selectedIds.has(edge.source) && selectedIds.has(edge.target)
         );
-        clipboardRef.current = { nodes: selected, edges: copiedEdges, incomingEdges };
+        clipboardRef.current = { nodes: selected, edges: copiedEdges, incomingEdges, edgeOrder: edgesRef.current.map(edge => edge.id) };
         e.preventDefault();
       }
 
@@ -504,6 +496,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         if (!cb || cb.nodes.length === 0) return;
         const ts = Date.now();
         const idMap = new Map<string, string>();
+        const edgeIdMap = new Map<string, string>();
 
         const newNodes: Node<NodeData>[] = cb.nodes.map((n, i) => {
           const newId = `${n.type}-${ts}-${i}`;
@@ -511,29 +504,26 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
           return { ...n, id: newId, position: { x: n.position.x + 50, y: n.position.y + 50 }, data: pasteCleanData(n.type, n.data), selected: true } as Node<NodeData>;
         });
 
-        // Internal edges — both ends remapped to new IDs
-        const internalEdges: Edge[] = cb.edges.map((edge, i) => ({
-          ...edge,
-          id: `edge-${ts}-${i}`,
-          source: idMap.get(edge.source) ?? edge.source,
-          target: idMap.get(edge.target) ?? edge.target,
-          animated: false,
-        }));
-
-        // Incoming edges from non-copied nodes — only the target is remapped so
-        // the pasted node stays connected to the same upstream source.
-        const externalEdges: Edge[] = (cb.incomingEdges ?? []).map((edge, i) => ({
-          ...edge,
-          id: `edge-ext-${ts}-${i}`,
-          target: idMap.get(edge.target) ?? edge.target,
-          animated: false,
-        }));
+        // Preserve the original edge order across internal and upstream edges.
+        const copiedEdges = [...cb.edges, ...(cb.incomingEdges ?? [])]
+          .sort((a, b) => cb.edgeOrder.indexOf(a.id) - cb.edgeOrder.indexOf(b.id));
+        const allPastedEdges = copiedEdges.filter(edge => idMap.has(edge.source) || nodesRef.current.some(node => node.id === edge.source))
+          .map((edge, i) => {
+            const edgeId = `edge-${ts}-${i}`;
+            edgeIdMap.set(edge.id, edgeId);
+            return { ...edge, id: edgeId, source: idMap.get(edge.source) ?? edge.source,
+              target: idMap.get(edge.target) ?? edge.target, animated: false };
+          });
+        for (const node of newNodes) {
+          if (Array.isArray(node.data.promptTags)) {
+            node.data = { ...node.data, promptTags: remapCopiedPromptTags(node.data.promptTags as PromptTag[], idMap, edgeIdMap) };
+          }
+        }
 
         // Reconstruct connection-derived state for pasted nodes.
         // pasteCleanData intentionally clears derived fields (promptConnected,
         // imagePortCount, inputImageUrls…) but leaves the edges intact, so we
         // mirror the same logic as onConnectHandler to restore them before render.
-        const allPastedEdges = [...internalEdges, ...externalEdges];
         for (const edge of allPastedEdges) {
           const tgtIdx = newNodes.findIndex((n) => n.id === edge.target);
           if (tgtIdx === -1) continue;
@@ -555,6 +545,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
                 ...newNodes[tgtIdx].data,
                 promptConnected: true,
                 ...(prompt !== undefined ? { prompt } : {}),
+                ...(sourceNode.type === 'promptNode' ? { promptTags: (sourceNode.data as PromptNodeData).promptTags ?? [] } : {}),
               } as NodeData,
             };
             continue;
@@ -586,25 +577,26 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
           }
 
           // ── Multi-image ref_ connections (imageGenNode) ─────────────────
-          if (!edge.targetHandle?.startsWith('ref_')) continue;
+          if (newNodes[tgtIdx].type !== 'imageGenNode' || (!edge.targetHandle?.startsWith('ref_') && edge.targetHandle !== 'reference_image')) continue;
 
           const imageUrl = getNodeMediaUrls(sourceNode, 'image')[0];
-          if (!imageUrl) continue;
 
           const tgtData = newNodes[tgtIdx].data as ImageGenNodeData;
           const urls = [...(tgtData.inputImageUrls ?? [])];
-          const refIdx = parseInt(edge.targetHandle.split('_')[1]);
-          urls[refIdx] = imageUrl;
-          const filled = urls.filter(Boolean).length;
+          const refIdx = edge.targetHandle === 'reference_image' ? 0 : Number(edge.targetHandle.slice(4));
+          urls[refIdx] = imageUrl ?? '';
+          const highestOccupied = Math.max(...allPastedEdges.filter(candidate => candidate.target === edge.target && candidate.targetHandle?.startsWith('ref_')).map(candidate => Number(candidate.targetHandle?.slice(4))), -1);
           const maxRefs = getImageReferenceLimit(tgtData.model);
           newNodes[tgtIdx] = {
             ...newNodes[tgtIdx],
-            data: { ...newNodes[tgtIdx].data, inputImageUrls: urls, imagePortCount: Math.min(filled + 1, maxRefs) } as NodeData,
+            data: { ...newNodes[tgtIdx].data, inputImageUrls: urls, imagePortCount: Math.min(highestOccupied + 2, maxRefs) } as NodeData,
           };
         }
 
-        setNodes([...nodesRef.current.map((n) => ({ ...n, selected: false })), ...newNodes]);
-        setEdges([...edgesRef.current, ...internalEdges, ...externalEdges]);
+        useFlowStore.setState({
+          nodes: [...nodesRef.current.map((n) => ({ ...n, selected: false })), ...newNodes],
+          edges: [...edgesRef.current, ...allPastedEdges], isDirty: true,
+        });
         e.preventDefault();
       }
     }
@@ -929,12 +921,10 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
 
       if (sourceNode && sourceMediaType === 'image') {
         const imageUrl = getNodeMediaUrls(sourceNode, 'image')[0];
-        if (imageUrl) {
-          propagateImageToTarget(connection.source, {
-            id: '', source: connection.source, target: connection.target,
-            sourceHandle: connection.sourceHandle, targetHandle: connection.targetHandle,
-          }, imageUrl);
-        }
+        propagateImageToTarget(connection.source, {
+          id: '', source: connection.source, target: connection.target,
+          sourceHandle: connection.sourceHandle, targetHandle: connection.targetHandle,
+        }, imageUrl ?? null);
       }
 
       if (sourceNode && sourceMediaType === 'video' && (connection.targetHandle === 'video' || connection.targetHandle === 'video_in')) {

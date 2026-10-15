@@ -3,10 +3,10 @@
 // A tag is a piece of prompt text ("@image2") plus a PromptTag record that pins
 // it to the reference port and connection it was picked from. The text alone is
 // never trusted: "@image2" only renders as a chip while a matching PromptTag
-// exists, and a PromptTag only survives while its connection does.
+// exists. Tags survive missing connections so the prompt can be repaired.
 
 import type { Edge, Node } from '@xyflow/react';
-import type { ImageGenNodeData, NodeData, PromptReferenceStyle, PromptTag } from '@/types';
+import type { ImageGenNodeData, NodeData, PromptReferenceStyle, PromptTag, VideoGenNodeData } from '@/types';
 
 export type { PromptReferenceStyle };
 
@@ -81,7 +81,7 @@ export function getPromptTargets(promptNodeId: string, nodes: Node<NodeData>[], 
   const targetIds = new Set(
     edges.filter((e) => e.source === promptNodeId && e.sourceHandle === 'prompt').map((e) => e.target),
   );
-  return nodes.filter((n) => targetIds.has(n.id) && (n.type === 'imageGenNode' || n.type === 'referenceVideoNode'));
+  return nodes.filter((n) => targetIds.has(n.id) && ['imageGenNode', 'referenceVideoNode', 'videoGenNode'].includes(n.type ?? ''));
 }
 
 /**
@@ -102,7 +102,9 @@ export function getDownstreamTaggableInputs(
       ? resolveReferenceInputs?.(target.id) ?? (['image', 'video'] as const).flatMap(kind =>
         edges.filter(edge => edge.target === target.id && edge.targetHandle === `reference_${kind}s`)
           .map((_, portIndex) => ({ label: `${kind}${portIndex + 1}`, portIndex, mediaType: kind, url: '' })))
-      : getTaggableInputs(target.id, edges, data.inputImageUrls);
+      : target.type === 'videoGenNode'
+        ? getVideoFrameTaggableInputs(target.id, edges, target.data as VideoGenNodeData)
+        : getTaggableInputs(target.id, edges, data.inputImageUrls);
     for (const input of inputs) {
       const existing = byLabel.get(input.label);
       if (!existing) {
@@ -147,7 +149,7 @@ export function labelsInText(text: string): Set<string> {
 /**
  * Keep `tags` consistent with `text` and the currently connected inputs:
  *  - drop tags whose "@label" the user deleted from the text
- *  - auto-create tags for "@imageN" typed by hand when port N is connected
+ *  - register typed/pasted media tags even when their references are missing
  * Returns the same array instance when nothing changed.
  */
 export function syncTagsWithText(
@@ -162,7 +164,7 @@ export function syncTagsWithText(
   for (const label of present) {
     if (have.has(label)) continue;
     const input = taggable.find((i) => i.label === label);
-    if (input) added.push(tagFromInput(input));
+    added.push(input ? tagFromInput(input) : { label, portIndex: Number(label.replace(/^(image|video)/, '')) - 1 });
   }
   if (kept.length === tags.length && added.length === 0) return tags;
   return [...kept, ...added];
@@ -228,7 +230,7 @@ export function formatPromptReference(style: PromptReferenceStyle, position: num
 
 export interface CompiledPrompt {
   prompt: string;
-  /** Tags whose port has no image to send; their "@" was dropped in `prompt`. */
+  /** Tags whose port has no image to send. */
   unresolved: PromptTag[];
 }
 
@@ -257,7 +259,7 @@ export function compilePromptForModel(
     const pos = positionByPort.get(tag.portIndex);
     if (pos === undefined) {
       unresolved.push(tag);
-      return tag.label;
+      return token;
     }
     return formatPromptReference(style, pos);
   });
@@ -267,116 +269,101 @@ export function compilePromptForModel(
 
 // ── Keeping tags honest ──────────────────────────────────────────────────────
 
-/**
- * For an Image Generation node that owns its prompt: drop tags whose
- * connection no longer exists exactly as it did when the tag was picked (same
- * edge id, same target port, same source node). Their "@label" text becomes
- * plain "label". Returns null when nothing changed.
- *
- * Positional tags (inherited from a Prompt node that has since been
- * disconnected) are adopted: pinned to the node's own connection on that port
- * if there is one, otherwise untagged.
- *
- * Because the check is by edge identity, replacing the image on a port with a
- * different connection untags too — a chip never silently re-points.
- */
-export function reconcilePromptTags(
-  nodeId: string,
-  prompt: string,
-  tags: PromptTag[],
-  edges: Edge[],
-): { prompt: string; tags: PromptTag[] } | null {
-  if (tags.length === 0) return null;
-  const edgeById = new Map(edges.map((e) => [e.id, e]));
-  let nextPrompt = prompt;
-  let changed = false;
-  const kept: PromptTag[] = [];
-  for (const tag of tags) {
-    if (!tag.edgeId) {
-      const own = edges.find((e) => e.target === nodeId && referenceHandleIndex(e.targetHandle) === tag.portIndex);
-      changed = true;
-      if (own) kept.push({ label: tag.label, portIndex: tag.portIndex, edgeId: own.id, sourceNodeId: own.source });
-      else nextPrompt = untagLabel(nextPrompt, tag.label);
-      continue;
+/** Resolve by connection identity, or a reconnect to the same source. */
+export function resolvePromptTag(tag: PromptTag, inputs: TaggableInput[]): TaggableInput | undefined {
+  const kind = tag.label.startsWith('video') ? 'video' : 'image';
+  const sameKind = inputs.filter(input => (input.mediaType ?? 'image') === kind);
+  if (!tag.edgeId) return sameKind.find(input => input.portIndex === tag.portIndex);
+  const exact = sameKind.find(input => input.edgeId === tag.edgeId && input.sourceNodeId === tag.sourceNodeId);
+  const sameSource = sameKind.filter(input => input.sourceNodeId === tag.sourceNodeId);
+  return exact ?? (sameSource.length === 1 ? sameSource[0] : sameSource.find(input => input.portIndex === tag.portIndex));
+}
+
+export function missingPromptTags(tags: PromptTag[], inputs: TaggableInput[]): PromptTag[] {
+  return tags.filter(tag => !resolvePromptTag(tag, inputs)?.url);
+}
+
+/** Keep visible reference labels stable when a reference list compacts. */
+export function labelInputsForTags(inputs: TaggableInput[], tags: PromptTag[]): TaggableInput[] {
+  const reserved = new Set(tags.map(tag => tag.label));
+  const assigned = new Set<string>();
+  return inputs.map(input => {
+    const tag = tags.find(tag => resolvePromptTag(tag, inputs) === input);
+    let label = tag?.label ?? input.label;
+    if (assigned.has(label) || (!tag && reserved.has(label))) {
+      const kind = input.mediaType ?? 'image';
+      let number = 1;
+      while (reserved.has(`${kind}${number}`) || assigned.has(`${kind}${number}`)) number++;
+      label = `${kind}${number}`;
     }
-    const edge = edgeById.get(tag.edgeId);
-    const stillValid =
-      !!edge &&
-      edge.target === nodeId &&
-      edge.source === tag.sourceNodeId &&
-      referenceHandleIndex(edge.targetHandle) === tag.portIndex;
-    if (stillValid) kept.push(tag);
-    else { nextPrompt = untagLabel(nextPrompt, tag.label); changed = true; }
-  }
-  if (!changed) return null;
-  return { prompt: nextPrompt, tags: kept };
+    assigned.add(label);
+    return { ...input, label };
+  });
 }
 
-/**
- * For a Prompt node: a positional tag stays valid while at least one Image
- * Generation node it feeds has a connection on that port. Otherwise untag.
- * Returns null when nothing changed.
- */
-export function reconcilePositionalTags(
-  promptNodeId: string,
-  prompt: string,
-  tags: PromptTag[],
-  nodes: Node<NodeData>[],
-  edges: Edge[],
-): { prompt: string; tags: PromptTag[] } | null {
-  if (tags.length === 0) return null;
-  const available = new Set(getDownstreamTaggableInputs(promptNodeId, nodes, edges).map((i) => i.label));
-  let nextPrompt = prompt;
-  const kept: PromptTag[] = [];
-  for (const tag of tags) {
-    if (available.has(tag.label)) kept.push(tag);
-    else nextPrompt = untagLabel(nextPrompt, tag.label);
-  }
-  if (kept.length === tags.length) return null;
-  return { prompt: nextPrompt, tags: kept };
+export function getVideoFrameTaggableInputs(nodeId: string, edges: Edge[], data: VideoGenNodeData): TaggableInput[] {
+  return edges.filter(edge => edge.target === nodeId && ['start_frame', 'end_frame'].includes(edge.targetHandle ?? ''))
+    .map(edge => {
+      const portIndex = edge.targetHandle === 'start_frame' ? 0 : 1;
+      return { edgeId: edge.id, sourceNodeId: edge.source, portIndex, label: imageTagLabel(portIndex),
+        url: (portIndex === 0 ? data.startFrameUrl : data.endFrameUrl) ?? '', mediaType: 'image' as const };
+    }).sort((a, b) => a.portIndex - b.portIndex);
 }
 
-/**
- * Tags that would break a generation: their port is connected but has no
- * image to send yet (e.g. an upstream node hasn't generated). Tags with a
- * missing connection are expected to have been untagged already by
- * reconcilePromptTags, but are reported here too as a safety net.
- */
-export function findBrokenTags(
-  nodeId: string,
-  tags: PromptTag[],
-  edges: Edge[],
-  inputImageUrls: string[] | undefined,
-): PromptTag[] {
-  const valid = reconcilePromptTags(nodeId, '', tags, edges)?.tags ?? tags;
-  const validLabels = new Set(valid.map((t) => t.label));
-  return tags.filter((t) => !validLabels.has(t.label) || !inputImageUrls?.[t.portIndex]);
+/** Compile stable labels to the actual ordered media sent to the provider. */
+export function compileMediaPromptTags(prompt: string, tags: PromptTag[], inputs: TaggableInput[], frames = false): string {
+  const byLabel = new Map(tags.map(tag => [tag.label, tag]));
+  return prompt.replace(MEDIA_TAG_PATTERN, (token, kind: string, number: string) => {
+    const tag = byLabel.get(`${kind}${number}`);
+    const input = tag && resolvePromptTag(tag, inputs);
+    if (!input?.url) return token;
+    return frames ? (input.portIndex === 0 ? 'the start frame' : 'the end frame') : `@${kind}${input.portIndex + 1}`;
+  });
 }
 
-/** Keep ordered media tags pinned, renumbering surviving connections in one pass. */
-export function reconcileMediaPromptTags(prompt: string, tags: PromptTag[], inputs: TaggableInput[]) {
+export function reconcilePromptTags(nodeId: string, prompt: string, tags: PromptTag[], edges: Edge[]) {
+  return reconcileMediaPromptTags(prompt, tags, getTaggableInputs(nodeId, edges, undefined));
+}
+
+/** Prompt-node tags remain positional, including when no target currently supplies a reference. */
+export function reconcilePositionalTags(promptNodeId: string, prompt: string, tags: PromptTag[], nodes: Node<NodeData>[], edges: Edge[]) {
+  const next = syncTagsWithText(prompt, tags, getDownstreamTaggableInputs(promptNodeId, nodes, edges));
+  return next === tags ? null : { prompt, tags: next };
+}
+
+export function findBrokenTags(nodeId: string, tags: PromptTag[], edges: Edge[], inputImageUrls: string[] | undefined): PromptTag[] {
+  return missingPromptTags(tags, getTaggableInputs(nodeId, edges, inputImageUrls));
+}
+
+/** Preserve missing tags. Only an explicit reorder renumbers the prompt's labels. */
+export function reconcileMediaPromptTags(prompt: string, tags: PromptTag[], inputs: TaggableInput[], renumber = false) {
+  const synced = syncTagsWithText(prompt, tags, inputs);
+  const reserved = new Set(synced.filter(tag => !resolvePromptTag(tag, inputs)).map(tag => tag.label));
   const replacements = new Map<string, string>();
-  const kept: PromptTag[] = [];
-  let changed = false;
-  for (const tag of tags) {
-    const input = tag.edgeId
-      ? inputs.find(input => input.edgeId === tag.edgeId && input.sourceNodeId === tag.sourceNodeId
-        && input.label.startsWith(tag.label.startsWith('video') ? 'video' : 'image'))
-      : inputs.find(input => input.label === tag.label);
-    if (!input) {
-      replacements.set(tag.label, tag.label);
-      changed = true;
-      continue;
-    }
-    const next = tagFromInput(input);
-    kept.push(next);
-    replacements.set(tag.label, `@${next.label}`);
+  let changed = synced !== tags;
+  const nextTags = synced.map(tag => {
+    const input = resolvePromptTag(tag, inputs);
+    if (!input) return tag;
+    // Missing labels reserve their names. Keep all labels stable in that case
+    // so renumbering cannot make two different references share a tag.
+    const label = renumber && reserved.size === 0 ? input.label : tag.label;
+    const next = { ...tagFromInput(input), label };
     if (next.label !== tag.label || next.portIndex !== tag.portIndex || next.edgeId !== tag.edgeId
       || next.sourceNodeId !== tag.sourceNodeId) changed = true;
-  }
+    replacements.set(tag.label, `@${label}`);
+    return next;
+  });
   if (!changed) return null;
   return {
-    prompt: prompt.replace(MEDIA_TAG_PATTERN, (token, kind: string, num: string) => replacements.get(`${kind}${num}`) ?? token),
-    tags: kept,
+    prompt: renumber ? prompt.replace(MEDIA_TAG_PATTERN, (token, kind: string, num: string) => replacements.get(`${kind}${num}`) ?? token) : prompt,
+    tags: nextTags,
   };
+}
+
+/** Remap only copied associations; absent references keep their original missing binding. */
+export function remapCopiedPromptTags(tags: PromptTag[], nodeIds: Map<string, string>, edgeIds: Map<string, string>): PromptTag[] {
+  return tags.map(tag => ({ ...tag,
+    ...(tag.edgeId && edgeIds.has(tag.edgeId) ? { edgeId: edgeIds.get(tag.edgeId) } : {}),
+    ...(tag.sourceNodeId && nodeIds.has(tag.sourceNodeId) ? { sourceNodeId: nodeIds.get(tag.sourceNodeId) } : {}),
+  }));
 }
