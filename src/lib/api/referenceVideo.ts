@@ -35,6 +35,22 @@ const REFERENCE_DURATION_CHOICES = [4, 5, 8, 10, 12, 15, 20, 25, 30];
 const seedanceAspects = ['auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'];
 export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
   {
+    id: 'wan-3-prime', name: 'Wan 3 Prime',
+    endpoint: 'alibaba/wan-3.0-prime/reference-to-video',
+    estimatedUnitPrice: 0.28,
+    // Use the same 1080p pricing API base rate as Wan's other video endpoints.
+    pricing: { kind: 'video-seconds', resolutionMultipliers: { '480p': 0.068 / 0.28, '720p': 0.14 / 0.28, '1080p': 1 } },
+    aspectRatios: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    resolutions: ['480p', '720p', '1080p'],
+    minDuration: 2, maxDuration: 30, defaultDuration: 5,
+    durationOptions: REFERENCE_DURATION_CHOICES,
+    defaultAspectRatio: 'adaptive', defaultResolution: '1080p', autoDuration: 'null',
+    audioParam: 'audio', imageParam: 'reference_image_urls', videoParam: 'reference_video_urls',
+    maxImages: 10, maxVideos: 5, maxReferences: 15,
+    referenceHint: 'Refer to images as Image 1, Image 2 and videos as Video 1, Video 2.',
+    videoHint: 'At most 15 seconds combined; each clip must be at least 16 fps.',
+  },
+  {
     id: 'seedance-2-5', name: 'Seedance 2.5',
     endpoint: 'bytedance/seedance-2.5/reference-to-video',
     estimatedUnitPrice: 0.0214,
@@ -107,22 +123,6 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
     maxImages: 9, maxVideos: 3, maxReferences: 12,
     referenceHint: 'Refer to images as Image 1, Image 2 and videos as Video 1, Video 2.',
     videoHint: 'Each clip must be 2–15 seconds, with at most 15 seconds combined.',
-  },
-  {
-    id: 'wan-3-prime', name: 'Wan 3 Prime',
-    endpoint: 'alibaba/wan-3.0-prime/reference-to-video',
-    estimatedUnitPrice: 0.28,
-    // Use the same 1080p pricing API base rate as Wan's other video endpoints.
-    pricing: { kind: 'video-seconds', resolutionMultipliers: { '480p': 0.068 / 0.28, '720p': 0.14 / 0.28, '1080p': 1 } },
-    aspectRatios: ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16'],
-    resolutions: ['480p', '720p', '1080p'],
-    minDuration: 2, maxDuration: 30, defaultDuration: 5,
-    durationOptions: REFERENCE_DURATION_CHOICES,
-    defaultAspectRatio: 'adaptive', defaultResolution: '1080p', autoDuration: 'null',
-    audioParam: 'audio', imageParam: 'reference_image_urls', videoParam: 'reference_video_urls',
-    maxImages: 10, maxVideos: 5, maxReferences: 15,
-    referenceHint: 'Refer to images as Image 1, Image 2 and videos as Video 1, Video 2.',
-    videoHint: 'At most 15 seconds combined; each clip must be at least 16 fps.',
   },
 ];
 

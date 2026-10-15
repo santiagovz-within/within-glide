@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Position, type NodeProps } from '@xyflow/react';
-import { ChevronLeft, ChevronRight, Clock3, Download, Video, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock3, Download, Video } from 'lucide-react';
 import Image from 'next/image';
 import type { ReferenceVideoNodeData } from '@/types';
 import { reconcileMediaPromptTags } from '@/lib/promptTags';
@@ -17,6 +17,8 @@ import { CanvasImage, CanvasVideo } from '../CanvasMedia';
 import { getReferenceVideoTaggableInputs, getReferenceVideoInputs, REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from '../referenceVideoInputs';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import { ReferenceInputRow } from './ReferenceInputRow';
+import { DisconnectInputButton } from './DisconnectInputButton';
 import { PromptEditor } from './PromptEditor';
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
@@ -30,6 +32,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const currentFlow = useFlowStore(state => state.currentFlow);
   const nodes = useFlowStore(state => state.nodes);
   const edges = useFlowStore(state => state.edges);
+  const promptEdge = edges.find(edge => edge.target === id && edge.targetHandle === 'prompt');
   const activeJobId = currentFlow ? generationJobId(currentFlow.id, id) : '';
   const isGenerating = useGenerationStore(state => !!state.jobs[activeJobId]);
   const config = getReferenceVideoModel(data.model) ?? REFERENCE_VIDEO_MODELS[0];
@@ -142,11 +145,6 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
     document.dispatchEvent(new CustomEvent('node:video-propagate', { detail: { sourceNodeId: id, videoUrl } }));
   }
 
-  function removeReference(edgeId: string) {
-    const store = useFlowStore.getState();
-    store.setEdges(store.edges.filter(edge => edge.id !== edgeId));
-  }
-
   const footer = (
     <div className={glassStyles.footerStack}>
       {validationMessage && <p className={cn(glassStyles.microLabel, 'nodrag')} role="status">{validationMessage}</p>}
@@ -185,7 +183,10 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
       {data.promptConnected ? (
         <div ref={promptRef} className={cn(glassStyles.glassSurface, glassStyles.promptSection,
           glassStyles.promptSurface, glassStyles.connectedTextPrompt)}>
-          <div className={cn(glassStyles.glassContent, glassStyles.connectedPrompt)} title={prompt}>Prompt connected</div>
+          <div className={cn(glassStyles.glassContent, glassStyles.connectedPrompt)} title={prompt}>
+            Prompt connected
+            {promptEdge && <DisconnectInputButton edgeId={promptEdge.id} label="prompt" style={{ height: 20 }} />}
+          </div>
         </div>
       ) : (
         <PromptEditor containerRef={promptRef} value={prompt} tags={promptTags} taggable={taggable}
@@ -224,20 +225,18 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         return (
           <div key={kind} className={glassStyles.referenceSection}>
             <div ref={kind === 'image' ? imageRef : videoRef}
-              className={cn(glassStyles.glassSurface, glassStyles.connector, items.length ? glassStyles.connectorActive : glassStyles.connectorInactive)}>
+              className={cn(glassStyles.glassSurface, glassStyles.connector, items.length
+                ? kind === 'video' ? glassStyles.connectorActiveVideo : glassStyles.connectorActive : glassStyles.connectorInactive)}>
               <span className={glassStyles.glassContent}>{kind === 'image' ? 'Image' : 'Video'} References ({items.length}/{limit})</span>
             </div>
             {items.length === 0 && <p className={glassStyles.microLabel}>Connect {kind} outputs to the port.</p>}
             {items.map((item, index) => (
-              <div key={item.edgeId} className={cn(glassStyles.rowBetween, 'nodrag')}>
-                <div style={{ width: 48, height: 36, overflow: 'hidden', borderRadius: 5 }}>
-                  {item.url && (kind === 'image'
-                    ? <CanvasImage src={item.url} alt={`Image ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <CanvasVideo src={item.url} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)}
-                </div>
-                <span className={glassStyles.microLabel} style={{ textTransform: 'none' }}>{referenceLabel(index)}{!item.url ? ' · Waiting for media' : ''}</span>
-                <button aria-label={`Remove ${kind} reference ${index + 1}`} onClick={() => removeReference(item.edgeId)} className="nodrag p-1"><X size={12} /></button>
-              </div>
+              <ReferenceInputRow key={item.edgeId} nodeId={id} edgeId={item.edgeId} kind={kind}
+                canReorder={items.length > 1} label={`${referenceLabel(index)}${!item.url ? ' · Waiting for media' : ''}`}>
+                {item.url && (kind === 'image'
+                  ? <CanvasImage src={item.url} alt={`Image ${index + 1}`} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <CanvasVideo src={item.url} muted draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)}
+              </ReferenceInputRow>
             ))}
             {kind === 'video' && <p className={cn(glassStyles.microLabel, 'nodrag')} style={{ textTransform: 'none' }}>{config.videoHint}</p>}
           </div>

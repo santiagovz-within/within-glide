@@ -47,7 +47,7 @@ export function GenerationFailureOverlay({
  * Regenerating with the same inputs just reproduces the same rejection, so the
  * Generate button stays disabled until the user confirms they changed something.
  */
-export function RegenerateGate({ onChangesApplied }: { onChangesApplied: () => void }) {
+export function RegenerateGate({ onChangesApplied, disabled }: { onChangesApplied: () => void; disabled?: boolean }) {
   return (
     <div className={glassStyles.rowBetween} style={{ paddingInline: 2 }}>
       <span className={glassStyles.microLabel}>
@@ -55,11 +55,12 @@ export function RegenerateGate({ onChangesApplied }: { onChangesApplied: () => v
       </span>
       <button
         onClick={onChangesApplied}
+        disabled={disabled}
         className={cn(
           glassStyles.glassSurface,
           glassStyles.chip,
           glassStyles.chipAuto,
-          'nodrag transition-opacity hover:opacity-80 active:opacity-60',
+          'nodrag transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-40',
         )}
       >
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>

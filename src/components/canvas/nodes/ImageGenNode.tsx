@@ -11,6 +11,9 @@ import { downloadAllFromUrls, downloadFromUrl } from '@/lib/utils/download';
 import { CanvasImage } from '@/components/canvas/CanvasMedia';
 import { NodeWrapper } from './NodeWrapper';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
+import { ReferenceInputRow } from './ReferenceInputRow';
+import { DisconnectInputButton } from './DisconnectInputButton';
+import { acknowledgeImageFailure, preserveImageBatch } from '@/lib/imageGenerationResults';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import type { ImageGenNodeData } from '@/types';
 import {
@@ -48,6 +51,8 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadingImageIndex, setDownloadingImageIndex] = useState<number | null>(null);
   const storeEdges = useFlowStore((state) => state.edges);
+  const promptEdge = storeEdges.find(edge => edge.target === id && edge.targetHandle === 'prompt');
+  const singleReferenceEdge = storeEdges.find(edge => edge.target === id && edge.targetHandle === 'reference_image');
   const isOutputConnected = storeEdges.some((edge) => edge.source === id && edge.sourceHandle === 'image');
   const genHistory = data.generationHistory ?? [];
   const [histIdx, setHistIdx] = useState(() => Math.max(0, genHistory.length - 1));
@@ -274,12 +279,15 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   /** Clears the failure so the Generate button unlocks for the edited inputs. */
   function acknowledgeFailure() {
-    updateData({
-      status: 'idle',
-      errorMessage: undefined,
-      generationErrors: undefined,
-      generationSlots: undefined,
-    });
+    if (isGenerating || data.pendingRequests?.length) return;
+    const updates = acknowledgeImageFailure(data);
+    updateData(updates);
+    setHistIdx(Math.max(0, (updates.generationHistory?.length ?? 1) - 1));
+    if (updates.generatedImages?.[0]) {
+      document.dispatchEvent(new CustomEvent('node:image-propagate', {
+        detail: { sourceNodeId: id, imageUrl: updates.generatedImages[0] },
+      }));
+    }
   }
 
   const sliderPct = ((data.numImages - 1) / 3) * 100;
@@ -293,7 +301,9 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     : displayImages;
   const downloadableImages = previewSlots.filter((url): url is string => !!url);
   const hasFailure = data.status === 'error';
-  const displayVersion = isShowingActiveGeneration ? genHistory.length + 1 : histIdx + 1;
+  const batchAlreadySaved = hasFailure && downloadableImages.length > 0
+    && preserveImageBatch(genHistory, downloadableImages) === genHistory;
+  const displayVersion = isShowingActiveGeneration ? genHistory.length + (batchAlreadySaved ? 0 : 1) : histIdx + 1;
   const previewAspectRatio = data.aspectRatio.replace(':', ' / ');
 
   const footer = (
@@ -324,7 +334,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           } : null} />
         </span>
       </button>
-      {hasFailure && <RegenerateGate onChangesApplied={acknowledgeFailure} />}
+      {hasFailure && <RegenerateGate onChangesApplied={acknowledgeFailure} disabled={isGenerating || hasPendingRequests} />}
       {downloadableImages.length > 0 && (
         <div key={downloadableImages[0]} className={glassStyles.footerSecondary}>
           <button
@@ -428,6 +438,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
             )}
           >
             Prompt connected
+            {promptEdge && <DisconnectInputButton edgeId={promptEdge.id} label="prompt" style={{ height: 20 }} />}
           </div>
         </div>
       ) : (
@@ -582,22 +593,24 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
               const hasImage = !!(data.inputImageUrls?.[i]);
               const isConnected = connectedReferenceHandles.has(`ref_${i}`) || hasImage;
               return (
-                <div
-                  key={i}
-                  className={cn(
-                    glassStyles.glassSurface,
-                    glassStyles.connector,
-                    isConnected ? glassStyles.connectorActive : glassStyles.connectorInactive,
-                  )}
-                >
-                  <span className={glassStyles.glassContent}>
-                    {usesStyleReference ? `Style Reference ${i + 1}` : `@image${i + 1}`}
-                  </span>
-                </div>
+                <ReferenceInputRow key={i} nodeId={id}
+                  edgeId={storeEdges.find(edge => edge.target === id && edge.targetHandle === `ref_${i}`)?.id}
+                  connected={isConnected} canReorder={connectedCount > 1} compact
+                  label={usesStyleReference ? `Style Reference ${i + 1}` : `@image${i + 1}`}>
+                  {hasImage && <CanvasImage src={data.inputImageUrls![i]} alt={`Reference ${i + 1}`} draggable={false}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                </ReferenceInputRow>
               );
             })}
           </div>
         </div>
+      )}
+
+      {!isMultiImageModel && singleReferenceEdge && (
+        <ReferenceInputRow nodeId={id} edgeId={singleReferenceEdge.id} label="Reference image" canReorder={false} compact>
+          {data.inputImageUrls?.[0] && <CanvasImage src={data.inputImageUrls[0]} alt="Reference image" draggable={false}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+        </ReferenceInputRow>
       )}
 
       {/* ── Generation history navigation ─────────────────────── */}

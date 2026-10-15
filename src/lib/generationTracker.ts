@@ -9,6 +9,7 @@ import type {
 } from '@/types';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { playSuccessSound } from '@/lib/utils/sound';
+import { preserveImageBatch } from '@/lib/imageGenerationResults';
 import {
   generationJobId,
   type BackgroundGenerationJob,
@@ -218,6 +219,7 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
           generatedImages: completedMedia,
           generationSlots: job.slots,
           generationErrors: failuresBySlot(job),
+          generationHistory: preserveImageBatch(history, completedMedia),
           status: 'error',
           errorMessage: errorMessageForJob(job),
           pendingRequests: undefined,
@@ -295,8 +297,8 @@ async function saveFinalJob(job: BackgroundGenerationJob) {
     // The Flow may have loaded while the persistence request was in flight.
     applyNodeData(job.flowId, job.nodeId, job.finalData);
     const completedMedia = job.slots.find((url): url is string => !!url);
-    if (completedMedia && job.failedSlots.length === 0) {
-      playSuccessSound();
+    if (completedMedia) {
+      if (job.failedSlots.length === 0) playSuccessSound();
       propagateCompletedMedia(job, completedMedia);
     }
     useGenerationStore.getState().removeJob(job.id);

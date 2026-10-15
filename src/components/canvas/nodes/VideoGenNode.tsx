@@ -10,12 +10,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeWrapper } from './NodeWrapper';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
+import { ReferenceInputRow } from './ReferenceInputRow';
+import { DisconnectInputButton } from './DisconnectInputButton';
 import type { VideoGenNodeData, ImageInputNodeData, ImageGenNodeData, MediaInputNodeData } from '@/types';
 import { VIDEO_MODELS, FAL_MODELS } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
-import { CanvasVideo } from '@/components/canvas/CanvasMedia';
+import { CanvasImage, CanvasVideo } from '@/components/canvas/CanvasMedia';
 import { generationJobId, useGenerationStore } from '@/lib/stores/generationStore';
 import { startTrackedVideoGeneration } from '@/lib/generationTracker';
 import { cn } from '@/lib/utils/cn';
@@ -139,8 +141,10 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
   // Read start-frame source node directly from store (reactive, zero-latency)
   const storeEdges = useFlowStore(state => state.edges);
+  const promptEdge = storeEdges.find(edge => edge.target === id && edge.targetHandle === 'prompt');
   const storeNodes = useFlowStore(state => state.nodes);
   const startFrameEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'start_frame');
+  const endFrameEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'end_frame');
   const startFrameSource = startFrameEdge ? storeNodes.find(n => n.id === startFrameEdge.source) : undefined;
 
   // Derive aspect ratio from source node data synchronously
@@ -397,7 +401,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         id="start_frame"
         portType="image"
         offset={`${startFrameHandleTop}px`}
-        connected={storeEdges.some(e => e.target === id && e.targetHandle === 'start_frame')}
+        connected={!!startFrameEdge}
       />
       {supportsEndFrame && (
         <TypedHandle
@@ -406,7 +410,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           id="end_frame"
           portType="image"
           offset={`${endFrameHandleTop}px`}
-          connected={storeEdges.some(e => e.target === id && e.targetHandle === 'end_frame')}
+          connected={!!endFrameEdge}
           disabled={!startFrameEdge}
           disabledReason="Connect a Start Frame first — End Frame requires a Start Frame"
         />
@@ -428,6 +432,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             glassStyles.connectedPrompt,
           )}>
             Prompt connected
+            {promptEdge && <DisconnectInputButton edgeId={promptEdge.id} label="prompt" style={{ height: 20 }} />}
           </div>
         ) : (
           <textarea
@@ -507,29 +512,19 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       <div className={glassStyles.referenceSection}>
         <label className={glassStyles.microLabel}>Frame References</label>
         <div className={glassStyles.connectorRows}>
-          <div
-            ref={startFrameRowRef}
-            className={cn(
-              glassStyles.glassSurface,
-              glassStyles.connector,
-              data.startFrameUrl ? glassStyles.connectorActive : glassStyles.connectorInactive,
-            )}
-          >
-            <span className={glassStyles.glassContent}>
-              Start Frame
-            </span>
-          </div>
+          <ReferenceInputRow ref={startFrameRowRef} nodeId={id} edgeId={startFrameEdge?.id}
+            label="Start Frame" connected={!!startFrameEdge || !!data.startFrameUrl}
+            canReorder={supportsEndFrame && !!startFrameEdge && !!endFrameEdge} compact>
+            {data.startFrameUrl && <CanvasImage src={data.startFrameUrl} alt="Start frame" draggable={false}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+          </ReferenceInputRow>
           {supportsEndFrame && (
-            <div
-              ref={endFrameRowRef}
-              className={cn(
-                glassStyles.glassSurface,
-                glassStyles.connector,
-                data.endFrameUrl ? glassStyles.connectorActive : glassStyles.connectorInactive,
-              )}
-            >
-              <span className={glassStyles.glassContent}>End Frame</span>
-            </div>
+            <ReferenceInputRow ref={endFrameRowRef} nodeId={id} edgeId={endFrameEdge?.id}
+              label="End Frame" connected={!!endFrameEdge || !!data.endFrameUrl}
+              canReorder={!!startFrameEdge && !!endFrameEdge} compact>
+              {data.endFrameUrl && <CanvasImage src={data.endFrameUrl} alt="End frame" draggable={false}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            </ReferenceInputRow>
           )}
         </div>
       </div>
