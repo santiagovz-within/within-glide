@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils/cn';
 import { createClient } from '@/lib/supabase/client';
 import { useGenerationStore } from '@/lib/stores/generationStore';
+import { isHistoricalGeneration } from '@/lib/generationRecoveryPolicy';
 import { PORT_COLORS } from '@/components/canvas/nodes/TypedHandle';
 
 const NAV_ITEMS = [
@@ -44,7 +45,9 @@ export function Sidebar() {
 
   const checkingFlows = new Map<string, { title: string; count: number }>();
   for (const job of Object.values(generationJobs)) {
-    if (job.phase !== 'checking') continue;
+    // Reconcile historical requests silently; only confirmed live work belongs
+    // in the sidebar after the recovery window has elapsed.
+    if (job.phase !== 'checking' || isHistoricalGeneration(job.startedAt)) continue;
     const previous = checkingFlows.get(job.flowId);
     checkingFlows.set(job.flowId, { title: job.flowTitle, count: (previous?.count ?? 0) + 1 });
   }

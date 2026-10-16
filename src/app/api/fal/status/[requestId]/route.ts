@@ -5,6 +5,7 @@ import { getSignedReadUrl, isGcsRef, signGcsRef } from '@/lib/gcs';
 import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
 import { describeFalError, isTerminalFalError } from '@/lib/falErrors';
 import { failGeneration } from '@/lib/generationFailures';
+import { expireUnverifiedGeneration, rememberActiveGeneration } from '@/lib/falRecovery';
 import {
   fetchFalQueueResult,
   getFalBillingColumns,
@@ -42,6 +43,11 @@ export async function GET(
     if (lookupError) {
       throw new Error(`Could not load queued generation: ${lookupError.message}`);
     }
+    const expireRecovery = async () => {
+      if (!existingGeneration) return null;
+      const error = await expireUnverifiedGeneration(supabase, user.id, existingGeneration);
+      return error ? NextResponse.json({ status: 'failed', error, requestId }) : null;
+    };
 
     const storedParameters = existingGeneration?.parameters;
     const storedEndpoint = storedParameters
@@ -84,6 +90,8 @@ export async function GET(
         return await failGeneration(supabase, user.id, requestId,
           'FAL can no longer find this generation request. Please generate again.');
       }
+      const expired = await expireRecovery();
+      if (expired) return expired;
       throw error;
     }
 
@@ -99,7 +107,11 @@ export async function GET(
       try {
         result = await fetchFalQueueResult<Record<string, unknown>>(status.response_url, requestId);
       } catch (err) {
-        if (!isTerminalFalError(err)) throw err;
+        if (!isTerminalFalError(err)) {
+          const expired = await expireRecovery();
+          if (expired) return expired;
+          throw err;
+        }
         const message = describeFalError(err);
         console.error(`[fal/status] ${endpoint} request ${requestId} failed: ${message}`);
         return await failGeneration(supabase, user.id, requestId, message);
@@ -125,6 +137,10 @@ export async function GET(
 
         const imageRes = await fetch(imageUrl);
         if (!imageRes.ok) {
+          if ([404, 410].includes(imageRes.status)) {
+            const expired = await expireRecovery();
+            if (expired) return expired;
+          }
           throw new Error(`Could not download completed FAL image (${imageRes.status}).`);
         }
         const imageBuffer = await imageRes.arrayBuffer();
@@ -175,7 +191,13 @@ export async function GET(
       }
 
       const videoRes = await fetch(videoUrl);
-      if (!videoRes.ok) throw new Error(`Could not download completed FAL video (${videoRes.status}).`);
+      if (!videoRes.ok) {
+        if ([404, 410].includes(videoRes.status)) {
+          const expired = await expireRecovery();
+          if (expired) return expired;
+        }
+        throw new Error(`Could not download completed FAL video (${videoRes.status}).`);
+      }
       const videoBuffer = await videoRes.arrayBuffer();
       const genId = existingGeneration?.id ?? crypto.randomUUID();
       const objectPath = `${user.id}/${genId}.mp4`;
@@ -231,8 +253,11 @@ export async function GET(
     }
 
     if (s.status === 'IN_QUEUE' || s.status === 'IN_PROGRESS') {
+      if (existingGeneration) await rememberActiveGeneration(supabase, user.id, existingGeneration);
       return NextResponse.json({ status: 'pending', queuePosition: s.queue_position ?? null });
     }
+    const expired = await expireRecovery();
+    if (expired) return expired;
     return NextResponse.json({ status: 'error', error: 'FAL returned an unrecognized request status.' }, { status: 503 });
   } catch (err) {
     console.error('Status check error:', err);

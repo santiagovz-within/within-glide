@@ -185,7 +185,8 @@ function database(tables, { failTable, failUpdates = false, beforeUpdate } = {})
     let filters = [], update, range, single = false; const orders = [];
     const q = {
       select() { return q; },
-      eq(key, value) { filters.push(row => row[key] === value); return q; },
+      eq(key, value) { filters.push(row => key === 'parameters' ? JSON.stringify(row[key]) === value : row[key] === value); return q; },
+      is(key, value) { filters.push(row => row[key] === value); return q; },
       not(key, op, value) { filters.push(row => row[key] !== value && row[key] !== undefined); return q; },
       in(key, values) { filters.push(row => values.includes(key === 'parameters->>generationRunId' ? row.parameters?.generationRunId : row[key])); return q; },
       contains(key) {
@@ -212,6 +213,8 @@ function database(tables, { failTable, failUpdates = false, beforeUpdate } = {})
 }
 const next = { NextResponse: { json: (body, options) => json(body, options?.status ?? 200) } };
 const falErrors = load('src/lib/falErrors.ts');
+const recoveryPolicy = load('src/lib/generationRecoveryPolicy.ts');
+const falRecovery = load('src/lib/falRecovery.ts', { '@/lib/generationRecoveryPolicy': recoveryPolicy });
 const { ApiError } = require('@fal-ai/client');
 function statusRoute(db, providerStatus, providerResult) {
   const failures = load('src/lib/generationFailures.ts', { 'next/server': next });
@@ -223,6 +226,7 @@ function statusRoute(db, providerStatus, providerResult) {
     } } } },
     '@/lib/gcs': { isGcsRef: () => false }, '@/lib/mediaDerivatives': {},
     '@/lib/falErrors': falErrors, '@/lib/generationFailures': failures,
+    '@/lib/falRecovery': falRecovery,
     '@/lib/falResult': { fetchFalQueueResult: async () => {
       if (providerResult instanceof Error) throw providerResult;
       return providerResult;
@@ -560,6 +564,7 @@ test('sidebar groups uncertain historical jobs separately from confirmed generat
     '@/lib/utils/cn': { cn: (...values) => values.filter(v => typeof v === 'string').join(' ') },
     '@/lib/supabase/client': {},
     '@/lib/stores/generationStore': { useGenerationStore: selector => selector(state) },
+    '@/lib/generationRecoveryPolicy': recoveryPolicy,
     '@/components/canvas/nodes/TypedHandle': { PORT_COLORS: { video: 'purple' } },
   });
   const { renderToStaticMarkup } = require('react-dom/server');
@@ -568,6 +573,9 @@ test('sidebar groups uncertain historical jobs separately from confirmed generat
   assert.equal((render().match(/Checking status \(/g) ?? []).length, 1);
   state.jobs.active = job({ id: 'active', phase: 'processing' });
   assert.equal((render().match(/Generating asset/g) ?? []).length, 1);
+  for (const entry of Object.values(state.jobs)) entry.startedAt = Date.now() - 40 * 24 * 60 * 60 * 1000;
+  assert.equal((render().match(/Checking status \(/g) ?? []).length, 0);
+  assert.equal((render().match(/Generating asset/g) ?? []).length, 1, 'confirmed live jobs remain visible even after a month');
 });
 test('unknown provider statuses remain unverified rather than being reported as pending', async () => {
   const response = await statusRoute(database({ generations: [row()] }), { status: 'UNKNOWN' }).GET(request, params);
@@ -695,4 +703,112 @@ test('recovery adds delayed database rows only to the same exact batch', async (
   await h.recoverBackgroundGenerations();
   assert.deepEqual(h.state().jobs['flow:node'].requests.map(r => r.requestId), ['request', 'delayed-request']);
   assert.deepEqual(h.state().jobs['flow:node'].failedSlots, []);
+});
+
+const monthOld = () => new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+for (const status of [401, 403, 429, 500, 503, 504, 'UNKNOWN', 'NETWORK']) {
+  test(`month-old unverified request persists a recovery error for ${status}`, async () => {
+    const generation = row({ created_at: monthOld() });
+    const response = await statusRoute(database({ generations: [generation] }),
+      typeof status === 'number' ? new ApiError({ status, message: 'Unavailable' })
+        : status === 'NETWORK' ? new Error('Network unavailable') : { status }).GET(request, params);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).status, 'failed');
+    assert.equal(generation.status, 'failed');
+    assert.match(generation.error_message, /Recovery expired/);
+    assert.ok(generation.parameters.recoveryExpiredAt);
+    assert.equal(generation.parameters.endpoint, 'fal-ai/video');
+  });
+}
+for (const status of ['IN_QUEUE', 'IN_PROGRESS']) {
+  test(`month-old ${status} remains active and survives an outage after a reload`, async () => {
+    const generation = row({ created_at: monthOld() });
+    const db = database({ generations: [generation] });
+    let response = await statusRoute(db, { status }).GET(request, params);
+    assert.equal((await response.json()).status, 'pending');
+    assert.equal(generation.status, 'processing');
+    assert.ok(generation.parameters.falLastConfirmedActiveAt);
+    response = await statusRoute(db, new Error('Temporary outage')).GET(request, params);
+    assert.equal(response.status, 500);
+    assert.equal(generation.status, 'processing');
+    generation.parameters.falLastConfirmedActiveAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    response = await statusRoute(db, new Error('Still unavailable')).GET(request, params);
+    assert.equal((await response.json()).status, 'failed');
+  });
+}
+test('the 30-day limit does not expire newer requests or invalid creation dates', async () => {
+  for (const created_at of [new Date(Date.now() - recoveryPolicy.GENERATION_RECOVERY_AGE_MS + 60_000).toISOString(), 'invalid']) {
+    const generation = row({ created_at });
+    const response = await statusRoute(database({ generations: [generation] }), new Error('Unavailable')).GET(request, params);
+    assert.equal(response.status, 500);
+    assert.equal(generation.status, 'processing');
+  }
+});
+test('saved month-old results remain authoritative', async () => {
+  const generation = row({ created_at: monthOld(), status: 'completed', media_url: 'https://example.com/saved.mp4' });
+  const response = await statusRoute(database({ generations: [generation] }), new Error('Must not poll')).GET(request, params);
+  assert.equal((await response.json()).status, 'completed');
+  assert.equal(generation.status, 'completed');
+});
+test('requests missing from both the database and fal stop checking', async () => {
+  const response = await statusRoute(database({ generations: [] }), new ApiError({ status: 404, message: 'Missing' })).GET(request, params);
+  assert.equal((await response.json()).status, 'failed');
+});
+for (const concurrent of ['completed', 'active']) {
+  test(`a concurrent ${concurrent} response wins over stale recovery expiry`, async () => {
+    const generation = row({ created_at: monthOld() });
+    const db = database({ generations: [generation] }, { beforeUpdate: (_table, update) => {
+      if (update.status !== 'failed') return;
+      if (concurrent === 'completed') {
+        generation.status = 'completed'; generation.media_url = 'https://example.com/recovered.mp4';
+      } else {
+        generation.parameters = { ...generation.parameters, falLastConfirmedActiveAt: new Date().toISOString() };
+      }
+    } });
+    const response = await statusRoute(db, new Error('Unavailable')).GET(request, params);
+    assert.notEqual((await response.json()).status, 'failed');
+    assert.equal(generation.status, concurrent === 'completed' ? 'completed' : 'processing');
+  });
+}
+test('recovery failure is not reported as terminal unless its database update succeeds', async () => {
+  const generation = row({ created_at: monthOld() });
+  const response = await statusRoute(database({ generations: [generation] }, { failUpdates: true }), new Error('Unavailable')).GET(request, params);
+  assert.equal(response.status, 500);
+  assert.equal(generation.status, 'processing');
+});
+test('a month-old completed request with an unavailable result exits recovery', async () => {
+  const generation = row({ created_at: monthOld() });
+  const response = await statusRoute(database({ generations: [generation] }), { status: 'COMPLETED' }, new Error('Result unavailable')).GET(request, params);
+  assert.equal((await response.json()).status, 'failed');
+  assert.equal(generation.status, 'failed');
+});
+for (const mediaType of ['image', 'video']) {
+  test(`month-old ${mediaType} with expired media exits recovery`, async () => {
+    const generation = row({ created_at: monthOld() });
+    globalThis.fetch = async () => json({}, 410);
+    const response = await statusRoute(database({ generations: [generation] }), { status: 'COMPLETED' },
+      { data: { image: { url: 'https://example.com/image.png' }, video: { url: 'https://example.com/video.mp4' } } })
+      .GET({ nextUrl: new URL(`https://example.com/api/fal/status/request?mediaType=${mediaType}`) }, params);
+    assert.equal((await response.json()).status, 'failed');
+    assert.equal(generation.status, 'failed');
+  });
+}
+test('expired recovery clears the tracker and node and stays cleared after recovery and reload', async () => {
+  const generation = row({ created_at: monthOld(), source_id: 'flow', source_type: 'canvas', node_id: 'node', media_type: 'video', model: 'model' });
+  const flow = flowRecord({ status: 'processing', pendingRequestId: 'request', pendingEndpoint: 'fal-ai/video' });
+  const db = database({ generations: [generation], flows: [flow] });
+  const h = harness(job({ startedAt: Date.parse(generation.created_at) }));
+  h.flowState().setCurrentFlow(flow);
+  globalThis.fetch = async (url, options) => {
+    if (options?.method === 'PATCH') return saveRoutes(db).node(bodyRequest(JSON.parse(options.body)), nodeParams);
+    if (url === '/api/generations/pending') return pendingRoute(db).POST(bodyRequest(JSON.parse(options.body)));
+    return statusRoute(db, new Error('Unavailable')).GET(request, params);
+  };
+  await h.progressBackgroundGenerations();
+  assert.deepEqual(h.state().jobs, {});
+  assert.equal(flow.flow_data.nodes[0].data.status, 'error');
+  assert.equal(flow.flow_data.nodes[0].data.pendingRequestId, undefined);
+  await h.hydrate();
+  await h.recoverBackgroundGenerations();
+  assert.deepEqual(h.state().jobs, {});
 });
