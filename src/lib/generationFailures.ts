@@ -8,7 +8,7 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
  *
  * Persisting matters as much as the response: a row left at `processing` keeps
  * coming back from /api/generations/pending, so recovery resurrects the request
- * every 15s and the node flips between "Generating" and "Failed" for two hours.
+ * every 15s and the node flips between "Generating" and "Failed" indefinitely.
  */
 export async function failGeneration(
   supabase: SupabaseServerClient,
@@ -16,10 +16,11 @@ export async function failGeneration(
   requestId: string,
   message: string,
 ) {
-  await supabase
+  const { error } = await supabase
     .from('generations')
     .update({ status: 'failed', error_message: message })
     .eq('fal_request_id', requestId)
     .eq('user_id', userId);
+  if (error) throw new Error(`Could not persist generation failure: ${error.message}`);
   return NextResponse.json({ status: 'failed', error: message, requestId });
 }

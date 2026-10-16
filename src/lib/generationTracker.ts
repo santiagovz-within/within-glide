@@ -48,9 +48,18 @@ interface RecoveredGeneration {
 
 const inFlightRequests = new Set<string>();
 const inFlightSaves = new Set<string>();
+const inFlightSubmissions = new Set<string>();
 let isRecovering = false;
 const ORPHANED_SUBMISSION_TIMEOUT_MS = 10 * 60 * 1000;
 const INCOMPLETE_RECOVERY_GRACE_MS = 60 * 1000;
+
+function submissionKey(job: BackgroundGenerationJob): string {
+  return `${job.id}:${job.startedAt}`;
+}
+
+function isCurrentJob(job: BackgroundGenerationJob): boolean {
+  return useGenerationStore.getState().jobs[job.id]?.startedAt === job.startedAt;
+}
 
 function activeNodeData(flowId: string, nodeId: string): NodeData | undefined {
   const flowState = useFlowStore.getState();
@@ -123,7 +132,9 @@ function markSlotCompleted(jobId: string, slotIndex: number, mediaUrl: string) {
     (_, index) => job.slots[index] ?? null,
   );
   slots[slotIndex] = mediaUrl;
-  useGenerationStore.getState().patchJob(jobId, { slots });
+  useGenerationStore.getState().patchJob(jobId, {
+    slots, failedSlots: job.failedSlots.filter((index) => index !== slotIndex),
+  });
   syncJobToCurrentFlow(useGenerationStore.getState().jobs[jobId]);
 }
 
@@ -132,6 +143,7 @@ function markSlotFailed(jobId: string, slotIndex: number) {
   if (!job || job.failedSlots.includes(slotIndex)) return;
   useGenerationStore.getState().patchJob(jobId, {
     failedSlots: [...job.failedSlots, slotIndex],
+    slots: job.slots.map((url, index) => index === slotIndex ? null : url),
   });
 }
 
@@ -205,7 +217,8 @@ function errorMessageForJob(job: BackgroundGenerationJob): string {
 
 function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null {
   const resolvedCount = job.slots.filter(Boolean).length + job.failedSlots.length;
-  if (!job.submissionsComplete || resolvedCount < job.slotCount) return null;
+  if (!job.submissionsComplete || resolvedCount < job.slotCount
+    || job.requests.some((request) => request.status === 'pending')) return null;
 
   const failed = job.failedSlots.length > 0;
   const completedMedia = job.slots.filter((url): url is string => !!url);
@@ -269,13 +282,14 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
 }
 
 async function saveFinalJob(job: BackgroundGenerationJob) {
-  if (!job.finalData || inFlightSaves.has(job.id)) return;
+  if (!job?.finalData || !isCurrentJob(job) || inFlightSaves.has(job.id)) return;
   inFlightSaves.add(job.id);
   applyNodeData(job.flowId, job.nodeId, job.finalData);
 
   try {
     const response = await fetch(`/api/flows/${job.flowId}/nodes/${job.nodeId}`, {
       method: 'PATCH',
+      signal: AbortSignal.timeout(60_000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         data: Object.fromEntries(
@@ -286,6 +300,7 @@ async function saveFinalJob(job: BackgroundGenerationJob) {
           .map(([key]) => key),
       }),
     });
+    if (!isCurrentJob(job)) return;
     if ([400, 403, 404].includes(response.status)) {
       // The node was removed, the Flow is gone, or the saved job is no longer
       // valid. Retrying can never succeed and would leave a phantom card.
@@ -346,25 +361,16 @@ function recordPollError(jobId: string, requestId: string, message: string) {
 
 function failOrphanedJobs() {
   const now = Date.now();
-  for (const job of Object.values(useGenerationStore.getState().jobs)) {
+  for (let job of Object.values(useGenerationStore.getState().jobs)) {
     if (
       !job.submissionsComplete
-      && job.requests.length === 0
+      && !inFlightSubmissions.has(submissionKey(job))
       && now - job.startedAt >= ORPHANED_SUBMISSION_TIMEOUT_MS
     ) {
-      useGenerationStore.getState().patchJob(job.id, {
-        submissionsComplete: true,
-        failedSlots: Array.from({ length: job.slotCount }, (_, index) => index),
-        requests: [{
-          requestId: 'orphaned-submission',
-          endpoint: '',
-          mediaType: job.kind === 'image-generation' ? 'image' : 'video',
-          slotIndex: 0,
-          status: 'failed',
-          errorMessage: 'The generation request could not be recovered.',
-        }],
-      });
-      continue;
+      // Closing/reloading loses submission callbacks, even for a partial batch.
+      // Keep every known Fal request pending; only unsubmitted slots can fail.
+      useGenerationStore.getState().patchJob(job.id, { submissionsComplete: true });
+      job = useGenerationStore.getState().jobs[job.id];
     }
 
     const hasPendingRequest = job.requests.some((request) => request.status === 'pending');
@@ -393,11 +399,13 @@ function failOrphanedJobs() {
 }
 
 async function pollRequest(jobId: string, request: BackgroundGenerationRequest) {
+  const job = useGenerationStore.getState().jobs[jobId];
+  if (!job) return;
   const requestKey = `${jobId}:${request.requestId}`;
   if (inFlightRequests.has(requestKey)) return;
   inFlightRequests.add(requestKey);
   try {
-    const response = await fetch(requestStatusUrl(request));
+    const response = await fetch(requestStatusUrl(request), { signal: AbortSignal.timeout(120_000) });
     if (!response.ok) {
       const result = await response.json().catch(() => ({})) as { error?: string };
       recordPollError(jobId, request.requestId, result.error ?? `Status request failed (${response.status}).`);
@@ -409,6 +417,7 @@ async function pollRequest(jobId: string, request: BackgroundGenerationRequest) 
       error?: string;
       detail?: string;
     }>(response);
+    if (!isCurrentJob(job)) return;
     if (result.status === 'completed' && result.mediaUrls?.[0]) {
       useGenerationStore.getState().patchRequest(jobId, request.requestId, {
         status: 'completed',
@@ -446,7 +455,7 @@ export async function progressBackgroundGenerations() {
       .filter((request) => request.status === 'pending')
       .map((request) => pollRequest(job.id, request))),
   );
-  failOrphanedJobs();
+  if (!isRecovering) failOrphanedJobs();
   await finalizeReadyJobs();
 }
 
@@ -460,9 +469,29 @@ export async function recoverBackgroundGenerations() {
   if (isRecovering) return;
   isRecovering = true;
   try {
-    const response = await fetch('/api/generations/pending');
+    const snapshot = Object.values(useGenerationStore.getState().jobs);
+    const response = await fetch('/api/generations/pending', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jobs: snapshot.map(({ id, flowId, nodeId }) => ({ id, flowId, nodeId })) }),
+      signal: AbortSignal.timeout(60_000),
+    });
     if (!response.ok) return;
-    const { generations } = await readJsonResponse<{ generations: RecoveredGeneration[] }>(response);
+    const { generations, removedJobIds = [] } = await readJsonResponse<{
+      generations: RecoveredGeneration[];
+      removedJobIds?: string[];
+    }>(response);
+    for (const id of removedJobIds) {
+      const previous = snapshot.find((job) => job.id === id);
+      const job = useGenerationStore.getState().jobs[id];
+      if (!job || job.startedAt !== previous?.startedAt) continue;
+      // A newly created node may not have autosaved yet. The open canvas is
+      // authoritative for unsaved nodes; never infer deletion from list absence.
+      const flow = useFlowStore.getState();
+      if (flow.currentFlow?.id === job.flowId && flow.nodes.some((node) => node.id === job.nodeId)) continue;
+      if (Date.now() - job.startedAt < INCOMPLETE_RECOVERY_GRACE_MS) continue;
+      useGenerationStore.getState().removeJob(id);
+    }
     const grouped = new Map<string, RecoveredGeneration[]>();
     for (const generation of generations) {
       const key = generationJobId(generation.flowId, generation.nodeId);
@@ -472,9 +501,13 @@ export async function recoverBackgroundGenerations() {
     for (const [jobId, recovered] of grouped) {
       if (recovered.length === 0) continue;
       const first = recovered[0];
+      const flow = useFlowStore.getState();
+      if (flow.currentFlow?.id === first.flowId && !flow.nodes.some((node) => node.id === first.nodeId)) continue;
       const kind = recoveredKind(first.nodeType);
       if (!kind) continue;
       const existing = useGenerationStore.getState().jobs[jobId];
+      const previous = snapshot.find((job) => job.id === jobId);
+      if (previous && (!existing || previous.startedAt !== existing.startedAt)) continue;
       const imageData = first.nodeData as ImageGenNodeData;
       const videoData = first.nodeData as VideoGenNodeData;
       const savedRequestIds = new Set([
@@ -498,6 +531,7 @@ export async function recoverBackgroundGenerations() {
         kind === 'image-generation' ? imageData.numImages ?? 1 : 1,
       );
 
+      if (existing?.phase === 'saving') continue;
       if (!existing) {
         useGenerationStore.getState().startJob({
           ...initialJob({
@@ -511,6 +545,8 @@ export async function recoverBackgroundGenerations() {
             videoHistory: videoData.videoHistory ?? [],
           }),
           phase: 'processing',
+          startedAt: Date.parse(first.createdAt) || Date.now(),
+          slots: Array.from({ length: recoveredSlotCount }, (_, index) => imageData.generationSlots?.[index] ?? null),
           submissionsComplete: true,
         });
       } else if (existing.flowTitle !== first.flowTitle) {
@@ -518,6 +554,10 @@ export async function recoverBackgroundGenerations() {
       }
 
       relevantGenerations.forEach((generation, index) => {
+        // Recovery is additive, never reset terminal requests or merge an old
+        // batch into a newer, fully submitted job on the same node.
+        if (existing?.requests.some((request) => request.requestId === generation.requestId)) return;
+        if (existing?.submissionsComplete) return;
         useGenerationStore.getState().addRequest(jobId, {
           requestId: generation.requestId,
           endpoint: generation.endpoint,
@@ -530,7 +570,8 @@ export async function recoverBackgroundGenerations() {
       const latest = useGenerationStore.getState().jobs[jobId];
       // A rehydrated submitting job has lost its browser request callbacks.
       // The database records above are now the authoritative submitted set.
-      if (latest && !latest.submissionsComplete && Date.now() - latest.startedAt > 10_000) {
+      if (latest && !latest.submissionsComplete && !inFlightSubmissions.has(submissionKey(latest))
+        && Date.now() - latest.startedAt >= ORPHANED_SUBMISSION_TIMEOUT_MS) {
         useGenerationStore.getState().patchJob(jobId, {
           phase: 'processing',
           submissionsComplete: true,
@@ -564,6 +605,7 @@ export async function startTrackedImageGeneration(input: {
     imageHistory: input.data.generationHistory ?? [],
   });
   useGenerationStore.getState().startJob(job);
+  inFlightSubmissions.add(submissionKey(job));
   syncJobToCurrentFlow(job);
 
   await Promise.all(Array.from({ length: input.slotCount }, async (_, slotIndex) => {
@@ -574,6 +616,7 @@ export async function startTrackedImageGeneration(input: {
         body: JSON.stringify({ ...input.payload, slotIndex }),
       });
       const result = await readJsonResponse<ImageGenerationResponse>(response);
+      if (!isCurrentJob(job)) return;
       if (!response.ok) {
         throw new Error(result.details ?? result.error ?? `Server error ${response.status}`);
       }
@@ -595,6 +638,7 @@ export async function startTrackedImageGeneration(input: {
         throw new Error(result.details ?? result.error ?? 'Image generation returned no output.');
       }
     } catch (error) {
+      if (!isCurrentJob(job)) return;
       markSlotFailed(job.id, slotIndex);
       const current = useGenerationStore.getState().jobs[job.id];
       if (current) {
@@ -613,8 +657,9 @@ export async function startTrackedImageGeneration(input: {
         });
       }
     }
-  }));
+  })).finally(() => { inFlightSubmissions.delete(submissionKey(job)); });
 
+  if (!isCurrentJob(job)) return;
   useGenerationStore.getState().patchJob(job.id, {
     submissionsComplete: true,
     phase: useGenerationStore.getState().jobs[job.id]?.requests.some(
@@ -643,6 +688,7 @@ export async function startTrackedVideoGeneration(input: {
     videoHistory: input.data.videoHistory ?? [],
   });
   useGenerationStore.getState().startJob(job);
+  inFlightSubmissions.add(submissionKey(job));
   syncJobToCurrentFlow(job);
 
   try {
@@ -652,6 +698,7 @@ export async function startTrackedVideoGeneration(input: {
       body: JSON.stringify(input.payload),
     });
     const result = await readJsonResponse<VideoGenerationResponse>(response);
+    if (!isCurrentJob(job)) return;
     if (!response.ok) {
       throw new Error(result.details ?? result.error ?? `Server error ${response.status}`);
     }
@@ -670,6 +717,7 @@ export async function startTrackedVideoGeneration(input: {
       throw new Error(result.details ?? result.error ?? 'Generation returned no request ID.');
     }
   } catch (error) {
+    if (!isCurrentJob(job)) return;
     markSlotFailed(job.id, 0);
     useGenerationStore.getState().patchJob(job.id, {
       requests: [{
@@ -681,8 +729,11 @@ export async function startTrackedVideoGeneration(input: {
         errorMessage: error instanceof Error ? error.message : 'Video generation failed.',
       }],
     });
+  } finally {
+    inFlightSubmissions.delete(submissionKey(job));
   }
 
+  if (!isCurrentJob(job)) return;
   useGenerationStore.getState().patchJob(job.id, {
     submissionsComplete: true,
     phase: useGenerationStore.getState().jobs[job.id]?.requests.some(

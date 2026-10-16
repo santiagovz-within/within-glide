@@ -11,7 +11,7 @@ import { ApiError, ValidationError, type ValidationErrorInfo } from '@fal-ai/cli
 
 // A request that FAL retries or that never reached the model is not a verdict on
 // the generation itself, so the poller should keep waiting instead of failing.
-const TRANSIENT_STATUSES = new Set([408, 425, 429, 502, 503, 504]);
+const TRANSIENT_STATUSES = new Set([401, 403, 408, 425, 429, 502, 503, 504]);
 
 function fieldLabel(loc: Array<string | number>): string | null {
   const field = [...loc].reverse().find(
@@ -91,6 +91,8 @@ export function describeFalError(err: unknown): string {
  */
 export function isTerminalFalError(err: unknown): boolean {
   if (!(err instanceof ApiError)) return false;
+  // Fal explicitly reports terminal queue/inference timeouts on completed results.
+  if (err.status === 504 && err.timeoutType) return true;
   if (TRANSIENT_STATUSES.has(err.status)) return false;
   if (err.status >= 400 && err.status < 500) return true;
   // A 5xx that still carries FAL's error payload describes a run that blew up,

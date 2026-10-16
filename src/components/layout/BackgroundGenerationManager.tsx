@@ -19,10 +19,10 @@ export function BackgroundGenerationManager() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.resolve(useGenerationStore.persist.rehydrate()).then(() => {
+    void Promise.resolve(useGenerationStore.persist.rehydrate()).then(async () => {
       if (cancelled) return;
-      void recoverBackgroundGenerations();
-      void progressBackgroundGenerations();
+      await recoverBackgroundGenerations();
+      if (!cancelled) void progressBackgroundGenerations();
     });
 
     const pollTimer = window.setInterval(() => {

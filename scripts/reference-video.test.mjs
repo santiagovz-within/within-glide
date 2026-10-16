@@ -156,11 +156,12 @@ test('Pending-generation recovery includes the new node and keeps its original e
   const pending = [{ source_id: 'flow', node_id: 'node', model: 'minimax-h3-max', media_type: 'video',
     fal_request_id: 'request', parameters: { endpoint }, reference_image_urls: ['a.png'] }];
   // The user may have switched models while a request is still running.
-  const flows = [{ id: 'flow', title: 'Flow', flow_data: { nodes: [{ id: 'node', type: 'referenceVideoNode', data: { model: 'seedance-2' } }] } }];
+  const flows = [{ id: 'flow', title: 'Flow', flow_data: { nodes: [{ id: 'node', type: 'referenceVideoNode', data: { model: 'seedance-2', status: 'processing' } }] } }];
   const admin = { from: table => {
     const chain = {
       select: () => chain, eq: () => chain, not: () => chain, gte: () => chain,
-      order: async () => ({ data: pending }),
+      order: () => chain, contains: () => chain,
+      range: async () => ({ data: table === 'flows' ? flows : pending }),
       in: async () => ({ data: table === 'flows' ? flows : [] }),
     };
     return chain;

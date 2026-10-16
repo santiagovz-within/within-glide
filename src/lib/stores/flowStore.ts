@@ -10,6 +10,17 @@ import {
   addEdge,
 } from '@xyflow/react';
 import type { Flow, NodeData } from '@/types';
+import { useGenerationStore } from '@/lib/stores/generationStore';
+
+function removeDeletedNodeJobs(flowId: string | undefined, nodes: Node<NodeData>[]) {
+  if (!flowId) return;
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  for (const job of Object.values(useGenerationStore.getState().jobs)) {
+    if (job.flowId === flowId && !nodeIds.has(job.nodeId)) {
+      useGenerationStore.getState().removeJob(job.id);
+    }
+  }
+}
 
 interface FlowStore {
   // Current flow meta
@@ -44,6 +55,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
   currentFlow: null,
   setCurrentFlow: (flow) => {
     if (flow) {
+      removeDeletedNodeJobs(flow.id, flow.flow_data.nodes as Node<NodeData>[]);
       set({
         currentFlow: flow,
         nodes: flow.flow_data.nodes as Node<NodeData>[],
@@ -64,12 +76,19 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
 
   nodes: [],
   edges: [],
-  setNodes: (nodes) => set({ nodes, isDirty: true }),
+  setNodes: (nodes) => {
+    removeDeletedNodeJobs(get().currentFlow?.id, nodes);
+    set({ nodes, isDirty: true });
+  },
   setEdges: (edges) => set({ edges, isDirty: true }),
 
   onNodesChange: (changes) => {
+    const nodes = applyNodeChanges(changes, get().nodes);
+    if (changes.some((change) => change.type === 'remove')) {
+      removeDeletedNodeJobs(get().currentFlow?.id, nodes);
+    }
     set({
-      nodes: applyNodeChanges(changes, get().nodes),
+      nodes,
       isDirty: true,
     });
   },
@@ -98,8 +117,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     });
   },
   removeNode: (nodeId) => {
+    const nodes = get().nodes.filter((n) => n.id !== nodeId);
+    removeDeletedNodeJobs(get().currentFlow?.id, nodes);
     set({
-      nodes: get().nodes.filter((n) => n.id !== nodeId),
+      nodes,
       edges: get().edges.filter(
         (e) => e.source !== nodeId && e.target !== nodeId
       ),

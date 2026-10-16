@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { fal } from '@fal-ai/client';
+import { ApiError, fal } from '@fal-ai/client';
 import { getSignedReadUrl, isGcsRef, signGcsRef } from '@/lib/gcs';
 import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
 import { describeFalError, isTerminalFalError } from '@/lib/falErrors';
@@ -34,7 +34,7 @@ export async function GET(
 
     const { data: existingGeneration, error: lookupError } = await supabase
       .from('generations')
-      .select('id, media_url, status, error_message, parameters')
+      .select('id, media_url, status, error_message, parameters, created_at')
       .eq('fal_request_id', requestId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -72,12 +72,27 @@ export async function GET(
       });
     }
 
-    const status = await fal.queue.status(endpoint, {
-      requestId,
-      logs: false,
-    });
+    let status;
+    try {
+      status = await fal.queue.status(endpoint, { requestId, logs: false });
+    } catch (error) {
+      // Status-service/auth/network errors do not mean inference failed.
+      // A missing/expired request is terminal, after allowing a newly submitted
+      // request a short visibility grace period. Never expire queued/running work.
+      if (error instanceof ApiError && [404, 410].includes(error.status)
+        && (!existingGeneration || Date.now() - Date.parse(existingGeneration.created_at) >= 60_000)) {
+        return await failGeneration(supabase, user.id, requestId,
+          'FAL can no longer find this generation request. Please generate again.');
+      }
+      throw error;
+    }
 
     if (status.status === 'COMPLETED') {
+      const failure = status as { error?: string; error_type?: string };
+      if (failure.error || failure.error_type) {
+        return await failGeneration(supabase, user.id, requestId,
+          failure.error ?? `FAL generation failed (${failure.error_type}).`);
+      }
       // FAL marks a failed run COMPLETED and only reveals why when the result is
       // fetched: it answers 422/500 with the reason in `detail`.
       let result;
@@ -87,7 +102,7 @@ export async function GET(
         if (!isTerminalFalError(err)) throw err;
         const message = describeFalError(err);
         console.error(`[fal/status] ${endpoint} request ${requestId} failed: ${message}`);
-        return failGeneration(supabase, user.id, requestId, message);
+        return await failGeneration(supabase, user.id, requestId, message);
       }
 
       if (mediaType === 'image') {
@@ -98,7 +113,7 @@ export async function GET(
         const imageUrl = falResult.images?.[0]?.url ?? falResult.image?.url;
 
         if (!imageUrl) {
-          return failGeneration(supabase, user.id, requestId, 'FAL returned no image URL in the result.');
+          return await failGeneration(supabase, user.id, requestId, 'FAL returned no image URL in the result.');
         }
         if (!existingGeneration) {
           return NextResponse.json({
@@ -156,10 +171,11 @@ export async function GET(
       const videoUrl = falResult.video?.url;
 
       if (!videoUrl) {
-        return failGeneration(supabase, user.id, requestId, 'FAL returned no video URL in the result.');
+        return await failGeneration(supabase, user.id, requestId, 'FAL returned no video URL in the result.');
       }
 
       const videoRes = await fetch(videoUrl);
+      if (!videoRes.ok) throw new Error(`Could not download completed FAL video (${videoRes.status}).`);
       const videoBuffer = await videoRes.arrayBuffer();
       const genId = existingGeneration?.id ?? crypto.randomUUID();
       const objectPath = `${user.id}/${genId}.mp4`;
@@ -209,9 +225,9 @@ export async function GET(
 
     // The queue contract only documents IN_QUEUE/IN_PROGRESS/COMPLETED, but treat
     // any explicit failure status as terminal in case FAL adds one.
-    if (s.status === 'FAILED' || s.status === 'ERROR') {
+    if (['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(s.status)) {
       const message = s.error ?? s.detail ?? 'FAL reported the job failed.';
-      return failGeneration(supabase, user.id, requestId, message);
+      return await failGeneration(supabase, user.id, requestId, message);
     }
 
     return NextResponse.json({ status: 'pending', queuePosition: s.queue_position ?? null });
