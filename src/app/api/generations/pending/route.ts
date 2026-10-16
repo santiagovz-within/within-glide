@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { generationIdentity, generationRequestIds, isTerminalNode } from '@/lib/generationReconciliation';
+import { signFlowMedia } from '@/lib/flowMedia';
 import { FAL_MODELS } from '@/lib/api/models';
 import type { FlowData, NodeType } from '@/types';
 
@@ -7,6 +9,9 @@ interface TrackedJob {
   id: string;
   flowId: string;
   nodeId: string;
+  runId?: string;
+  previousIdentity?: string;
+  requestIds?: string[];
 }
 
 // Supabase caps result sets. Recovery must not silently omit older jobs when
@@ -55,7 +60,7 @@ async function recover(trackedJobs: TrackedJob[]) {
 
     const admin = createAdminClient();
     const pending = [];
-    const selection = 'source_id, node_id, model, media_type, fal_request_id, parameters, reference_image_urls, created_at';
+    const selection = 'source_id, node_id, model, media_type, fal_request_id, parameters, reference_image_urls, created_at, status, media_url, error_message';
     for (let offset = 0; ; offset += PAGE_SIZE) {
       const { data, error } = await admin.from('generations')
         .select(selection)
@@ -117,6 +122,7 @@ async function recover(trackedJobs: TrackedJob[]) {
         }
       }
     }
+    for (const job of trackedJobs) for (const id of job.requestIds ?? []) savedIds.add(id);
     const missingIds = [...savedIds].filter((id) => !knownIds.has(id));
     for (let offset = 0; offset < missingIds.length; offset += PAGE_SIZE) {
       const { data, error } = await admin.from('generations')
@@ -127,6 +133,22 @@ async function recover(trackedJobs: TrackedJob[]) {
       if (error) throw new Error(error.message);
       pending.push(...(data ?? []));
     }
+    // A submission can finish while its browser is closing, before node
+    // autosave records the request ID. Its persisted attempt token is exact.
+    const runIds = [...new Set([
+      ...trackedJobs.flatMap((job) => job.runId ? [job.runId] : []),
+      ...[...flowMap.values()].flatMap((flow) => (flow.flow_data as FlowData).nodes
+        .flatMap((node) => node.data.status === 'processing' && typeof node.data.generationRunId === 'string'
+          ? [node.data.generationRunId] : [])),
+    ])];
+    for (let offset = 0; offset < runIds.length; offset += PAGE_SIZE) {
+      const { data, error } = await admin.from('generations').select(selection)
+        .eq('user_id', user.id).eq('source_type', 'canvas')
+        .in('parameters->>generationRunId', runIds.slice(offset, offset + PAGE_SIZE));
+      if (error) throw new Error(error.message);
+      const known: Set<string> = new Set(pending.map((generation) => generation.fal_request_id as string));
+      pending.push(...(data ?? []).filter((generation) => !known.has(generation.fal_request_id)));
+    }
     pending.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
     const generations = (pending ?? []).flatMap((generation) => {
@@ -136,16 +158,28 @@ async function recover(trackedJobs: TrackedJob[]) {
       if (!flow || !node || !generation.fal_request_id) return [];
       if (node.type !== 'imageGenNode' && node.type !== 'videoGenNode' && node.type !== 'referenceVideoNode') return [];
       // Old processing rows must not resurrect a node whose batch has ended.
-      const nodeData = node.data as Record<string, unknown>;
+      let nodeData = node.data as Record<string, unknown>;
+      const tracked = trackedJobs.find((job) => job.flowId === flow.id && job.nodeId === node.id);
+      const unsavedAttempt = tracked?.runId && tracked.runId === generation.parameters?.generationRunId
+        && tracked.previousIdentity === generationIdentity(nodeData);
+      if (unsavedAttempt) {
+        nodeData = { ...nodeData, status: 'processing', generationRunId: tracked.runId,
+          pendingRequests: undefined, pendingRequestId: undefined, pendingEndpoint: undefined };
+      }
       const savedRequests = Array.isArray(nodeData.pendingRequests)
         ? nodeData.pendingRequests as Array<{ requestId: string; slotIndex?: number }> : [];
       const savedIds = [
         ...savedRequests.map((request) => request.requestId),
         ...(typeof nodeData.pendingRequestId === 'string' ? [nodeData.pendingRequestId] : []),
       ];
-      if (savedIds.length > 0) {
+      if (isTerminalNode(nodeData)) return [];
+      if (typeof nodeData.generationRunId === 'string') {
+        if (generation.parameters?.generationRunId !== nodeData.generationRunId) return [];
+      } else if (savedIds.length > 0) {
         if (!savedIds.includes(generation.fal_request_id)) return [];
-      } else if (nodeData.status !== 'processing') {
+      } else if (typeof nodeData.generationRunId !== 'string'
+        || generation.parameters?.generationRunId !== nodeData.generationRunId) {
+        // A processing flag alone cannot identify an historical attempt.
         return [];
       }
       const parameters = generation.parameters as Record<string, unknown> | null;
@@ -162,8 +196,12 @@ async function recover(trackedJobs: TrackedJob[]) {
         flowTitle: flow.title,
         nodeId: node.id,
         nodeType: node.type as NodeType,
-        nodeData: node.data,
+        nodeData,
         requestId: generation.fal_request_id,
+        runId: typeof parameters?.generationRunId === 'string' ? parameters.generationRunId : undefined,
+        status: generation.status,
+        mediaUrl: generation.media_url || undefined,
+        errorMessage: generation.error_message || undefined,
         endpoint,
         mediaType: generation.media_type === 'image' ? 'image' as const : 'video' as const,
         slotIndex: typeof parameters?.slotIndex === 'number'
@@ -175,9 +213,21 @@ async function recover(trackedJobs: TrackedJob[]) {
 
     const removedJobIds = trackedJobs.filter((job) => {
       const flow = flowMap.get(job.flowId);
-      return !(flow?.flow_data as FlowData | undefined)?.nodes?.some((node) => node.id === job.nodeId);
+      const node = (flow?.flow_data as FlowData | undefined)?.nodes?.find((node) => node.id === job.nodeId);
+      if (!node) return true;
+      const data = node.data as Record<string, unknown>;
+      const identity = generationIdentity(data);
+      if (job.runId && job.runId !== identity && job.previousIdentity === identity) return false;
+      if (job.runId && typeof data.generationRunId === 'string' && job.runId !== data.generationRunId) return true;
+      const trackedIdentity = job.runId ?? [...(job.requestIds ?? [])].sort().join(',');
+      if (isTerminalNode(data) && (!trackedIdentity || !identity || trackedIdentity === identity)) return true;
+      // Superseded attempts must not overwrite the node's new pending IDs.
+      const savedIds = generationRequestIds(data);
+      return !!savedIds.length && !!job.requestIds?.length
+        && !savedIds.some((id) => job.requestIds!.includes(id))
+        && (!job.runId || job.runId !== data.generationRunId);
     }).map((job) => job.id);
-    return NextResponse.json({ generations, removedJobIds });
+    return NextResponse.json({ generations: await signFlowMedia(generations), removedJobIds });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error('[generations/pending] GET error:', detail);
@@ -193,7 +243,11 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!Array.isArray(body?.jobs) || body.jobs.length > 1000 || body.jobs.some(
     (job: TrackedJob) => !job || typeof job.id !== 'string'
-      || typeof job.flowId !== 'string' || typeof job.nodeId !== 'string',
+      || typeof job.flowId !== 'string' || typeof job.nodeId !== 'string'
+      || (job.runId !== undefined && typeof job.runId !== 'string')
+      || (job.previousIdentity !== undefined && typeof job.previousIdentity !== 'string')
+      || (job.requestIds !== undefined && (!Array.isArray(job.requestIds)
+        || job.requestIds.some((id) => typeof id !== 'string'))),
   )) {
     return NextResponse.json({ error: 'Invalid tracked jobs' }, { status: 400 });
   }

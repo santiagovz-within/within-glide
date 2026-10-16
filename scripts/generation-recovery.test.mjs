@@ -7,7 +7,7 @@ import ts from 'typescript';
 const require = createRequire(import.meta.url);
 function load(path, dependencies = {}) {
   const { outputText } = ts.transpileModule(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   });
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(
@@ -32,13 +32,15 @@ function harness(initial = job()) {
   const tracker = load('src/lib/generationTracker.ts', {
     '@/lib/stores/generationStore': generation, '@/lib/stores/flowStore': flow,
     '@/lib/utils/sound': { playSuccessSound() {} },
+    '@/lib/flowMedia': { signFlowMedia: async value => value },
+    '@/lib/generationReconciliation': load('src/lib/generationReconciliation.ts'),
     '@/lib/imageGenerationResults': load('src/lib/imageGenerationResults.ts'),
   });
   if (initial) generation.useGenerationStore.getState().startJob(initial);
   const state = () => generation.useGenerationStore.getState();
   const flowState = () => flow.useFlowStore.getState();
   globalThis.document = { dispatchEvent() {} };
-  return { ...tracker, state, flowState };
+  return { ...tracker, state, flowState, storage, hydrate: () => generation.useGenerationStore.persist.rehydrate(), subscribe: generation.useGenerationStore.subscribe };
 }
 function recovered(overrides = {}) {
   return { flowId: 'flow', nodeId: 'node', flowTitle: 'Flow', nodeType: 'videoGenNode',
@@ -75,6 +77,7 @@ test('partial submission recovered after reload finalizes missing slots without 
   await h.progressBackgroundGenerations();
   assert.equal(h.state().jobs['flow:node'].submissionsComplete, true);
   assert.equal(h.state().jobs['flow:node'].requests[0].status, 'pending');
+  h.state().patchRequest('flow:node', 'request', { nextPollAt: 0 });
   const saves = [];
   globalThis.fetch = async (url, options) => {
     if (options?.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({}); }
@@ -94,8 +97,10 @@ test('server-confirmed deleted node removes a persisted job, but empty pending l
   assert.equal(h.state().jobs['flow:node'], undefined);
 });
 test('recovery failure leaves jobs intact and newly unsaved open nodes are protected', async () => {
-  const h = harness();
-  h.flowState().setCurrentFlow({ id: 'flow', flow_data: { nodes: [{ id: 'node', data: {} }], edges: [] } });
+  const h = harness(null);
+  h.flowState().setCurrentFlow({ id: 'flow', flow_data: { nodes: [], edges: [] } });
+  h.flowState().setNodes([{ id: 'node', data: {} }]);
+  h.state().startJob(job());
   globalThis.fetch = async () => json({ generations: [], removedJobIds: ['flow:node'] });
   await h.recoverBackgroundGenerations();
   assert.ok(h.state().jobs['flow:node']);
@@ -126,7 +131,8 @@ test('recovery cannot resurrect a node deleted locally before autosave', async (
 });
 test('recovery preserves terminal requests and saving jobs', async () => {
   const h = harness(job({ requests: [{ ...job().requests[0], status: 'completed' }], slots: ['url'] }));
-  globalThis.fetch = async () => json({ generations: [recovered()] });
+  globalThis.fetch = async (url, options) => options?.method === 'PATCH'
+    ? json({ error: 'Temporary save failure' }, 500) : json({ generations: [recovered()] });
   await h.recoverBackgroundGenerations();
   assert.equal(h.state().jobs['flow:node'].requests[0].status, 'completed');
   h.state().patchJob('flow:node', { phase: 'saving' });
@@ -174,14 +180,14 @@ test('live slow submission is not orphaned by recovery or progress', async () =>
 
 // Exercise the actual route handlers with a small query adapter. No credentials
 // or paid model invocations are needed to cover provider and database failures.
-function database(tables, { failTable, failUpdates = false } = {}) {
+function database(tables, { failTable, failUpdates = false, beforeUpdate } = {}) {
   return { auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) }, from(table) {
     let filters = [], update, range, single = false; const orders = [];
     const q = {
       select() { return q; },
       eq(key, value) { filters.push(row => row[key] === value); return q; },
       not(key, op, value) { filters.push(row => row[key] !== value && row[key] !== undefined); return q; },
-      in(key, values) { filters.push(row => values.includes(row[key])); return q; },
+      in(key, values) { filters.push(row => values.includes(key === 'parameters->>generationRunId' ? row.parameters?.generationRunId : row[key])); return q; },
       contains(key) {
         filters.push(row => row[key]?.nodes?.some(node => node.data?.status === 'processing'));
         return q;
@@ -192,6 +198,7 @@ function database(tables, { failTable, failUpdates = false } = {}) {
       single() { single = true; return q; },
       update(values) { update = values; return q; },
       then(resolve, reject) { return Promise.resolve().then(() => {
+        if (update) beforeUpdate?.(table, update);
         if (table === failTable || (update && failUpdates)) return { data: null, error: { message: 'Database unavailable' } };
         let rows = (tables[table] ?? []).filter(row => filters.every(f => f(row)));
         if (update) rows.forEach(row => Object.assign(row, update));
@@ -285,6 +292,8 @@ test('explicit fal timeout is terminal; auth errors and generic gateway timeouts
 function pendingRoute(db) {
   return load('src/app/api/generations/pending/route.ts', {
     'next/server': next, '@/lib/supabase/server': { createClient: async () => db, createAdminClient: () => db }, '@/lib/api/models': { FAL_MODELS: {} },
+    '@/lib/flowMedia': { signFlowMedia: async value => value },
+    '@/lib/generationReconciliation': load('src/lib/generationReconciliation.ts'),
   });
 }
 test('recovery API includes multi-day jobs, saved terminal results and pages beyond 500; excludes deleted/finished/other-user nodes', async () => {
@@ -343,4 +352,347 @@ test('recovered partial batch keeps successful images in history and propagates 
   ]);
   assert.equal(events[0].type, 'node:image-propagate');
   assert.equal(events[0].detail.imageUrl, 'https://example.com/success.png');
+});
+
+const reconciliation = load('src/lib/generationReconciliation.ts');
+const oldPending = { status: 'processing', pendingRequestId: 'request', pendingEndpoint: 'fal-ai/video' };
+const finished = { status: 'completed', videoUrl: 'gcs:result.mp4', resolvedRequestIds: ['request'] };
+function flowRecord(data = oldPending) {
+  return { id: 'flow', user_id: 'user', title: 'Vans', lifecycle_state: 'active', updated_at: '2026-01-01T00:00:00Z',
+    flow_data: { nodes: [{ id: 'node', type: 'videoGenNode', position: { x: 0, y: 0 }, data }], edges: [] } };
+}
+function saveRoutes(db) {
+  const dependencies = { 'next/server': next,
+    '@/lib/supabase/server': { createClient: async () => db, createAdminClient: () => db },
+    '@/lib/flowMedia': { signFlowMedia: async value => value },
+    '@/lib/generationReconciliation': reconciliation,
+    '@/lib/utils/flowPersistence': load('src/lib/utils/flowPersistence.ts'),
+  };
+  return {
+    node: load('src/app/api/flows/[flowId]/nodes/[nodeId]/route.ts', dependencies).PATCH,
+    canvas: load('src/app/api/flows/[flowId]/autosave/route.ts', dependencies).PATCH,
+  };
+}
+const nodeParams = { params: Promise.resolve({ flowId: 'flow', nodeId: 'node' }) };
+const bodyRequest = body => ({ json: async () => body });
+
+test('historical terminal nodes with stale pending IDs never create generating cards', async () => {
+  for (const status of ['completed', 'error']) {
+    const flow = flowRecord({ ...oldPending, status });
+    const generation = row({ source_type: 'canvas', source_id: 'flow', node_id: 'node', media_type: 'video', model: 'model' });
+    const db = database({ flows: [flow], generations: [generation] });
+    const response = await pendingRoute(db).POST(bodyRequest({ jobs: [{ id: 'flow:node', flowId: 'flow', nodeId: 'node', requestIds: ['request'] }] }));
+    const result = await response.json();
+    assert.deepEqual(result.generations, []);
+    assert.deepEqual(result.removedJobIds, ['flow:node']);
+    const h = harness();
+    globalThis.fetch = async () => json(result);
+    await h.recoverBackgroundGenerations();
+    assert.deepEqual(h.state().jobs, {});
+  }
+});
+test('recovery never guesses an attempt from old processing rows without matching IDs', async () => {
+  const flow = flowRecord({ status: 'processing' });
+  const generation = row({ source_type: 'canvas', source_id: 'flow', node_id: 'node', media_type: 'video', model: 'model' });
+  const result = await (await pendingRoute(database({ flows: [flow], generations: [generation] })).GET()).json();
+  assert.deepEqual(result.generations, []);
+});
+for (const status of ['completed', 'failed']) {
+  test(`saved ${status} recovers directly without polling fal or briefly showing Generating`, async () => {
+    const h = harness(null), phases = [], saves = [];
+    h.subscribe(state => { phases.push(...Object.values(state.jobs).map(j => j.phase)); });
+    globalThis.fetch = async (url, options) => {
+      if (options?.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({ ok: true }); }
+      assert.equal(url, '/api/generations/pending');
+      return json({ generations: [recovered({ status, mediaUrl: status === 'completed' ? 'gcs:result.mp4' : undefined, errorMessage: 'Rejected' })] });
+    };
+    await h.recoverBackgroundGenerations();
+    assert.deepEqual(h.state().jobs, {});
+    assert.equal(saves[0].data.status, status === 'completed' ? 'completed' : 'error');
+    assert.ok(!phases.includes('processing'));
+    assert.ok(!phases.includes('submitting'));
+  });
+}
+test('unverified recovery stays Checking with backoff until fal confirms the request is pending', async () => {
+  const h = harness(null);
+  h.flowState().setCurrentFlow(flowRecord(oldPending));
+  globalThis.fetch = async () => json({ generations: [recovered()] });
+  await h.recoverBackgroundGenerations();
+  assert.equal(h.state().jobs['flow:node'].phase, 'checking');
+  assert.equal(h.flowState().nodes[0].data.status, 'processing');
+  let polls = 0;
+  globalThis.fetch = async () => { polls++; return json({ error: 'Unavailable' }, 503); };
+  await h.progressBackgroundGenerations();
+  await h.progressBackgroundGenerations();
+  assert.equal(polls, 1);
+  assert.equal(h.state().jobs['flow:node'].phase, 'checking');
+  assert.equal(h.flowState().nodes[0].data.status, 'processing');
+  h.state().patchRequest('flow:node', 'request', { nextPollAt: 0 });
+  globalThis.fetch = async () => json({ status: 'pending' });
+  await h.progressBackgroundGenerations();
+  assert.equal(h.state().jobs['flow:node'].phase, 'processing');
+  assert.equal(h.flowState().nodes[0].data.status, 'processing');
+});
+test('rehydration requires fresh verification even for previously confirmed running jobs', async () => {
+  const h = harness(job({ requests: [{ ...job().requests[0], lastVerifiedAt: Date.now() }] }));
+  const persisted = h.storage.get('canvas-flow-background-generations');
+  const reopened = harness(null);
+  reopened.storage.set('canvas-flow-background-generations', persisted);
+  await reopened.hydrate();
+  assert.equal(reopened.state().jobs['flow:node'].phase, 'checking');
+  assert.equal(reopened.state().jobs['flow:node'].requests[0].lastVerifiedAt, undefined);
+});
+test('completion followed by stale autosave and repeated recovery cannot resurrect the generation', async () => {
+  const flow = flowRecord();
+  const base = structuredClone(flow.flow_data.nodes);
+  const generation = row({ source_type: 'canvas', source_id: 'flow', node_id: 'node', media_type: 'video', model: 'model', status: 'completed', media_url: 'gcs:result.mp4' });
+  const db = database({ flows: [flow], generations: [generation] });
+  const routes = saveRoutes(db);
+  const response = await routes.node(bodyRequest({ requestIds: ['request'], data: finished, unset: ['pendingRequestId', 'pendingEndpoint'] }), nodeParams);
+  assert.equal(response.status, 200);
+  const lateSave = await routes.canvas(bodyRequest({ baseNodes: base, flowData: { nodes: base, edges: [] } }), nodeParams);
+  assert.equal(lateSave.status, 200);
+  assert.equal(flow.flow_data.nodes[0].data.status, 'completed');
+  assert.equal(flow.flow_data.nodes[0].data.pendingRequestId, undefined);
+  for (let i = 0; i < 3; i++) {
+    const result = await (await pendingRoute(db).GET()).json();
+    assert.deepEqual(result.generations, []);
+  }
+});
+test('a newer run wins over delayed completion and older-tab autosave, preserving editable fields', async () => {
+  const base = flowRecord({ ...oldPending, generationRunId: 'old-run' }).flow_data.nodes;
+  const flow = flowRecord({ status: 'processing', generationRunId: 'new-run', pendingRequestId: 'new-request' });
+  const routes = saveRoutes(database({ flows: [flow] }));
+  const completion = await routes.node(bodyRequest({ generationRunId: 'old-run', requestIds: ['request'], data: finished }), nodeParams);
+  assert.equal((await completion.json()).superseded, true);
+  const incoming = structuredClone(base); incoming[0].data.prompt = 'Keep this edit';
+  const saved = await routes.canvas(bodyRequest({ baseNodes: base, flowData: { nodes: incoming, edges: [] } }), nodeParams);
+  assert.equal(saved.status, 200);
+  assert.equal(flow.flow_data.nodes[0].data.generationRunId, 'new-run');
+  assert.equal(flow.flow_data.nodes[0].data.pendingRequestId, 'new-request');
+  assert.equal(flow.flow_data.nodes[0].data.prompt, 'Keep this edit');
+});
+test('new attempt finishing before autosave waits for its identity, then saves without losing output', async () => {
+  const prior = { ...finished, generationRunId: 'old-run' };
+  const flow = flowRecord(prior), db = database({ flows: [flow] }), routes = saveRoutes(db);
+  const finalBody = { generationRunId: 'new-run', previousIdentity: 'old-run', requestIds: ['new-request'],
+    data: { ...finished, generationRunId: 'new-run', videoUrl: 'gcs:new.mp4', resolvedRequestIds: ['new-request'] }, unset: ['pendingRequestId'] };
+  const waiting = await routes.node(bodyRequest(finalBody), nodeParams);
+  assert.equal(waiting.status, 409);
+  const incoming = flowRecord({ status: 'processing', generationRunId: 'new-run', pendingRequestId: 'new-request' }).flow_data;
+  const saved = await routes.canvas(bodyRequest({ baseNodes: flow.flow_data.nodes, flowData: incoming }), nodeParams);
+  assert.equal(saved.status, 200);
+  assert.equal((await routes.node(bodyRequest(finalBody), nodeParams)).status, 200);
+  assert.equal(flow.flow_data.nodes[0].data.videoUrl, 'gcs:new.mp4');
+});
+test('stale autosave does not recreate a node deleted in another tab', async () => {
+  const base = flowRecord().flow_data.nodes;
+  const flow = flowRecord(); flow.flow_data.nodes = [];
+  const routes = saveRoutes(database({ flows: [flow] }));
+  assert.equal((await routes.canvas(bodyRequest({ baseNodes: base, flowData: { nodes: base, edges: [] } }), nodeParams)).status, 200);
+  assert.deepEqual(flow.flow_data.nodes, []);
+});
+test('canvas autosave and node completion enforce ownership', async () => {
+  const flow = flowRecord(); flow.user_id = 'someone-else';
+  const routes = saveRoutes(database({ flows: [flow] }));
+  assert.equal((await routes.canvas(bodyRequest({ baseNodes: [], flowData: { nodes: [], edges: [] } }), nodeParams)).status, 403);
+  assert.equal((await routes.node(bodyRequest({ data: finished }), nodeParams)).status, 403);
+});
+
+test('an outdated recovery response cannot reopen a terminal node in the current canvas', async () => {
+  const h = harness(null);
+  h.flowState().setCurrentFlow(flowRecord(finished));
+  globalThis.fetch = async () => json({ generations: [recovered()] });
+  await h.recoverBackgroundGenerations();
+  assert.deepEqual(h.state().jobs, {});
+  assert.equal(h.flowState().nodes[0].data.status, 'completed');
+});
+
+test('autosave retries a concurrent completion and keeps its terminal state', async () => {
+  const flow = flowRecord(), base = structuredClone(flow.flow_data.nodes);
+  let writes = 0;
+  const db = database({ flows: [flow] }, { beforeUpdate(table) {
+    if (table !== 'flows' || ++writes !== 1) return;
+    flow.flow_data = flowRecord(finished).flow_data;
+    flow.updated_at = '2026-01-02T00:00:00Z';
+  } });
+  const response = await saveRoutes(db).canvas(bodyRequest({ baseNodes: base, flowData: { nodes: base, edges: [] } }), nodeParams);
+  assert.equal(response.status, 200);
+  assert.equal(writes, 2);
+  assert.equal(flow.flow_data.nodes[0].data.status, 'completed');
+  assert.equal(flow.flow_data.nodes[0].data.pendingRequestId, undefined);
+});
+test('a deletion during completion wins the optimistic retry without recreating the node', async () => {
+  const flow = flowRecord(); let writes = 0;
+  const db = database({ flows: [flow] }, { beforeUpdate(table) {
+    if (table !== 'flows' || ++writes !== 1) return;
+    flow.flow_data.nodes = []; flow.updated_at = '2026-01-02T00:00:00Z';
+  } });
+  const response = await saveRoutes(db).node(bodyRequest({ requestIds: ['request'], data: finished }), nodeParams);
+  assert.equal(response.status, 404);
+  assert.deepEqual(flow.flow_data.nodes, []);
+});
+test('background polling is bounded and does not starve later requests', async () => {
+  const h = harness(null), seen = [], pending = [];
+  for (let i = 0; i < 8; i++) h.state().startJob(job({ id: `flow:node-${i}`, nodeId: `node-${i}`,
+    requests: [{ ...job().requests[0], requestId: `req-${i}` }] }));
+  globalThis.fetch = url => { seen.push(url); return new Promise(resolve => pending.push(resolve)); };
+  const first = h.progressBackgroundGenerations();
+  assert.equal(seen.length, 4);
+  await h.progressBackgroundGenerations();
+  assert.equal(seen.length, 4);
+  pending.splice(0).forEach(resolve => resolve(json({ status: 'pending' })));
+  await first;
+  const second = h.progressBackgroundGenerations();
+  assert.equal(seen.length, 8);
+  assert.equal(new Set(seen).size, 8);
+  pending.splice(0).forEach(resolve => resolve(json({ status: 'pending' })));
+  await second;
+});
+test('sidebar groups uncertain historical jobs separately from confirmed generating jobs', () => {
+  const React = require('react');
+  const state = { jobs: {} };
+  for (let i = 0; i < 4; i++) state.jobs[`flow:${i}`] = job({ id: `flow:${i}`, phase: 'checking', flowTitle: 'Vans' });
+  const { Sidebar } = load('src/components/layout/Sidebar.tsx', {
+    'next/navigation': { usePathname: () => '/dashboard/canvas-flow' },
+    'next/link': { __esModule: true, default: ({ children, href, ...props }) => React.createElement('a', { ...props, href: typeof href === 'string' ? href : href.pathname }, children) },
+    'next/image': { __esModule: true, default: () => null },
+    '@/lib/utils/cn': { cn: (...values) => values.filter(v => typeof v === 'string').join(' ') },
+    '@/lib/supabase/client': {},
+    '@/lib/stores/generationStore': { useGenerationStore: selector => selector(state) },
+    '@/components/canvas/nodes/TypedHandle': { PORT_COLORS: { video: 'purple' } },
+  });
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const render = () => renderToStaticMarkup(React.createElement(Sidebar));
+  assert.equal((render().match(/Generating asset/g) ?? []).length, 0);
+  assert.equal((render().match(/Checking status \(/g) ?? []).length, 1);
+  state.jobs.active = job({ id: 'active', phase: 'processing' });
+  assert.equal((render().match(/Generating asset/g) ?? []).length, 1);
+});
+test('unknown provider statuses remain unverified rather than being reported as pending', async () => {
+  const response = await statusRoute(database({ generations: [row()] }), { status: 'UNKNOWN' }).GET(request, params);
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).status, 'error');
+});
+
+test('unrelated media input uploads are not blocked by generation reconciliation', () => {
+  const base = [{ id: 'media', type: 'mediaInputNode', data: { status: 'completed', videoUrl: 'old.mp4' } }];
+  const incoming = [{ ...base[0], data: { status: 'processing', videoUrl: 'new.mp4' } }];
+  assert.deepEqual(reconciliation.mergeGenerationNodes(incoming, base, base), incoming);
+});
+test('a persisted new attempt can resume over its old completed node after verification', async () => {
+  const h = harness(job({ runId: 'new-run', previousIdentity: 'old-run', phase: 'checking' }));
+  h.flowState().setCurrentFlow(flowRecord({ ...finished, generationRunId: 'old-run' }));
+  globalThis.fetch = async () => json({ status: 'pending' });
+  await h.progressBackgroundGenerations();
+  assert.equal(h.flowState().nodes[0].data.generationRunId, 'new-run');
+  assert.equal(h.flowState().nodes[0].data.status, 'processing');
+  assert.equal(h.state().jobs['flow:node'].phase, 'processing');
+});
+test('an exact unsaved attempt is recovered even when its callback and node autosave were lost', async () => {
+  const flow = flowRecord({ ...finished, generationRunId: 'old-run' });
+  const generation = row({ status: 'completed', media_url: 'gcs:new.mp4', source_type: 'canvas', source_id: 'flow',
+    node_id: 'node', model: 'model', media_type: 'video', parameters: { endpoint: 'fal-ai/video', generationRunId: 'new-run' } });
+  const result = await (await pendingRoute(database({ flows: [flow], generations: [generation] })).POST(bodyRequest({ jobs: [
+    { id: 'flow:node', flowId: 'flow', nodeId: 'node', runId: 'new-run', previousIdentity: 'old-run', requestIds: [] },
+  ] }))).json();
+  assert.deepEqual(result.removedJobIds, []);
+  assert.equal(result.generations.length, 1);
+  assert.equal(result.generations[0].status, 'completed');
+  assert.equal(result.generations[0].runId, 'new-run');
+});
+
+const { registerGenerationAttempt } = load('src/lib/generationAttempt.ts', {
+  '@/lib/flowMedia': { signFlowMedia: async value => value },
+    '@/lib/generationReconciliation': reconciliation,
+});
+test('registration reserves a run durably and is idempotent across image batch slots', async () => {
+  const flow = flowRecord({ ...finished, generationRunId: 'old-run' });
+  const db = database({ flows: [flow] });
+  const input = { sourceType: 'canvas', sourceId: 'flow', nodeId: 'node', generationRunId: 'new-run', previousIdentity: 'old-run' };
+  await registerGenerationAttempt(db, 'user', input);
+  const version = flow.updated_at;
+  assert.equal(flow.flow_data.nodes[0].data.generationRunId, 'new-run');
+  assert.equal(flow.flow_data.nodes[0].data.status, 'processing');
+  assert.equal(flow.flow_data.nodes[0].data.resolvedRequestIds, undefined);
+  await registerGenerationAttempt(db, 'user', input);
+  assert.equal(flow.updated_at, version);
+});
+test('registration rejects a stale competing attempt and an inaccessible flow before paid submission', async () => {
+  const flow = flowRecord({ status: 'processing', generationRunId: 'first-run' });
+  const input = { sourceType: 'canvas', sourceId: 'flow', nodeId: 'node', generationRunId: 'second-run', previousIdentity: 'old-run' };
+  await assert.rejects(() => registerGenerationAttempt(database({ flows: [flow] }), 'user', input), /another tab/);
+  await assert.rejects(() => registerGenerationAttempt(database({ flows: [flow] }), 'another-user', input), /Could not load/);
+  assert.equal(flow.flow_data.nodes[0].data.generationRunId, 'first-run');
+});
+test('registration never recreates a deleted node', async () => {
+  const flow = flowRecord(); flow.flow_data.nodes = [];
+  await assert.rejects(() => registerGenerationAttempt(database({ flows: [flow] }), 'user', {
+    sourceType: 'canvas', sourceId: 'flow', nodeId: 'node', generationRunId: 'new-run', previousIdentity: '',
+  }), /removed or has not been saved/);
+  assert.deepEqual(flow.flow_data.nodes, []);
+});
+
+test('registration resets old failed image slots and preserves the exact submitted batch size', async () => {
+  const flow = flowRecord({ status: 'error', generationRunId: 'old', numImages: 4,
+    generationSlots: ['old.png', null], generatedImages: ['old.png'], generationErrors: [null, { message: 'Old failure' }] });
+  flow.flow_data.nodes[0].type = 'imageGenNode';
+  await registerGenerationAttempt(database({ flows: [flow] }), 'user', {
+    sourceType: 'canvas', sourceId: 'flow', nodeId: 'node', generationRunId: 'new', previousIdentity: 'old', generationSlotCount: 2,
+  });
+  assert.deepEqual(flow.flow_data.nodes[0].data.generationSlots, [null, null]);
+  assert.deepEqual(flow.flow_data.nodes[0].data.generatedImages, []);
+  assert.equal(flow.flow_data.nodes[0].data.generationErrors, undefined);
+});
+test('the complete exact batch is recovered even when no callbacks reached the browser', async () => {
+  const flow = flowRecord({ status: 'processing', generationRunId: 'run', numImages: 2, generationSlots: [null, null] });
+  flow.flow_data.nodes[0].type = 'imageGenNode';
+  const generations = ['completed', 'failed'].map((status, slotIndex) => row({
+    source_type: 'canvas', source_id: 'flow', node_id: 'node', model: 'model', media_type: 'image',
+    fal_request_id: `request-${slotIndex}`, status, media_url: status === 'completed' ? 'gcs:good.png' : '',
+    parameters: { endpoint: 'fal-ai/image', generationRunId: 'run', slotIndex },
+  }));
+  const result = await (await pendingRoute(database({ flows: [flow], generations })).GET()).json();
+  assert.deepEqual(result.generations.map(g => g.status), ['completed', 'failed']);
+  const h = harness(null); h.flowState().setCurrentFlow(flow);
+  const saves = [];
+  globalThis.fetch = async (url, options) => options?.method === 'PATCH'
+    ? (saves.push(JSON.parse(options.body)), json({ ok: true })) : json(result);
+  await h.recoverBackgroundGenerations();
+  assert.deepEqual(h.state().jobs, {});
+  assert.equal(saves[0].data.status, 'error');
+  assert.deepEqual(saves[0].data.generatedImages, ['gcs:good.png']);
+});
+test('recovered media, partial slots, and upstream references receive usable signed URLs', async () => {
+  const { signFlowMedia } = load('src/lib/flowMedia.ts', {
+    '@/lib/gcs': { isGcsRef: value => value.startsWith('gcs:'), signGcsRef: async ref => `https://media.example/${ref.slice(4)}`,
+      getSignedReadUrl: async path => `https://media.example/${path}` },
+  });
+  const signed = await signFlowMedia({ mediaUrl: 'gcs:result.mp4', nodeData: {
+    generationSlots: ['gcs:first.png', null], inputImageUrls: ['gcs:input.png'], generationHistory: [['gcs:old.png']],
+  } });
+  assert.equal(signed.mediaUrl, 'https://media.example/result.mp4');
+  assert.deepEqual(signed.nodeData.generationSlots, ['https://media.example/first.png', null]);
+  assert.deepEqual(signed.nodeData.inputImageUrls, ['https://media.example/input.png']);
+  assert.deepEqual(signed.nodeData.generationHistory, [['https://media.example/old.png']]);
+});
+
+test('a newer durable attempt clears the older tracker before its request IDs autosave', async () => {
+  const flow = flowRecord({ status: 'processing', generationRunId: 'new-run' });
+  const response = await pendingRoute(database({ flows: [flow], generations: [] })).POST({ json: async () => ({ jobs: [
+    { id: 'flow:node', flowId: 'flow', nodeId: 'node', runId: 'old-run', previousIdentity: '', requestIds: ['old-request'] },
+  ] }) });
+  assert.deepEqual((await response.json()).removedJobIds, ['flow:node']);
+});
+test('recovery adds delayed database rows only to the same exact batch', async () => {
+  const h = harness(job({ runId: 'run', nodeType: 'imageGenNode', kind: 'image-generation',
+    slotCount: 2, slots: [null, null], requests: [{ ...job().requests[0], mediaType: 'image' }] }));
+  const nodeData = { status: 'processing', generationRunId: 'run', numImages: 2, generationSlots: [null, null] };
+  globalThis.fetch = async () => json({ generations: [0, 1].map(slotIndex => recovered({
+    runId: 'run', nodeType: 'imageGenNode', mediaType: 'image', nodeData, slotIndex,
+    requestId: slotIndex ? 'delayed-request' : 'request', status: 'processing',
+  })) });
+  await h.recoverBackgroundGenerations();
+  assert.deepEqual(h.state().jobs['flow:node'].requests.map(r => r.requestId), ['request', 'delayed-request']);
+  assert.deepEqual(h.state().jobs['flow:node'].failedSlots, []);
 });

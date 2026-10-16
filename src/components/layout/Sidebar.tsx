@@ -39,8 +39,15 @@ export function Sidebar() {
   const [isAdmin, setIsAdmin] = useState(false);
   const generationJobs = useGenerationStore((state) => state.jobs);
   const activeGenerations = Object.values(generationJobs)
-    .filter((generation) => generation.phase !== 'saving')
+    .filter((generation) => generation.phase === 'submitting' || generation.phase === 'processing')
     .sort((a, b) => a.startedAt - b.startedAt);
+
+  const checkingFlows = new Map<string, { title: string; count: number }>();
+  for (const job of Object.values(generationJobs)) {
+    if (job.phase !== 'checking') continue;
+    const previous = checkingFlows.get(job.flowId);
+    checkingFlows.set(job.flowId, { title: job.flowTitle, count: (previous?.count ?? 0) + 1 });
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -238,6 +245,17 @@ export function Sidebar() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {checkingFlows.size > 0 && (
+        <div className="max-h-24 overflow-y-auto px-3 pb-3" style={{ color: 'var(--color-white-muted)' }}>
+          {[...checkingFlows].map(([flowId, flow]) => (
+            <Link key={flowId} href={`/dashboard/canvas-flow/${flowId}`} className="block py-1 text-[11px]"
+              title={`Checking status of ${flow.count} generation${flow.count === 1 ? '' : 's'} in ${flow.title}. Results will be recovered when available.`}>
+              {collapsed ? '…' : <>Checking status ({flow.count})<span className="block truncate">{flow.title}</span></>}
+            </Link>
+          ))}
         </div>
       )}
 

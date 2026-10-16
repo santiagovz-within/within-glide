@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { registerGenerationAttempt, type GenerationAttemptInput } from '@/lib/generationAttempt';
 import { GoogleGenAI } from '@google/genai';
 import { GOOGLE_IMAGE_MODELS } from '@/lib/api/models';
 import { getSignedReadUrl } from '@/lib/gcs';
 import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
 
-interface GenerateBody {
+interface GenerateBody extends GenerationAttemptInput {
   model: string;
   prompt: string;
   aspectRatio?: string;
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
 
     console.log('[google/generate] model:', googleModelId, '| refs:', referenceImageUrls.length, '| prompt:', prompt.slice(0, 80));
 
+    await registerGenerationAttempt(supabase, user.id, body);
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
     const validRefUrls = referenceImageUrls.filter(Boolean);

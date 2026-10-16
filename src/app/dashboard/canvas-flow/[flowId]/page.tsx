@@ -9,6 +9,8 @@ import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
 import { AUTOSAVE_DEBOUNCE_MS } from '@/lib/utils/constants';
 import { createFlowThumbnail, extractFlowThumbnailSource } from '@/lib/utils/flowThumbnail';
+import { mergeGenerationNodes } from '@/lib/generationReconciliation';
+import type { FlowData } from '@/types';
 import { canonicalizeGcsValue } from '@/lib/utils/mediaUtils';
 import {
   shouldActivateFlow,
@@ -141,31 +143,32 @@ export default function FlowEditorPage() {
         }
       }
 
-      const { error } = await supabase
-        .from('flows')
-        .update({
-          flow_data: {
+      const response = await fetch(`/api/flows/${flowId}/autosave`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseNodes: snapshot.currentFlow.flow_data.nodes.map(({ id, data }) => ({ id, data })),
+          flowData: {
             nodes: snapshotNodes.map((node) => ({
-              id: node.id,
-              type: node.type,
-              position: node.position,
-              data: canonicalizeGcsValue(node.data),
-              parentId: node.parentId,
-              style: node.style,
+              id: node.id, type: node.type, position: node.position,
+              data: canonicalizeGcsValue(node.data), parentId: node.parentId, style: node.style,
             })),
-            edges: snapshotEdges,
-            viewport: { x: 0, y: 0, zoom: 1 },
+            edges: snapshotEdges, viewport: { x: 0, y: 0, zoom: 1 },
           },
-          ...(!thumbnailSource
-            ? { thumbnail_url: null }
-            : thumbnailRef
-              ? { thumbnail_url: thumbnailRef }
-              : {}),
-          ...(shouldActivate ? { lifecycle_state: 'active' as const } : {}),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', flowId);
-      if (error) throw error;
+          ...(!thumbnailSource ? { thumbnailUrl: null } : thumbnailRef ? { thumbnailUrl: thumbnailRef } : {}),
+        }),
+      });
+      if (!response.ok) throw new Error(`Could not save canvas (${response.status})`);
+      const saved = await response.json() as { flowData: FlowData; updatedAt: string; lifecycle: 'active' | 'draft' };
+      const beforeMerge = useFlowStore.getState();
+      const snapshotIsCurrent = beforeMerge.nodes === snapshotNodes && beforeMerge.edges === snapshotEdges;
+      if (beforeMerge.currentFlow?.id === flowId) {
+        useFlowStore.setState({
+          nodes: mergeGenerationNodes(beforeMerge.nodes, saved.flowData.nodes as typeof snapshotNodes, snapshotNodes),
+          currentFlow: { ...beforeMerge.currentFlow, flow_data: saved.flowData,
+            updated_at: saved.updatedAt, lifecycle_state: saved.lifecycle },
+        });
+      }
 
       if (thumbnailRef || !thumbnailSource || shouldActivate) {
         useFlowStore.setState((state) => ({
@@ -183,8 +186,6 @@ export default function FlowEditorPage() {
 
       if (shouldActivate) isDraftFlow.current = false;
 
-      const latest = useFlowStore.getState();
-      const snapshotIsCurrent = latest.nodes === snapshotNodes && latest.edges === snapshotEdges;
       const shouldRetryThumbnail = !!thumbnailSource
         && !thumbnailRef
         && thumbnailAttempts.current.failures < 3;
@@ -197,7 +198,7 @@ export default function FlowEditorPage() {
     } finally {
       setSaving(false);
     }
-  }, [flowId, isOwner, setDirty, setLastSaved, setSaving, supabase]);
+  }, [flowId, isOwner, setDirty, setLastSaved, setSaving]);
 
   // Promote a draft as soon as it gains meaningful content, a media upload, or
   // its first node. The state changes in the same database update as flow_data.

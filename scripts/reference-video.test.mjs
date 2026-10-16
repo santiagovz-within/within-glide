@@ -128,6 +128,7 @@ test('API queues each reference endpoint and persists recoverable metadata; inva
     '@/lib/api/referenceVideo': config,
     '@/lib/falStorage': { getFalStorageHeaders: async () => ({ 'storage-test': 'preserved' }) },
     '@/lib/falErrors': { describeFalError: String },
+    '@/lib/generationAttempt': { registerGenerationAttempt: async () => {} },
     '@/lib/falPricing': {}, '@/lib/gptImage25': {},
   });
   for (const [id, endpoint] of expected) {
@@ -156,7 +157,7 @@ test('Pending-generation recovery includes the new node and keeps its original e
   const pending = [{ source_id: 'flow', node_id: 'node', model: 'minimax-h3-max', media_type: 'video',
     fal_request_id: 'request', parameters: { endpoint }, reference_image_urls: ['a.png'] }];
   // The user may have switched models while a request is still running.
-  const flows = [{ id: 'flow', title: 'Flow', flow_data: { nodes: [{ id: 'node', type: 'referenceVideoNode', data: { model: 'seedance-2', status: 'processing' } }] } }];
+  const flows = [{ id: 'flow', title: 'Flow', flow_data: { nodes: [{ id: 'node', type: 'referenceVideoNode', data: { model: 'seedance-2', status: 'processing', pendingRequestId: 'request' } }] } }];
   const admin = { from: table => {
     const chain = {
       select: () => chain, eq: () => chain, not: () => chain, gte: () => chain,
@@ -173,6 +174,8 @@ test('Pending-generation recovery includes the new node and keeps its original e
       createAdminClient: () => admin,
     },
     '@/lib/api/models': { FAL_MODELS: {} },
+    '@/lib/flowMedia': { signFlowMedia: async value => value },
+    '@/lib/generationReconciliation': load('src/lib/generationReconciliation.ts'),
   });
   const response = await GET();
   const { generations } = await response.json();

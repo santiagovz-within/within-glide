@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generationIdentity, generationRequestIds, isTerminalNode } from '@/lib/generationReconciliation';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 
 const BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -13,7 +14,7 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { flowId, nodeId } = await params;
-    const body = await request.json() as { data?: unknown; unset?: unknown };
+    const body = await request.json() as { data?: unknown; unset?: unknown; generationRunId?: string; previousIdentity?: string; requestIds?: string[] };
     if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data)) {
       return NextResponse.json({ error: 'Node data updates are required' }, { status: 400 });
     }
@@ -49,6 +50,24 @@ export async function PATCH(
         viewport?: unknown;
       };
       const nodes = Array.isArray(flowData?.nodes) ? flowData.nodes : [];
+      const target = nodes.find((node) => node.id === nodeId);
+      if (!target) return NextResponse.json({ error: 'Node not found' }, { status: 404 });
+      const current = target.data ?? {};
+      const savedIds = generationRequestIds(current);
+      const requestIds = Array.isArray(body.requestIds) ? body.requestIds : [];
+      const sameRun = typeof current.generationRunId === 'string'
+        ? current.generationRunId === body.generationRunId
+        : savedIds.some((id) => requestIds.includes(id));
+      if (!sameRun && body.generationRunId && body.previousIdentity === generationIdentity(current)) {
+        return NextResponse.json({ error: 'Waiting for the new attempt to be saved' }, { status: 409 });
+      }
+      if (isTerminalNode(current) || (!sameRun && (current.generationRunId || savedIds.length))) {
+        return NextResponse.json({ ok: true, superseded: true });
+      }
+      if (!sameRun && (body.generationRunId || requestIds.length)) {
+        // The generation started before autosave persisted its attempt identity.
+        return NextResponse.json({ error: 'Waiting for the current generation to be saved' }, { status: 409 });
+      }
       let found = false;
       const nextNodes = nodes.map((node) => {
         if (node.id !== nodeId) return node;
@@ -63,7 +82,7 @@ export async function PATCH(
         .from('flows')
         .update({
           flow_data: { ...flowData, nodes: nextNodes },
-          updated_at: new Date().toISOString(),
+          updated_at: new Date(Math.max(Date.now(), Date.parse(flow.updated_at) + 1)).toISOString(),
         })
         .eq('id', flowId)
         .eq('user_id', user.id)

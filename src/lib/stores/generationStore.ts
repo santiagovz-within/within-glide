@@ -17,6 +17,8 @@ export interface BackgroundGenerationRequest {
   mediaUrl?: string;
   errorMessage?: string;
   pollErrorCount?: number;
+  lastVerifiedAt?: number;
+  nextPollAt?: number;
 }
 
 export interface BackgroundGenerationJob {
@@ -26,7 +28,9 @@ export interface BackgroundGenerationJob {
   nodeId: string;
   nodeType: NodeType;
   kind: BackgroundGenerationKind;
-  phase: 'submitting' | 'processing' | 'saving';
+  phase: 'submitting' | 'checking' | 'processing' | 'saving';
+  runId?: string;
+  previousIdentity?: string;
   startedAt: number;
   slotCount: number;
   slots: Array<string | null>;
@@ -87,7 +91,7 @@ export const useGenerationStore = create<GenerationStore>()(
         return {
           jobs: {
             ...state.jobs,
-            [jobId]: { ...job, requests, phase: 'processing' },
+            [jobId]: { ...job, requests },
           },
         };
       }),
@@ -125,6 +129,14 @@ export const useGenerationStore = create<GenerationStore>()(
         // the server immediately after hydration.
         if (version < 2) return { jobs: {} } as GenerationStore;
         return persistedState as GenerationStore;
+      },
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<GenerationStore> | undefined;
+        return { ...current, jobs: Object.fromEntries(Object.entries(saved?.jobs ?? {}).map(([id, job]) => [id, {
+          ...job,
+          phase: job.phase === 'saving' ? 'saving' : 'checking',
+          requests: job.requests.map((request) => ({ ...request, lastVerifiedAt: undefined, nextPollAt: undefined })),
+        }])) };
       },
       skipHydration: true,
     },

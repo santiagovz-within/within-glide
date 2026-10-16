@@ -127,11 +127,12 @@ test('Background partial completion saves a history version before acknowledgeme
       updateNodeData: (_id, updates) => { nodeData = { ...nodeData, ...updates }; } }) } },
     '@/lib/stores/generationStore': { useGenerationStore: { getState: () => generationState } },
     '@/lib/utils/sound': { playSuccessSound: () => assert.fail('Partial failures should not play the all-success sound') },
+    '@/lib/generationReconciliation': load('src/lib/generationReconciliation.ts'),
     '@/lib/imageGenerationResults': results,
   });
   const oldFetch = globalThis.fetch;
   const oldDocument = globalThis.document;
-  globalThis.fetch = async (_url, options) => { saved = JSON.parse(options.body); return { ok: true, status: 200 }; };
+  globalThis.fetch = async (_url, options) => { saved = JSON.parse(options.body); return Response.json({ ok: true }); };
   globalThis.document = { dispatchEvent: event => events.push(event) };
   try { await tracker.progressBackgroundGenerations(); }
   finally { globalThis.fetch = oldFetch; globalThis.document = oldDocument; }

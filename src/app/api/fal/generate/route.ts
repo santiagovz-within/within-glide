@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { registerGenerationAttempt, type GenerationAttemptInput } from '@/lib/generationAttempt';
 import { fal } from '@fal-ai/client';
 import { buildReferenceVideoInput } from '@/lib/api/referenceVideo';
 import { FAL_MODELS } from '@/lib/api/models';
@@ -11,7 +12,7 @@ import type { GenerateImageRequest } from '@/types';
 
 fal.config({ credentials: process.env.FAL_KEY });
 
-interface GenerateRequestBody extends GenerateImageRequest {
+interface GenerateRequestBody extends GenerateImageRequest, GenerationAttemptInput {
   sourceType: 'canvas' | 'chat';
   sourceId?: string;
   nodeId?: string;
@@ -24,6 +25,7 @@ interface GenerateRequestBody extends GenerateImageRequest {
   startFrameUrl?: string;
   endFrameUrl?: string;
   slotIndex?: number;
+  generationRunId?: string;
   generationMode?: 'reference-to-video';
   referenceDuration?: number | 'auto';
   referenceVideoUrls?: string[];
@@ -67,6 +69,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid reference inputs.' }, { status: 400 });
       }
       const { endpoint, input } = referenceRequest;
+      await registerGenerationAttempt(supabase, user.id, body);
       const { request_id } = await fal.queue.submit(endpoint, { input, headers: falHeaders });
       const { data: gen, error: insertError } = await supabase.from('generations').insert({
         user_id: user.id,
@@ -76,7 +79,7 @@ export async function POST(request: NextRequest) {
         model,
         prompt,
         parameters: {
-          generationMode: 'reference-to-video', endpoint,
+          generationMode: 'reference-to-video', endpoint, generationRunId: body.generationRunId,
           aspectRatio: input.aspect_ratio, resolution: input.resolution,
           duration: input.duration, generateAudio: input.generate_audio ?? input.audio,
           referenceVideoUrls: body.referenceVideoUrls ?? [],
@@ -256,6 +259,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      await registerGenerationAttempt(supabase, user.id, body);
       const { request_id } = await fal.queue.submit(endpoint as string, {
         input: videoInput,
         headers: falHeaders,
@@ -270,7 +274,7 @@ export async function POST(request: NextRequest) {
           node_id: nodeId,
           model,
           prompt,
-          parameters: { aspectRatio, resolution: videoResolution, duration, endpoint },
+          parameters: { generationRunId: body.generationRunId, aspectRatio, resolution: videoResolution, duration, endpoint },
           reference_image_urls: referenceImageUrls,
           media_type: 'video',
           media_url: '',
@@ -360,6 +364,7 @@ export async function POST(request: NextRequest) {
 
     for (let i = 0; i < numImages; i++) {
       console.log(`[fal/generate] queue image ${i + 1}/${numImages} input:`, JSON.stringify(baseInput));
+      await registerGenerationAttempt(supabase, user.id, body);
       const { request_id } = await fal.queue.submit(endpoint as string, {
         input: baseInput,
         headers: falHeaders,
@@ -373,7 +378,7 @@ export async function POST(request: NextRequest) {
           node_id: nodeId,
           model,
           prompt,
-          parameters: { aspectRatio, resolution, endpoint, slotIndex: body.slotIndex },
+          parameters: { generationRunId: body.generationRunId, aspectRatio, resolution, endpoint, slotIndex: body.slotIndex },
           reference_image_urls: referenceImageUrls,
           media_type: 'image',
           media_url: '',

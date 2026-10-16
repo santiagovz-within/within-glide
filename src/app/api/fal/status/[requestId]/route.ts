@@ -230,7 +230,10 @@ export async function GET(
       return await failGeneration(supabase, user.id, requestId, message);
     }
 
-    return NextResponse.json({ status: 'pending', queuePosition: s.queue_position ?? null });
+    if (s.status === 'IN_QUEUE' || s.status === 'IN_PROGRESS') {
+      return NextResponse.json({ status: 'pending', queuePosition: s.queue_position ?? null });
+    }
+    return NextResponse.json({ status: 'error', error: 'FAL returned an unrecognized request status.' }, { status: 503 });
   } catch (err) {
     console.error('Status check error:', err);
     return NextResponse.json({ status: 'error', error: describeFalError(err) }, { status: 500 });
