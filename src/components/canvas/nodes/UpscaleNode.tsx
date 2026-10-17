@@ -8,10 +8,11 @@ import Image from 'next/image';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
 import { useEffect, useRef, useState } from 'react';
+import { getNodeMediaUrls } from '../mediaOutputs';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { SendToFigmaButton } from './SendToFigmaButton';
-import type { UpscaleNodeData, ImageInputNodeData, ImageGenNodeData, SelectNodeData } from '@/types';
+import type { UpscaleNodeData, ImageInputNodeData, SelectNodeData } from '@/types';
 import { UPSCALE_MODELS, FAL_MODELS, getUpscaleVariantConfig, resolveUpscaleVariant } from '@/lib/api/models';
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
@@ -118,7 +119,7 @@ export function UpscaleNode({ data, selected, id }: NodeProps & { data: UpscaleN
   if (sourceNode?.type === 'imageInputNode') {
     inputImageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
   } else if (sourceNode?.type === 'imageGenNode') {
-    inputImageUrl = (sourceNode.data as ImageGenNodeData).generatedImages?.[0];
+    inputImageUrl = getNodeMediaUrls(sourceNode, 'image', incomingEdge?.sourceHandle)[0];
   } else if (sourceNode?.type === 'upscaleNode') {
     inputImageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
   } else if (sourceNode?.type === 'selectNode') {

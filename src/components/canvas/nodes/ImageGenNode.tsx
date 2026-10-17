@@ -2,7 +2,7 @@
 
 import { GenerationPreview } from './GenerationPreview';
 
-import { Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Aperture, Download, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { SendToFigmaButton } from './SendToFigmaButton';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -12,6 +12,7 @@ import { CanvasImage } from '@/components/canvas/CanvasMedia';
 import { NodeWrapper } from './NodeWrapper';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
 import { imageReferencePortCount } from '../imageReferenceInputs';
+import { getImageOutputIndex } from '../mediaOutputs';
 import { ReferenceInputRow } from './ReferenceInputRow';
 import { DisconnectInputButton } from './DisconnectInputButton';
 import { acknowledgeImageFailure, preserveImageBatch } from '@/lib/imageGenerationResults';
@@ -54,9 +55,16 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const storeEdges = useFlowStore((state) => state.edges);
   const promptEdge = storeEdges.find(edge => edge.target === id && edge.targetHandle === 'prompt');
   const singleReferenceEdge = storeEdges.find(edge => edge.target === id && edge.targetHandle === 'reference_image');
-  const isOutputConnected = storeEdges.some((edge) => edge.source === id && edge.sourceHandle === 'image');
+  const hasLegacyOutput = storeEdges.some((edge) => edge.source === id && edge.sourceHandle === 'image');
+  const updateNodeInternals = useUpdateNodeInternals();
+  const previewListRef = useRef<HTMLDivElement>(null);
+  const [outputTops, setOutputTops] = useState<number[]>([]);
   const genHistory = data.generationHistory ?? [];
-  const [histIdx, setHistIdx] = useState(() => Math.max(0, genHistory.length - 1));
+  const [histIdx, setHistIdx] = useState(() => {
+    const savedIndex = genHistory.findLastIndex((batch) => batch.length === data.generatedImages?.length
+      && batch.every((url, index) => url === data.generatedImages?.[index]));
+    return savedIndex >= 0 ? savedIndex : Math.max(0, genHistory.length - 1);
+  });
   const [historyLength, setHistoryLength] = useState(genHistory.length);
   if (historyLength !== genHistory.length) {
     setHistoryLength(genHistory.length);
@@ -252,7 +260,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     });
   }
 
-  const displayImages = genHistory.length > 0 ? (genHistory[histIdx] ?? []) : (data.generatedImages ?? []);
+  const displayImages = data.generatedImages ?? genHistory[histIdx] ?? [];
 
   async function handleDownload() {
     if (isDownloading || downloadableImages.length === 0) return;
@@ -305,6 +313,40 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
     && preserveImageBatch(genHistory, downloadableImages) === genHistory;
   const displayVersion = isShowingActiveGeneration ? genHistory.length + (batchAlreadySaved ? 0 : 1) : histIdx + 1;
   const previewAspectRatio = data.aspectRatio.replace(':', ' / ');
+
+  // Keep connected slots mounted when switching to a version with fewer images.
+  // They resolve to no image until that slot exists again.
+  const connectedOutputIndexes = storeEdges
+    .filter((edge) => edge.source === id)
+    .map((edge) => getImageOutputIndex(edge.sourceHandle))
+    .filter((index): index is number => index !== null);
+  const outputCount = Math.max(previewSlots.length, 1, ...connectedOutputIndexes.map((index) => index + 1));
+
+  useLayoutEffect(() => {
+    const list = previewListRef.current;
+    if (!list) {
+      setOutputTops((previous) => previous.length ? [] : previous);
+      return;
+    }
+    const measure = () => {
+      // Preview rows and the handles share nodeContent as their offset parent.
+      const tops = Array.from(list.children, (child) => {
+        const row = child as HTMLElement;
+        return Math.round(row.offsetTop + row.offsetHeight / 2);
+      });
+      setOutputTops((previous) => previous.length === tops.length && previous.every((top, i) => top === tops[i])
+        ? previous : tops);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list.parentElement!);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [previewSlots.length]);
+
+  useLayoutEffect(() => {
+    updateNodeInternals(id);
+  }, [id, outputCount, outputTops, hasLegacyOutput, updateNodeInternals]);
 
   const footer = (
     <div className={glassStyles.footerStack}>
@@ -661,7 +703,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
       {/* ── Generated previews ───────────────────────────────── */}
       {previewSlots.length > 0 && (
-        <div className={glassStyles.previewList}>
+        <div ref={previewListRef} className={glassStyles.previewList}>
           {previewSlots.map((url, i) => (
             <div
               key={i}
@@ -722,14 +764,38 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         </div>
       )}
 
-      <TypedHandle
-        type="source"
-        position={Position.Right}
-        id="image"
-        portType="image"
-        connected={isOutputConnected}
-        appearance="imageGenerationGlass"
-      />
+      {Array.from({ length: outputCount }, (_, index) => {
+        const handleId = `image_${index}`;
+        if (index >= previewSlots.length && index > 0) {
+          return <Handle key={handleId} type="source" position={Position.Right} id={handleId} isConnectable={false}
+            style={{ opacity: 0, pointerEvents: 'none', right: -44, width: 36, height: 36,
+              top: outputTops.at(-1) ?? '50%', transform: 'translateY(-50%)' }} />;
+        }
+        const unavailable = previewSlots.length > 0 && !previewSlots[index];
+        const top = outputTops[index] ?? 40 + index * 44;
+        return (
+          <TypedHandle
+            key={handleId}
+            type="source"
+            position={Position.Right}
+            id={handleId}
+            portType="image"
+            offset={previewSlots.length || index > 0 ? `${top}px` : '50%'}
+            title={`Image ${index + 1} output`}
+            aria-label={`Image ${index + 1} output`}
+            connected={storeEdges.some((edge) => edge.source === id && edge.sourceHandle === handleId)}
+            disabled={unavailable}
+            disabledReason={`Image ${index + 1} is not available in this generation`}
+            appearance="imageGenerationGlass"
+          />
+        );
+      })}
+      {/* Saved batch connections retain their behavior without exposing another circle. */}
+      {hasLegacyOutput && (
+        <Handle type="source" position={Position.Right} id="image" isConnectable={false}
+          style={{ opacity: 0, pointerEvents: 'none', right: -44, width: 36, height: 36,
+            top: outputTops[0] ?? '50%', transform: 'translateY(-50%)' }} />
+      )}
     </NodeWrapper>
   );
 }

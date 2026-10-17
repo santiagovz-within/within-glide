@@ -2,9 +2,10 @@
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Monitor, Image, Download } from 'lucide-react';
+import { getNodeMediaUrls } from '../mediaOutputs';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import type { OutputNodeData, ImageInputNodeData, ImageGenNodeData, UpscaleNodeData, VideoGenNodeData, ModifyNodeData, SelectNodeData } from '@/types';
+import type { OutputNodeData, ImageInputNodeData, UpscaleNodeData, VideoGenNodeData, ModifyNodeData, SelectNodeData } from '@/types';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { CanvasImage, CanvasVideo } from '@/components/canvas/CanvasMedia';
@@ -23,7 +24,7 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
   function getImageUrl(node: typeof imgSource): string | undefined {
     if (!node) return undefined;
     if (node.type === 'imageInputNode') return (node.data as ImageInputNodeData).imageUrl;
-    if (node.type === 'imageGenNode') return (node.data as ImageGenNodeData).generatedImages?.[0];
+    if (node.type === 'imageGenNode') return getNodeMediaUrls(node, 'image', imageEdge?.sourceHandle)[0];
     if (node.type === 'upscaleNode') return (node.data as UpscaleNodeData).outputImageUrl;
     if (node.type === 'modifyNode') return (node.data as ModifyNodeData).outputImageUrl;
     if (node.type === 'selectNode') return (node.data as SelectNodeData).selectedImageUrl;

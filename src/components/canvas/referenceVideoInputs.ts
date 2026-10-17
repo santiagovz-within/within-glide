@@ -12,7 +12,7 @@ export function getReferenceVideoInputs(nodeId: string, nodes: Node<NodeData>[],
   function references(handle: string, kind: 'image' | 'video') {
     return edges.filter(edge => edge.target === nodeId && edge.targetHandle === handle).map(edge => {
       const source = nodes.find(node => node.id === edge.source);
-      return { edgeId: edge.id, sourceNodeId: edge.source, url: source ? getNodeMediaUrls(source, kind)[0] : undefined };
+      return { edgeId: edge.id, sourceNodeId: edge.source, url: source ? getNodeMediaUrls(source, kind, edge.sourceHandle)[0] : undefined };
     });
   }
   return {

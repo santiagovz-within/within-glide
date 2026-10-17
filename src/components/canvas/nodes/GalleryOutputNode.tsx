@@ -41,7 +41,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
     const extension = sourceNode.type === 'videoToGifNode'
       ? 'gif'
       : mediaType === 'video' ? 'mp4' : 'jpg';
-    return getNodeMediaUrls(sourceNode as Node<NodeData>, mediaType).map((url) => ({
+    return getNodeMediaUrls(sourceNode as Node<NodeData>, mediaType, edge.sourceHandle).map((url) => ({
       url,
       type: mediaType,
       extension,

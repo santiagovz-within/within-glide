@@ -4,6 +4,7 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { Pointer, Download, Film } from 'lucide-react';
 import { SendToFigmaButton } from './SendToFigmaButton';
 import { useEffect } from 'react';
+import { getNodeMediaUrls } from '../mediaOutputs';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
 import { SourceThumbnails, THUMBNAIL_GRID_STYLE, THUMBNAIL_RADIUS } from './SourceThumbnails';
@@ -35,7 +36,7 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
 
   if (sourceNode?.type === 'imageGenNode') {
     const nd = sourceNode.data as ImageGenNodeData;
-    availableImages = nd.generatedImages ?? [];
+    availableImages = getNodeMediaUrls(sourceNode, 'image', incomingEdge?.sourceHandle);
     sourceAspect = nd.aspectRatio ?? '1:1';
   } else if (sourceNode?.type === 'imageInputNode') {
     const nd = sourceNode.data as ImageInputNodeData;

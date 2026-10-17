@@ -19,11 +19,18 @@ import { PORT_TYPE_MAP } from './nodes/TypedHandle';
 
 export type CanvasMediaType = 'image' | 'video';
 
+/** Indexed outputs select a slot; the legacy `image` output still represents a batch. */
+export function getImageOutputIndex(handle: string | null | undefined): number | null {
+  if (!handle || !/^image_\d+$/.test(handle)) return null;
+  const index = Number(handle.slice(6));
+  return Number.isSafeInteger(index) ? index : null;
+}
+
 const STATIC_MEDIA_SOURCE_HANDLES: Partial<
   Record<NodeType, Partial<Record<CanvasMediaType, string>>>
 > = {
   imageInputNode: { image: 'image' },
-  imageGenNode: { image: 'image' },
+  imageGenNode: { image: 'image_0' },
   videoGenNode: { video: 'video' },
   referenceVideoNode: { video: 'video' },
   upscaleNode: { image: 'image' },
@@ -39,6 +46,7 @@ export function getSourceMediaType(
   sourceHandle: string | null | undefined
 ): CanvasMediaType | null {
   if (!node?.type || !sourceHandle) return null;
+  if (node.type === 'imageGenNode' && getImageOutputIndex(sourceHandle) !== null) return 'image';
   const portType = PORT_TYPE_MAP[`${node.type}:${sourceHandle}:source`];
   return portType === 'image' || portType === 'video' ? portType : null;
 }
@@ -84,14 +92,25 @@ export function getActiveMediaSourceHandle(
 
 export function getNodeMediaUrls(
   node: Node<NodeData>,
-  mediaType: CanvasMediaType
+  mediaType: CanvasMediaType,
+  sourceHandle?: string | null,
 ): string[] {
   if (mediaType === 'image') {
     switch (node.type) {
       case 'imageInputNode':
         return [(node.data as ImageInputNodeData).imageUrl].filter(Boolean) as string[];
-      case 'imageGenNode':
-        return (node.data as ImageGenNodeData).generatedImages ?? [];
+      case 'imageGenNode': {
+        const data = node.data as ImageGenNodeData;
+        const index = getImageOutputIndex(sourceHandle);
+        if (index === null) return data.generatedImages ?? [];
+        // Pending/failed batches keep holes. Never let a later success slide
+        // into an earlier image's connector while requests finish out of order.
+        const slots = data.generationSlots?.length &&
+          (data.status === 'processing' || data.status === 'error' || data.pendingRequests?.length)
+          ? data.generationSlots : data.generatedImages;
+        const url = slots?.[index];
+        return url ? [url] : [];
+      }
       case 'upscaleNode':
         return [(node.data as UpscaleNodeData).outputImageUrl].filter(Boolean) as string[];
       case 'modifyNode':

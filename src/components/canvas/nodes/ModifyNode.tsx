@@ -21,7 +21,7 @@ import type {
   ModifyNodeData, ImageGenNodeData, ImageInputNodeData, UpscaleNodeData, MediaInputNodeData,
   VideoGenNodeData, VideoInputNodeData, VideoUpscaleNodeData, UpscaleMediaNodeData,
 } from '@/types';
-import { getSourceMediaType } from '../mediaOutputs';
+import { getNodeMediaUrls, getSourceMediaType } from '../mediaOutputs';
 import { CanvasImage, CanvasVideo } from '@/components/canvas/CanvasMedia';
 import { CanvasNodeFocusContext } from '@/components/canvas/mediaFocus';
 import { cn } from '@/lib/utils/cn';
@@ -503,7 +503,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   if (inputMediaType === 'image') {
     if (sourceNode?.type === 'imageGenNode') {
       const nd = sourceNode.data as ImageGenNodeData;
-      availableImages   = nd.generatedImages ?? [];
+      availableImages   = getNodeMediaUrls(sourceNode, 'image', incomingEdge?.sourceHandle);
       sourceAspectRatio = nd.aspectRatio ?? '1:1';
       sourceResolution  = nd.resolution  ?? '1K';
     } else if (sourceNode?.type === 'imageInputNode') {

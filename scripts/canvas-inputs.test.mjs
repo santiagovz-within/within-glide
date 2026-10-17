@@ -27,6 +27,39 @@ const imageSource = (id) => ({ id, type: 'imageInputNode', data: { imageUrl: `${
 const edge = (id, targetHandle, target = 'target') => ({ id, source: id, target, targetHandle, sourceHandle: 'image' });
 const tag = (id, portIndex, kind = 'image') => ({ edgeId: id, sourceNodeId: id, portIndex, label: `${kind}${portIndex + 1}` });
 
+test('Generated image connections resolve individual slots and preserve legacy batch outputs', () => {
+  const source = { id: 'batch', type: 'imageGenNode', data: { status: 'completed', generatedImages: ['a.png', 'b.png', 'c.png'] } };
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_0'), ['a.png']);
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_2'), ['c.png']);
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image'), ['a.png', 'b.png', 'c.png']);
+  assert.equal(media.getSourceMediaType(source, 'image_2'), 'image');
+  assert.equal(media.getActiveMediaSourceHandle(source, 'image', [source], []), 'image_0');
+  assert.equal(media.getSourceMediaType(imageSource('input'), 'image_2'), null);
+
+  // History navigation and reload use the same saved handle, never another slot.
+  source.data.generatedImages = ['older-a.png', 'older-b.png', 'older-c.png'];
+  const edges = [0, 2].map(index => ({ id: `edge-${index}`, source: 'batch', sourceHandle: `image_${index}`,
+    target: 'video', targetHandle: 'reference_images' }));
+  const saved = JSON.parse(JSON.stringify({ nodes: [source], edges }));
+  assert.deepEqual(references.getReferenceVideoInputs('video', saved.nodes, saved.edges).images.map(input => input.url),
+    ['older-a.png', 'older-c.png']);
+  source.data.generatedImages = ['only-one.png'];
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_2'), []);
+});
+
+test('Pending and failed image slots never resolve a different successful image', () => {
+  const source = { id: 'batch', type: 'imageGenNode', data: { status: 'processing',
+    generationSlots: [null, 'second.png', null], generatedImages: ['second.png'] } };
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_0'), []);
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_1'), ['second.png']);
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_2'), []);
+  source.data.status = 'error';
+  source.data.generationSlots[2] = 'third.png';
+  source.data.generatedImages.push('third.png');
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_0'), []);
+  assert.deepEqual(media.getNodeMediaUrls(source, 'image', 'image_2'), ['third.png']);
+});
+
 test('Image reorder preserves sparse slots, edge identity, source nodes and semantic prompt tags', () => {
   const sourceNodes = ['a', 'b', 'c'].map(imageSource);
   const nodes = [...sourceNodes, { id: 'target', type: 'imageGenNode', data: {

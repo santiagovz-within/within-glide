@@ -316,7 +316,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
   const inputItems = incomingEdges.map((edge) => {
     const sourceNode = storeNodes.find((n) => n.id === edge.source);
     const url = sourceNode && inputMediaType
-      ? getNodeMediaUrls(sourceNode, inputMediaType)[0]
+      ? getNodeMediaUrls(sourceNode, inputMediaType, edge.sourceHandle)[0]
       : undefined;
     return { url, sourceNodeId: edge.source };
   });

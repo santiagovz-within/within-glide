@@ -1,5 +1,6 @@
 import { getBezierPath, useReactFlow, type EdgeProps } from '@xyflow/react';
 import { useRef, useState } from 'react';
+import { getImageOutputIndex } from '../mediaOutputs';
 import { PORT_TYPE_MAP, PORT_COLORS } from '../nodes/TypedHandle';
 
 export function CustomEdge({
@@ -29,7 +30,8 @@ export function CustomEdge({
 
   const sourceNode = getNode(source);
   const srcKey = `${sourceNode?.type}:${sourceHandleId ?? ''}:source`;
-  const portType = PORT_TYPE_MAP[srcKey] ?? 'text';
+  const portType = sourceNode?.type === 'imageGenNode' && getImageOutputIndex(sourceHandleId) !== null
+    ? 'image' : PORT_TYPE_MAP[srcKey] ?? 'text';
   const color = PORT_COLORS[portType];
 
   const isActive = hovered || selected;
