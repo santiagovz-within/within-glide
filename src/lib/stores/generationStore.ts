@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { NodeData, NodeType } from '@/types';
+import type { NodeData, NodeType, VideoGenerationMetadata } from '@/types';
 
 export type BackgroundGenerationKind =
   | 'image-generation'
@@ -15,6 +15,7 @@ export interface BackgroundGenerationRequest {
   slotIndex: number;
   status: 'pending' | 'completed' | 'failed';
   mediaUrl?: string;
+  videoMetadata?: VideoGenerationMetadata;
   errorMessage?: string;
   pollErrorCount?: number;
   lastVerifiedAt?: number;
@@ -39,6 +40,7 @@ export interface BackgroundGenerationJob {
   submissionsComplete: boolean;
   imageHistory: string[][];
   videoHistory: string[];
+  videoHistoryMetadata?: Array<VideoGenerationMetadata | null>;
   finalData?: Partial<NodeData>;
 }
 

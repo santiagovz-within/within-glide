@@ -200,12 +200,29 @@ export interface ImageGenNodeData extends Record<string, unknown> {
   label?: string;
 }
 
+export interface VideoGenerationMetadata {
+  generationId: string;
+  endpoint?: string;
+  resolution?: string;
+  seed?: number;
+  createdAt?: string;
+  isDraft?: boolean;
+  draftId?: string;
+  draftExpiresAt?: string;
+  sourceDraftGenerationId?: string;
+  /** Frozen settings for this result, independent of the node's current inputs. */
+  aspectRatio?: string;
+  duration?: number;
+  referenceVideoUrls?: string[];
+}
+
 export interface VideoGenNodeData extends Record<string, unknown> {
   model: string;
   aspectRatio: string;
   imageAspectRatio?: string;
   duration?: number;
   generateAudio?: boolean;
+  draftMode?: boolean;
   videoResolution?: '360p' | '480p' | '720p' | '1080p' | '4k' | '480P' | '768P' | '1080P' | '2K';
   /** @deprecated Read only as a fallback for videos saved before videoResolution was introduced. */
   seedanceResolution?: '480p' | '720p' | '1080p' | '4k';
@@ -216,6 +233,8 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   endFrameUrl?: string;
   videoUrl?: string;
   videoHistory?: string[];
+  /** Parallel to videoHistory; null entries preserve compatibility with older flows. */
+  videoHistoryMetadata?: Array<VideoGenerationMetadata | null>;
   status: NodeStatus;
   errorMessage?: string;
   /** FAL request that produced `errorMessage`, so the failure can be traced in FAL. */

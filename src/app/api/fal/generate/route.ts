@@ -9,6 +9,7 @@ import { describeFalError } from '@/lib/falErrors';
 import { getCustomImageSize, type FalPricingRule } from '@/lib/falPricing';
 import { getGptImage25Size } from '@/lib/gptImage25';
 import type { GenerateImageRequest } from '@/types';
+import { validateSeedanceDraft } from '@/lib/seedanceDraft';
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -22,6 +23,7 @@ interface GenerateRequestBody extends GenerateImageRequest, GenerationAttemptInp
   /** Compatibility with canvas nodes saved before videoResolution was introduced. */
   seedanceResolution?: string;
   generateAudio?: boolean;
+  draft?: boolean;
   startFrameUrl?: string;
   endFrameUrl?: string;
   slotIndex?: number;
@@ -54,6 +56,12 @@ export async function POST(request: NextRequest) {
 
     const modelConfig = FAL_MODELS[model as keyof typeof FAL_MODELS];
     if (!modelConfig) return NextResponse.json({ error: 'Unknown model' }, { status: 400 });
+    let draft: boolean;
+    try {
+      draft = validateSeedanceDraft(model, body.draft);
+    } catch (error) {
+      return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+    }
 
     const falHeaders = await getFalStorageHeaders({
       userId: user.id,
@@ -83,6 +91,7 @@ export async function POST(request: NextRequest) {
           aspectRatio: input.aspect_ratio, resolution: input.resolution,
           duration: input.duration, generateAudio: input.generate_audio ?? input.audio,
           referenceVideoUrls: body.referenceVideoUrls ?? [],
+          ...(draft ? { draft: true, input } : {}),
         },
         reference_image_urls: referenceImageUrls,
         media_type: 'video', media_url: '', status: 'processing', fal_request_id: request_id,
@@ -109,7 +118,7 @@ export async function POST(request: NextRequest) {
       const requestedVideoResolution = body.videoResolution
         ?? body.seedanceResolution
         ?? defaultVideoResolution;
-      const videoResolution = isSeedanceMini && requestedVideoResolution !== '720p'
+      const videoResolution = draft ? '480p' : isSeedanceMini && requestedVideoResolution !== '720p'
         ? '720p'
         : requestedVideoResolution;
       const requestedDuration = body.duration ?? 5;
@@ -159,7 +168,7 @@ export async function POST(request: NextRequest) {
         : isMinimaxH3
           ? ['768P', '2K']
           : isSeedance25
-            ? ['720p', '1080p']
+            ? ['480p', '720p', '1080p']
             : isSeedanceMini
               ? ['720p']
             : isSeedance
@@ -229,6 +238,7 @@ export async function POST(request: NextRequest) {
           ...(endFrameUrl ? { end_image_url: endFrameUrl } : {}),
           generate_audio: generateAudio !== false,
           resolution: videoResolution,
+          ...(draft ? { draft: true } : {}),
         });
       } else if (isFlux3) {
         Object.assign(videoInput, {
@@ -274,7 +284,11 @@ export async function POST(request: NextRequest) {
           node_id: nodeId,
           model,
           prompt,
-          parameters: { generationRunId: body.generationRunId, aspectRatio, resolution: videoResolution, duration, endpoint },
+          parameters: {
+            generationRunId: body.generationRunId, aspectRatio: draft ? videoInput.aspect_ratio ?? 'auto' : aspectRatio,
+            resolution: videoResolution, duration, endpoint,
+            ...(draft ? { draft: true, input: videoInput, generateAudio: generateAudio !== false } : {}),
+          },
           reference_image_urls: referenceImageUrls,
           media_type: 'video',
           media_url: '',

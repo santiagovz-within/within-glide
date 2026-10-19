@@ -28,6 +28,7 @@ import { AspectRatioGlyph } from './AspectRatioGlyph';
 import FalCostEstimate from './FalCostEstimate';
 import { ExpensiveGenerationDialog } from './ExpensiveGenerationDialog';
 import { useFalCostEstimateValue } from '@/lib/useFalCostEstimate';
+import { SeedanceDraftActions, SeedanceDraftToggle } from './SeedanceDraftControls';
 
 type VideoResolution = NonNullable<VideoGenNodeData['videoResolution']>;
 
@@ -79,6 +80,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const isKling     = data.model === 'kling-3-pro';
   const isSeedanceFull = data.model === 'seedance-2';
   const isSeedance25 = data.model === 'seedance-2-5';
+  const draftMode = isSeedance25 && data.draftMode === true;
   const isSeedanceMini = data.model === 'seedance-2-mini';
   const isSeedance  = isSeedanceFull || isSeedance25 || isSeedanceMini;
   const isFlux3     = data.model === 'flux-3';
@@ -88,7 +90,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const modelConfig = VIDEO_MODELS.find(option => option.id === data.model) ?? VIDEO_MODELS[0];
 
   const aspectRatios = modelConfig.supportedAspectRatios;
-  const lockedResolution = LOCKED_RESOLUTIONS[data.model];
+  const lockedResolution = draftMode ? '480p' : LOCKED_RESOLUTIONS[data.model];
   const resolutionOptions = (lockedResolution
     ? [lockedResolution]
     : modelConfig.supportedResolutions) as VideoResolution[];
@@ -292,6 +294,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         endFrameUrl: data.endFrameUrl,
         generateAudio: data.generateAudio ?? true,
         videoResolution: selectedResolution,
+        draft: draftMode,
         sourceType: 'canvas',
         sourceId: currentFlow.id,
         nodeId: id,
@@ -342,7 +345,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       >
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
-          {isGenerating ? 'Generating…' : 'Generate'}
+          {isGenerating ? 'Generating…' : draftMode ? 'Generate draft' : 'Generate'}
           <FalCostEstimate input={costEstimateInput} />
         </span>
       </button>
@@ -356,6 +359,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       )}
 
       {hasFailure && <RegenerateGate onChangesApplied={acknowledgeFailure} />}
+      <SeedanceDraftActions key={data.videoHistoryMetadata?.[histIdx]?.generationId ?? 'legacy'}
+        data={data} nodeId={id} nodeType="videoGenNode" historyIndex={histIdx}
+        isGenerating={isGenerating} onSelectVersion={navigateHistory} />
 
       {displayVideoUrl && (
         <button
@@ -436,6 +442,8 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
       {/* Model selector */}
       <ModelSelect options={VIDEO_MODELS} value={data.model} onChange={handleModelChange} />
+      {isSeedance25 && <SeedanceDraftToggle enabled={draftMode} disabled={isGenerating}
+        onChange={draftMode => updateData({ draftMode })} />}
 
       {needsCostConfirmation && (
         <div className={cn(glassStyles.notice, glassStyles.noticeExpensive, 'nodrag')}>

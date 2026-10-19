@@ -6,6 +6,7 @@ import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
 import { describeFalError, isTerminalFalError } from '@/lib/falErrors';
 import { failGeneration } from '@/lib/generationFailures';
 import { expireUnverifiedGeneration, rememberActiveGeneration } from '@/lib/falRecovery';
+import { saveVideoResultParameters, videoGenerationMetadata } from '@/lib/seedanceDraft';
 import {
   fetchFalQueueResult,
   getFalBillingColumns,
@@ -67,6 +68,7 @@ export async function GET(
         status: 'completed',
         mediaUrls: [mediaUrl],
         generationId: existingGeneration.id,
+        ...(mediaType === 'video' ? { videoMetadata: videoGenerationMetadata(existingGeneration) } : {}),
       });
     }
     if (existingGeneration?.status === 'failed') {
@@ -183,11 +185,14 @@ export async function GET(
         });
       }
 
-      const falResult = result.data as { video?: { url: string } };
+      const falResult = result.data as { video?: { url: string }; draft_id?: string; seed?: number };
       const videoUrl = falResult.video?.url;
 
       if (!videoUrl) {
         return await failGeneration(supabase, user.id, requestId, 'FAL returned no video URL in the result.');
+      }
+      if (!existingGeneration) {
+        return NextResponse.json({ status: 'failed', error: 'Queued generation record was not found.', requestId });
       }
 
       const videoRes = await fetch(videoUrl);
@@ -204,6 +209,9 @@ export async function GET(
       const gcsRef = await uploadMediaToGCS(videoBuffer, objectPath, 'video/mp4');
       const signedUrl = await getSignedReadUrl(objectPath);
       const billing = await getFalBillingColumns(endpoint, result.billableUnits);
+      const completedParameters = saveVideoResultParameters(
+        mergeFalBillingParameters(storedParameters, billing), falResult, existingGeneration.created_at,
+      );
 
       const { error: updateError } = await supabase
         .from('generations')
@@ -211,9 +219,11 @@ export async function GET(
           media_url: gcsRef,
           status: 'completed',
           fal_request_id: requestId,
-          parameters: mergeFalBillingParameters(storedParameters, billing),
+          parameters: completedParameters,
         })
         .eq('fal_request_id', requestId)
+        // A second poll must not overwrite a completion reservation on a finished draft.
+        .eq('status', 'processing')
         .eq('user_id', user.id);
 
       if (updateError) {
@@ -240,6 +250,7 @@ export async function GET(
         status: 'completed',
         mediaUrls: [signedUrl],
         generationId: gen?.id,
+        videoMetadata: videoGenerationMetadata({ ...existingGeneration, parameters: completedParameters }),
       });
     }
 

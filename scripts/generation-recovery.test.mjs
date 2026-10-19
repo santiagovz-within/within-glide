@@ -11,7 +11,8 @@ function load(path, dependencies = {}) {
   });
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(
-    name => name in dependencies ? dependencies[name] : require(name), loadedModule, loadedModule.exports,
+    name => name in dependencies ? dependencies[name]
+      : name === '@/lib/seedanceDraft' ? load('src/lib/seedanceDraft.ts') : require(name), loadedModule, loadedModule.exports,
   );
   return loadedModule.exports;
 }
@@ -811,4 +812,63 @@ test('expired recovery clears the tracker and node and stays cleared after recov
   await h.hydrate();
   await h.recoverBackgroundGenerations();
   assert.deepEqual(h.state().jobs, {});
+});
+
+for (const nodeType of ['videoGenNode', 'referenceVideoNode']) {
+  for (const path of ['poll', 'recover']) {
+    test(`${nodeType}: ${path} persists draft metadata alongside legacy video history`, async () => {
+      const oldDraft = { generationId: 'old-draft', isDraft: true, draftId: 'old-provider-draft' };
+      const videoMetadata = { generationId: 'new-draft', isDraft: true, draftId: 'provider-draft',
+        draftExpiresAt: new Date(Date.now() + 86400_000).toISOString(), seed: 9,
+        resolution: '480p', duration: 10, referenceVideoUrls: ['original-reference.mp4'] };
+      const h = harness(job({ nodeType, videoHistory: ['legacy.mp4', 'old-draft.mp4'], videoHistoryMetadata: [null, oldDraft] }));
+      const saves = [];
+      globalThis.fetch = async (url, options) => {
+        if (options?.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({ ok: true }); }
+        if (url === '/api/generations/pending') return json({ generations: [recovered({ nodeType,
+          status: 'completed', mediaUrl: 'draft.mp4', videoMetadata })] });
+        return json({ status: 'completed', mediaUrls: ['draft.mp4'], videoMetadata });
+      };
+      if (path === 'poll') await h.progressBackgroundGenerations();
+      else await h.recoverBackgroundGenerations();
+      assert.deepEqual(saves[0].data.videoHistory, ['legacy.mp4', 'old-draft.mp4', 'draft.mp4']);
+      assert.deepEqual(saves[0].data.videoHistoryMetadata, [null, oldDraft, videoMetadata]);
+      assert.equal(saves[0].data.videoUrl, 'draft.mp4');
+    });
+  }
+}
+
+test('failed HD completion preserves the draft and history, and successful completion appends a linked final', async () => {
+  const draftMetadata = { generationId: 'draft-gen', isDraft: true, draftId: 'provider-draft' };
+  for (const failed of [true, false]) {
+    const h = harness(job({ videoHistory: ['draft.mp4'], videoHistoryMetadata: [draftMetadata] }));
+    const saves = [];
+    globalThis.fetch = async (_url, options) => {
+      if (options?.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({}); }
+      return json(failed ? { status: 'failed', error: 'Completion rejected' }
+        : { status: 'completed', mediaUrls: ['final.mp4'], videoMetadata: {
+          generationId: 'final-gen', sourceDraftGenerationId: 'draft-gen', resolution: '1080p',
+        } });
+    };
+    await h.progressBackgroundGenerations();
+    if (failed) {
+      assert.equal('videoUrl' in saves[0].data, false);
+      assert.equal('videoHistory' in saves[0].data, false);
+      assert.equal('videoHistoryMetadata' in saves[0].data, false);
+      assert.equal(saves[0].unset.includes('videoHistoryMetadata'), false);
+    } else {
+      assert.deepEqual(saves[0].data.videoHistory, ['draft.mp4', 'final.mp4']);
+      assert.deepEqual(saves[0].data.videoHistoryMetadata[0], draftMetadata);
+      assert.equal(saves[0].data.videoHistoryMetadata[1].sourceDraftGenerationId, 'draft-gen');
+    }
+  }
+});
+
+test('stale autosave preserves draft metadata together with the winning video result', () => {
+  const current = { generationRunId: 'new', status: 'completed', videoUrl: 'draft.mp4',
+    videoHistory: ['draft.mp4'], videoHistoryMetadata: [{ generationId: 'draft-gen', draftId: 'provider-draft' }] };
+  const merged = reconciliation.mergeGenerationData({ generationRunId: 'old', status: 'processing', prompt: 'Edited prompt' }, current, {});
+  assert.deepEqual(merged.videoHistoryMetadata, current.videoHistoryMetadata);
+  assert.deepEqual(merged.videoHistory, current.videoHistory);
+  assert.equal(merged.prompt, 'Edited prompt');
 });

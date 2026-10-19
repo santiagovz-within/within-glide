@@ -1,4 +1,5 @@
 import type { FalEndpointPrice, FalPricingRule } from '@/lib/falPricing';
+import { validateSeedanceDraft, SEEDANCE_DRAFT_COMPLETE_ENDPOINT } from '@/lib/seedanceDraft';
 
 // Source schemas: https://fal.ai/models/{endpoint}/api (including OpenAPI bounds).
 // Pricing: https://fal.ai/models/{endpoint} (live base rates come from the pricing API).
@@ -133,6 +134,10 @@ export function getReferenceVideoModel(model: string) {
 /** Never use these fallback rates to persist actual completed-job billing. */
 export function getReferenceVideoEstimatePrice(endpoint: string, livePrice?: FalEndpointPrice): FalEndpointPrice | undefined {
   if (livePrice && livePrice.currency === 'USD' && Number.isFinite(livePrice.unitPrice) && livePrice.unitPrice > 0) return livePrice;
+  if ([SEEDANCE_DRAFT_COMPLETE_ENDPOINT, 'bytedance/seedance-2.5/text-to-video', 'bytedance/seedance-2.5/image-to-video'].includes(endpoint)) {
+    return { endpointId: endpoint, unitPrice: endpoint === SEEDANCE_DRAFT_COMPLETE_ENDPOINT ? 0.0234 : 0.0214,
+      currency: 'USD', unit: '1000 tokens' };
+  }
   const model = REFERENCE_VIDEO_MODELS.find(model => model.endpoint === endpoint);
   return model ? {
     endpointId: endpoint, unitPrice: model.estimatedUnitPrice, currency: 'USD',
@@ -152,10 +157,11 @@ export function referenceDurationOptions(model: ReferenceVideoModel): Array<numb
 export function buildReferenceVideoInput(body: Record<string, unknown>) {
   const model = getReferenceVideoModel(String(body.model));
   if (!model) throw new Error('Unknown reference-to-video model.');
+  const draft = validateSeedanceDraft(model.id, body.draft);
   const prompt = body.prompt;
   if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('Enter a prompt.');
   const aspectRatio = body.aspectRatio ?? model.defaultAspectRatio;
-  const resolution = body.videoResolution ?? model.defaultResolution;
+  const resolution = draft ? '480p' : body.videoResolution ?? model.defaultResolution;
   const duration = body.referenceDuration ?? model.defaultDuration;
   if (typeof aspectRatio !== 'string' || !model.aspectRatios.includes(aspectRatio)) {
     throw new Error(`${model.name} does not support that aspect ratio.`);
@@ -184,6 +190,7 @@ export function buildReferenceVideoInput(body: Record<string, unknown>) {
     throw new Error(`${model.name} accepts up to ${model.maxReferences} references in total.`);
   }
   const input: Record<string, unknown> = {
+    ...(draft ? { draft: true } : {}),
     prompt: compileReferenceVideoPrompt(prompt, model.id, imageUrls, videoUrls),
     aspect_ratio: aspectRatio,
     resolution,

@@ -6,11 +6,13 @@ import type {
   NodeData,
   NodeType,
   VideoGenNodeData,
+  VideoGenerationMetadata,
 } from '@/types';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { playSuccessSound } from '@/lib/utils/sound';
 import { generationIdentity, isTerminalNode } from '@/lib/generationReconciliation';
 import { preserveImageBatch } from '@/lib/imageGenerationResults';
+import { appendVideoResult } from '@/lib/seedanceDraft';
 import {
   generationJobId,
   type BackgroundGenerationJob,
@@ -28,6 +30,7 @@ interface ImageGenerationResponse {
 
 interface VideoGenerationResponse {
   mediaUrls?: string[];
+  videoMetadata?: VideoGenerationMetadata;
   requestId?: string;
   endpoint?: string;
   error?: string;
@@ -48,6 +51,7 @@ interface RecoveredGeneration {
   runId?: string;
   status?: string;
   mediaUrl?: string;
+  videoMetadata?: VideoGenerationMetadata;
   errorMessage?: string;
 }
 
@@ -126,6 +130,7 @@ function initialJob(input: {
   previousIdentity?: string;
   imageHistory?: string[][];
   videoHistory?: string[];
+  videoHistoryMetadata?: Array<VideoGenerationMetadata | null>;
 }): BackgroundGenerationJob {
   return {
     ...input,
@@ -207,7 +212,7 @@ export function syncJobToCurrentFlow(job: BackgroundGenerationJob | undefined) {
 // counterpart in FAL, so their IDs must not be shown as traceable request IDs.
 function falRequestId(request: BackgroundGenerationRequest): string | undefined {
   const { requestId } = request;
-  if (!requestId || requestId.startsWith('submission-')) return undefined;
+  if (!requestId || requestId.startsWith('submission-') || requestId.startsWith('cached-')) return undefined;
   if (requestId === 'orphaned-submission' || requestId === 'incomplete-recovery') return undefined;
   return requestId;
 }
@@ -290,7 +295,9 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
       ?? job.videoHistory;
     return {
       videoUrl: completedMedia[0],
-      videoHistory: [...history, completedMedia[0]],
+      ...appendVideoResult(history,
+        (currentData as VideoGenNodeData | undefined)?.videoHistoryMetadata ?? job.videoHistoryMetadata,
+        completedMedia[0], job.requests.find(request => request.status === 'completed')?.videoMetadata),
       status: 'completed',
       errorMessage: undefined,
       errorRequestId: undefined,
@@ -461,6 +468,7 @@ async function pollRequest(jobId: string, request: BackgroundGenerationRequest) 
     const result = await readJsonResponse<{
       status: string;
       mediaUrls?: string[];
+      videoMetadata?: VideoGenerationMetadata;
       error?: string;
       detail?: string;
     }>(response);
@@ -469,6 +477,7 @@ async function pollRequest(jobId: string, request: BackgroundGenerationRequest) 
       useGenerationStore.getState().patchRequest(jobId, request.requestId, {
         status: 'completed',
         mediaUrl: result.mediaUrls[0],
+        videoMetadata: result.videoMetadata,
       });
       markSlotCompleted(jobId, request.slotIndex, result.mediaUrls[0]);
     } else if (result.status === 'failed') {
@@ -617,6 +626,7 @@ export async function recoverBackgroundGenerations() {
             slotCount: recoveredSlotCount,
             imageHistory: imageData.generationHistory ?? [],
             videoHistory: videoData.videoHistory ?? [],
+            videoHistoryMetadata: videoData.videoHistoryMetadata,
           }),
           phase: 'checking',
           runId: first.runId,
@@ -644,6 +654,7 @@ export async function recoverBackgroundGenerations() {
           slotIndex: generation.slotIndex ?? index,
           status,
           mediaUrl: generation.mediaUrl,
+          videoMetadata: generation.videoMetadata,
           errorMessage: generation.errorMessage,
         });
         if (status === 'completed') markSlotCompleted(jobId, generation.slotIndex ?? index, generation.mediaUrl!);
@@ -763,7 +774,10 @@ export async function startTrackedVideoGeneration(input: {
   data: VideoGenNodeData;
   endpoint: string;
   payload: Record<string, unknown>;
+  submissionUrl?: string;
 }) {
+  // Synchronous guard also covers rapid double clicks before React re-renders.
+  if (useGenerationStore.getState().jobs[generationJobId(input.flowId, input.nodeId)]) return;
   const job = initialJob({
     flowId: input.flowId,
     flowTitle: input.flowTitle,
@@ -772,6 +786,7 @@ export async function startTrackedVideoGeneration(input: {
     kind: 'video-generation',
     slotCount: 1,
     videoHistory: input.data.videoHistory ?? [],
+    videoHistoryMetadata: input.data.videoHistoryMetadata,
     previousIdentity: generationIdentity(input.data),
   });
   useGenerationStore.getState().startJob(job);
@@ -781,7 +796,7 @@ export async function startTrackedVideoGeneration(input: {
   syncJobToCurrentFlow(job);
 
   try {
-    const response = await fetch('/api/fal/generate', {
+    const response = await fetch(input.submissionUrl ?? '/api/fal/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...input.payload, ...submissionMetadata(job) }),
@@ -792,6 +807,11 @@ export async function startTrackedVideoGeneration(input: {
       throw new Error(result.details ?? result.error ?? `Server error ${response.status}`);
     }
     if (result.mediaUrls?.[0]) {
+      useGenerationStore.getState().addRequest(job.id, {
+        requestId: result.requestId ?? `cached-${result.videoMetadata?.generationId ?? job.runId}`,
+        endpoint: input.endpoint, mediaType: 'video', slotIndex: 0, status: 'completed',
+        mediaUrl: result.mediaUrls[0], videoMetadata: result.videoMetadata,
+      });
       markSlotCompleted(job.id, 0, result.mediaUrls[0]);
     } else if (result.requestId) {
       useGenerationStore.getState().addRequest(job.id, {

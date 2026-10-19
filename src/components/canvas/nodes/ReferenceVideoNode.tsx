@@ -27,6 +27,7 @@ import { GenerationPreview } from './GenerationPreview';
 import FalCostEstimate from './FalCostEstimate';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
 import glassStyles from './ImageGenerationGlass.module.css';
+import { SeedanceDraftActions, SeedanceDraftToggle } from './SeedanceDraftControls';
 
 export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: ReferenceVideoNodeData }) {
   const currentFlow = useFlowStore(state => state.currentFlow);
@@ -36,6 +37,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const activeJobId = currentFlow ? generationJobId(currentFlow.id, id) : '';
   const isGenerating = useGenerationStore(state => !!state.jobs[activeJobId]);
   const config = getReferenceVideoModel(data.model) ?? REFERENCE_VIDEO_MODELS[0];
+  const draftMode = config.id === 'seedance-2-5' && data.draftMode === true;
   const references = getReferenceVideoInputs(id, nodes, edges);
   const taggable = getReferenceVideoTaggableInputs(id, nodes, edges);
   const reconciled = data.promptConnected ? null : reconcileMediaPromptTags(data.prompt ?? '', data.promptTags ?? [], taggable);
@@ -46,7 +48,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const duration = durationOptions.includes(data.referenceDuration ?? config.defaultDuration)
     ? data.referenceDuration ?? config.defaultDuration : config.defaultDuration;
   const aspectRatio = config.aspectRatios.includes(data.aspectRatio) ? data.aspectRatio : config.defaultAspectRatio;
-  const resolution = data.videoResolution && config.resolutions.includes(data.videoResolution)
+  const resolution = draftMode ? '480p' : data.videoResolution && config.resolutions.includes(data.videoResolution)
     ? data.videoResolution : config.defaultResolution;
   const pricesReferenceImages = config.pricing.kind === 'video-reference-tokens';
   const pricesReferenceVideos = pricesReferenceImages || config.pricing.kind === 'seedance-reference';
@@ -111,6 +113,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
     return {
       model: config.id, prompt: compileMediaPromptTags(prompt, promptTags, taggable), generationMode: 'reference-to-video',
       aspectRatio, videoResolution: resolution, referenceDuration: duration,
+      draft: draftMode,
       generateAudio: data.generateAudio ?? true,
       referenceImageUrls: references.images.map(reference => reference.url),
       referenceVideoUrls: references.videos.map(reference => reference.url),
@@ -155,7 +158,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         className={cn(glassStyles.glassSurface, glassStyles.button, glassStyles.generateButton, 'nodrag disabled:opacity-40')}>
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
-          {isGenerating ? 'Generating…' : 'Generate'}
+          {isGenerating ? 'Generating…' : draftMode ? 'Generate draft' : 'Generate'}
           <FalCostEstimate input={costEstimateInput} unavailableText="Estimate unavailable"
             description={config.id === 'minimax-h3-max'
               ? 'Estimated USD cost including the shared reference allowance. Video references use Fal’s 24 fps, 16:9 examples, capped at output duration; other frame rates and shapes may differ.'
@@ -163,6 +166,9 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         </span>
       </button>
       {hasFailure && <RegenerateGate onChangesApplied={() => updateData({ status: 'idle', errorMessage: undefined, errorRequestId: undefined })} />}
+      <SeedanceDraftActions key={data.videoHistoryMetadata?.[historyIndex]?.generationId ?? 'legacy'}
+        data={data} nodeId={id} nodeType="referenceVideoNode" historyIndex={historyIndex}
+        isGenerating={isGenerating} onSelectVersion={navigateHistory} />
       {displayVideoUrl && (
         <button onClick={() => downloadFromUrl(displayVideoUrl)}
           className={cn(glassStyles.glassSurface, glassStyles.button, glassStyles.downloadButton, 'nodrag')}>
@@ -198,6 +204,8 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
           onChange={({ prompt, tags }) => updateData({ prompt, promptTags: tags })} />
       )}
       <ModelSelect options={REFERENCE_VIDEO_MODELS} value={config.id} onChange={changeModel} />
+      {config.id === 'seedance-2-5' && <SeedanceDraftToggle enabled={draftMode} disabled={isGenerating}
+        onChange={draftMode => updateData({ draftMode })} />}
       {config.audioParam && (
         <div className={glassStyles.rowBetween}>
           <span className={glassStyles.microLabel}>Generate Audio</span>
@@ -216,7 +224,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         <NodeSelect label="Seconds to generate" options={durationOptions.map(value => value === 'auto' ? 'Auto' : `${value}s`)}
           value={duration === 'auto' ? 'Auto' : `${duration}s`} leadingIcon={<Clock3 size={10} />}
           onChange={value => updateData({ referenceDuration: value === 'Auto' ? 'auto' : Number.parseInt(value, 10) })} />
-        <NodeSelect label="Resolution" options={config.resolutions} value={resolution}
+        <NodeSelect label="Resolution" options={draftMode ? ['480p'] : config.resolutions} value={resolution} locked={draftMode}
           onChange={value => updateData({ videoResolution: value as ReferenceVideoNodeData['videoResolution'] })} />
       </div>
       <p className={cn(glassStyles.microLabel, 'nodrag')} style={{ textTransform: 'none' }}>Type @ to choose a connected image or video. References are included automatically.</p>

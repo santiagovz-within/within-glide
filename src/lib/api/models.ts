@@ -176,7 +176,7 @@ export const FAL_MODELS = {
     imageToVideoEndpoint: 'bytedance/seedance-2.5/image-to-video',
     // Fal bills Seedance per 1000 video tokens ($0.0214 at 480p/720p, $0.0234 at
     // 1080p). The pricing API only exposes the base rate, so scale 1080p here.
-    pricing: { kind: 'video-tokens', fps: 24, tokensPerUnit: 1000, resolutionRateMultipliers: { '720p': 1, '1080p': 0.0234 / 0.0214 } },
+    pricing: { kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000, resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 0.0234 / 0.0214 } },
     type: 'video' as const,
   },
   'seedance-2-mini': {
@@ -246,6 +246,11 @@ export const FAL_MODELS = {
 
 /** Fal endpoints used by nodes that do not expose a selectable model. */
 export const FAL_NODE_ENDPOINTS = {
+  seedanceDraftComplete: {
+    endpoint: 'bytedance/seedance-2.5/draft/complete',
+    // This endpoint's own rate is already for 1080p. Reference input seconds still apply.
+    pricing: { kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000, resolutionRateMultipliers: { '1080p': 1 } },
+  },
   imageOutpaint: {
     endpoint: 'fal-ai/flux-2-pro/outpaint',
     pricing: { kind: 'flux-outpaint' },
