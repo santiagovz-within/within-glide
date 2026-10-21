@@ -60,7 +60,7 @@ export function UserStatsCards({ revision }: { revision: number }) {
             <Activity size={16} style={{ color: 'var(--color-accent)' }} /> Average daily active users
           </div>
           <p className="text-3xl font-semibold mt-4 mb-2" style={valueStyle}>
-            {stats ? average.format(stats.averageDailyActiveUsers) : pendingValue}
+            {stats ? count.format(Math.ceil(stats.averageDailyActiveUsers)) : pendingValue}
           </p>
           <p className="text-xs leading-relaxed" style={mutedStyle}>Unique users requesting images or videos<br />Last 30 complete days · UTC</p>
         </article>
