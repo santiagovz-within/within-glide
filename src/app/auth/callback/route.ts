@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
-import { notifyAdminsOfAccessRequest, safeNextPath } from '@/lib/access-requests';
+import { getAppUrl, notifyAdminsOfAccessRequest, safeNextPath } from '@/lib/access-requests';
 
 const ALLOWED_DOMAIN = 'within.co';
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams, origin: requestOrigin } = new URL(request.url);
+  // A standalone server can see its internal listen address behind Cloud Run.
+  // Use the configured public origin for browser redirects and email links.
+  const origin = getAppUrl(requestOrigin);
   const code = searchParams.get('code');
   // Optional same-origin path to land on after sign-in (e.g. an email approval link).
   const next = safeNextPath(searchParams.get('next'));
@@ -89,12 +92,12 @@ export async function GET(request: NextRequest) {
   // ── Route based on approval ────────────────────────────────────────────────
   const approved = existing?.approved ?? false;
   if (!approved) {
-    // Email every admin an approval link. Runs after the redirect is sent so
-    // it never slows down or breaks sign-in; de-duplicated per open request.
+    // Complete notification while request-based Cloud Run CPU is allocated.
+    // The helper handles delivery failures and de-duplicates open requests.
     const userId = user.id;
     const email  = user.email;
     const displayName = googleDisplayName ?? existing?.display_name ?? null;
-    after(() => notifyAdminsOfAccessRequest({ userId, email, displayName, requestOrigin: origin }));
+    await notifyAdminsOfAccessRequest({ userId, email, displayName, requestOrigin: origin });
 
     return NextResponse.redirect(`${origin}/pending`);
   }

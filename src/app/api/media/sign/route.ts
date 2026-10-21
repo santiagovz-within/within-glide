@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { signGcsRef, isGcsRef, getSignedReadUrl } from '@/lib/gcs';
 import { isSignedGcsUrl, isExpiredSignedUrl, extractGcsPathFromSignedUrl } from '@/lib/utils/mediaUtils';
-import { mediaDerivativePaths, type MediaKind } from '@/lib/mediaDerivativePaths';
+import { mediaDerivativePaths, MEDIA_VARIANT_WIDTHS, type MediaKind } from '@/lib/mediaDerivativePaths';
+import { hasMediaVariants } from '@/lib/mediaVariants';
 
 const MEDIA_BUCKET = process.env.GCS_BUCKET_NAME ?? 'within-glide';
 
@@ -127,7 +128,20 @@ export async function POST(request: NextRequest) {
             ? getSignedReadUrl(derivativePaths.posterPath)
             : Promise.resolve(undefined),
         ]);
-        return [key, { original, thumbnail, ...(poster ? { poster } : {}) }] as const;
+        // A missing/unavailable optional preview must not discard a valid
+        // original URL. Next.js can optimize the original during a retry.
+        let variants: Record<number, string> | undefined;
+        if (process.env.GCS_IMAGE_VARIANTS === '1') {
+          try {
+            if (await hasMediaVariants(derivativePaths)) {
+              variants = Object.fromEntries(await Promise.all(MEDIA_VARIANT_WIDTHS.map(async width =>
+                [width, await getSignedReadUrl(derivativePaths.variantPaths[width])])));
+            }
+          } catch {
+            // Use the existing original/thumbnail when optional variants fail.
+          }
+        }
+        return [key, { original, thumbnail, ...(poster ? { poster } : {}), ...(variants ? { variants } : {}) }] as const;
       } catch {
         return [key, { original: source }] as const;
       }

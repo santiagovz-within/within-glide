@@ -2,6 +2,7 @@ import 'server-only';
 
 import { fal } from '@fal-ai/client';
 import sharp from 'sharp';
+import { createMediaVariants, hasMediaVariants, withMediaProcessingSlot } from '@/lib/mediaVariants';
 import {
   getFreshSignedReadUrl,
   getGcsBucket,
@@ -21,14 +22,12 @@ const POSTER_EDGE = 2048;
 async function makeThumbnail(input: Buffer): Promise<Buffer> {
   const qualities = [72, 56, 40, 28, 18, 10];
   let output: Buffer | undefined;
+  const { data, info } = await sharp(input, { animated: false, limitInputPixels: 64_000_000 })
+    .rotate().resize({ width: THUMBNAIL_EDGE, withoutEnlargement: true })
+    .raw().toBuffer({ resolveWithObject: true });
 
   for (const quality of qualities) {
-    output = await sharp(input, { animated: false })
-      .rotate()
-      .resize({
-        width: THUMBNAIL_EDGE,
-        withoutEnlargement: true,
-      })
+    output = await sharp(data, { raw: info })
       .webp({ quality, alphaQuality: Math.max(20, quality) })
       .toBuffer();
     if (output.byteLength <= THUMBNAIL_TARGET_BYTES) return output;
@@ -78,6 +77,14 @@ export async function ensureMediaDerivatives(
   contentType: string,
   sourceBuffer?: Buffer,
 ): Promise<MediaDerivativePaths | null> {
+  return withMediaProcessingSlot(objectPath, () => createDerivatives(objectPath, contentType, sourceBuffer));
+}
+
+async function createDerivatives(
+  objectPath: string,
+  contentType: string,
+  sourceBuffer?: Buffer,
+): Promise<MediaDerivativePaths | null> {
   if (!shouldCreateMediaDerivatives(objectPath, contentType)) return null;
 
   const kind: MediaKind = contentType.startsWith('video/') ? 'video' : 'image';
@@ -91,7 +98,9 @@ export async function ensureMediaDerivatives(
     posterFile ? posterFile.exists() : Promise.resolve([true]),
   ]);
   const posterExists = posterExistsResult[0];
-  if (thumbnailExists && posterExists) return paths;
+  const wantsVariants = process.env.GCS_IMAGE_VARIANTS === '1';
+  const variantsExist = !wantsVariants || await hasMediaVariants(paths);
+  if (thumbnailExists && posterExists && variantsExist) return paths;
 
   if (kind === 'image') {
     const input = sourceBuffer ?? await downloadObject(objectPath);
@@ -101,10 +110,14 @@ export async function ensureMediaDerivatives(
         cacheControl: MEDIA_CACHE_CONTROL,
       });
     }
+    if (wantsVariants && !variantsExist) await createMediaVariants(input, paths);
     return paths;
   }
 
-  const frame = await extractVideoFrame(objectPath);
+  // Existing posters can produce all preview sizes without another paid FAL call.
+  const frame = posterExists && paths.posterPath
+    ? await downloadObject(paths.posterPath)
+    : await extractVideoFrame(objectPath);
   const poster = posterExists ? null : await makePoster(frame);
   const thumbnail = thumbnailExists ? null : await makeThumbnail(frame);
   await Promise.all([
@@ -119,6 +132,7 @@ export async function ensureMediaDerivatives(
         })
       : Promise.resolve(),
   ]);
+  if (wantsVariants && !variantsExist) await createMediaVariants(frame, paths);
   return paths;
 }
 
@@ -158,5 +172,8 @@ export async function deleteMediaAndDerivatives(
     paths.posterPath
       ? getGcsBucket().file(paths.posterPath).delete({ ignoreNotFound: true })
       : Promise.resolve(),
+    ...Object.values(paths.variantPaths).map(path =>
+      getGcsBucket().file(path).delete({ ignoreNotFound: true })),
+    getGcsBucket().file(paths.variantManifestPath).delete({ ignoreNotFound: true }),
   ]);
 }

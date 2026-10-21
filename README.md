@@ -89,7 +89,7 @@ A companion Figma plugin can receive GIFs sent directly from the canvas. Users g
 | AI inference | FAL AI |
 | Image processing | Sharp (server), browser-image-compression (client) |
 | Video processing | FFmpeg (WASM) |
-| Deployment | Vercel |
+| Deployment | Google Cloud Run; old Vercel address redirects to Cloud Run |
 
 ---
 
@@ -108,7 +108,7 @@ A companion Figma plugin can receive GIFs sent directly from the canvas. Users g
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - A Supabase project
 - A Google Cloud Storage bucket with a service account key
 - A FAL AI API key
@@ -124,6 +124,8 @@ SUPABASE_SERVICE_ROLE_KEY=
 GCS_BUCKET_NAME=
 GCS_CREDENTIALS_JSON=      # full service account JSON, paste as a single line
 FAL_KEY=
+FAL_ADMIN_KEY=             # FAL balance/admin reporting
+GOOGLE_AI_API_KEY=         # Google AI features
 GMAIL_USER=                # optional — Google account that sends access-request emails
 GMAIL_APP_PASSWORD=        # app password for that account (not the normal password)
 NEXT_PUBLIC_APP_URL=       # optional — public URL used for links in emails
@@ -150,10 +152,14 @@ npm run setup-gcs-cors
 
 ## Deployment
 
-The app is deployed on **Vercel**. Push to `main` triggers a production deploy automatically.
+The Cloud Run deployment uses the existing **within-glide** Google Cloud project.
+See [Cloud Run deployment and rollback](docs/cloud-run.md) for configuration,
+secret handling, image processing, validation, and deployment commands.
 
-```bash
-git push origin main
-```
+**Production is https://within-glide.cloud.run.** The old
+`https://within-glide.vercel.app` address redirects there at Vercel's CDN,
+preserving paths and query parameters. The previous Vercel deployment is retained
+for rollback. A push to `main` still triggers a Vercel deployment, but the
+project-level redirect stays in effect. Cloud Run releases are deployed separately.
 
 Repository: [github.com/santiagovz-within/within-glide](https://github.com/santiagovz-within/within-glide)

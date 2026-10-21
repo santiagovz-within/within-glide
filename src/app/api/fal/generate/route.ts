@@ -377,7 +377,7 @@ export async function POST(request: NextRequest) {
     const pendingRequests: Array<{ requestId: string; generationId?: string; endpoint: string }> = [];
 
     for (let i = 0; i < numImages; i++) {
-      console.log(`[fal/generate] queue image ${i + 1}/${numImages} input:`, JSON.stringify(baseInput));
+        console.log(`[fal/generate] queue image ${i + 1}/${numImages}`);
       await registerGenerationAttempt(supabase, user.id, body);
       const { request_id } = await fal.queue.submit(endpoint as string, {
         input: baseInput,

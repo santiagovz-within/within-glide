@@ -183,6 +183,7 @@ export interface ResolvedMediaAsset {
   original: string;
   thumbnail?: string;
   poster?: string;
+  variants?: Partial<Record<512 | 1024 | 2048, string>>;
 }
 
 interface PendingAsset {
@@ -235,7 +236,11 @@ export function resolveMediaAsset(
 
   const key = `${kind}:${source}`;
   const cached = resolvedAssetCache.get(key);
-  if (cached) return cached;
+  if (cached) return cached.then(asset => {
+    if (isFreshSignedUrl(asset.original)) return asset;
+    resolvedAssetCache.delete(key);
+    return resolveMediaAsset(source, kind);
+  });
 
   const promise = new Promise<ResolvedMediaAsset>((resolve) => {
     pendingAssets.push({ key, source, kind, resolve });
@@ -244,6 +249,7 @@ export function resolveMediaAsset(
       queueMicrotask(flushPendingAssets);
     }
   });
+  if (resolvedAssetCache.size >= 1_000) resolvedAssetCache.delete(resolvedAssetCache.keys().next().value!);
   resolvedAssetCache.set(key, promise);
   return promise;
 }

@@ -1,0 +1,20 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_SUPABASE_URL}
+      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_SUPABASE_ANON_KEY}
+      - --build-arg=NEXT_PUBLIC_APP_URL=${_APP_URL}
+      - --build-arg=APP_DEPLOYMENT_ID=${BUILD_ID}
+      - --tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/glide/glide:${BUILD_ID}
+      - .
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/glide/glide:${BUILD_ID}
+substitutions:
+  _REGION: us-central1
+  _SUPABASE_URL: ''
+  _SUPABASE_ANON_KEY: ''
+  _APP_URL: ''
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s

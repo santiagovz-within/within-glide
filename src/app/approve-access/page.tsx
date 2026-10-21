@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { after } from 'next/server';
 import { headers } from 'next/headers';
 import { CheckCircle2, ShieldAlert, LogIn, AlertTriangle, UserCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
@@ -48,7 +47,7 @@ async function resolveState(token: string | undefined): Promise<ViewState> {
     if (result.status === 'approved') {
       const requestOrigin = await getRequestOrigin();
       const { email, displayName } = result;
-      after(() => notifyUserApproved({ email, displayName, requestOrigin }));
+      await notifyUserApproved({ email, displayName, requestOrigin });
     }
     return { kind: 'result', result };
   } catch (err) {

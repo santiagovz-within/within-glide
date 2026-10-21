@@ -102,9 +102,9 @@ function tierUrl(
   const base = posterOnly ? asset.poster : asset.original;
   if (rank === 1) return asset.thumbnail;
   if (!base) return undefined;
-  if (rank === 2) return optimizerUrl(base, 512);
-  if (rank === 3) return optimizerUrl(base, 1024);
-  if (rank === 4) return optimizerUrl(base, 2048);
+  if (rank === 2) return asset.variants?.[512] ?? optimizerUrl(base, 512);
+  if (rank === 3) return asset.variants?.[1024] ?? optimizerUrl(base, 1024);
+  if (rank === 4) return asset.variants?.[2048] ?? optimizerUrl(base, 2048);
   if (rank === 5) return base;
   return undefined;
 }
@@ -257,12 +257,13 @@ function LodImage({
 
     const load = (release: () => void) => {
       const preload = new Image();
+      let candidateUrl = url;
       preload.decoding = 'async';
       preload.onload = () => {
         const candidate: LoadedCandidate = {
           version,
           rank: requestedRank,
-          url,
+          url: candidateUrl,
           ...(preload.naturalWidth && preload.naturalHeight
             ? { aspectRatio: preload.naturalWidth / preload.naturalHeight }
             : {}),
@@ -277,6 +278,12 @@ function LodImage({
         release();
       };
       preload.onerror = () => {
+        const original = posterOnly ? asset.poster : asset.original;
+        if (requestedRank > 1 && original && candidateUrl !== original) {
+          candidateUrl = original;
+          preload.src = original;
+          return;
+        }
         if (sourceVersion.current === version && requestedRank === 1) {
           setThumbnailFailed(true);
         }

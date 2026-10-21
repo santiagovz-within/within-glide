@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Unknown Google model: ${model}` }, { status: 400 });
     }
 
-    console.log('[google/generate] model:', googleModelId, '| refs:', referenceImageUrls.length, '| prompt:', prompt.slice(0, 80));
+    console.log('[google/generate] model:', googleModelId, '| refs:', referenceImageUrls.length);
 
     await registerGenerationAttempt(supabase, user.id, body);
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });

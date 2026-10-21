@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { notifyUserApproved, resolveAccessRequestsForUser } from '@/lib/access-requests';
 
@@ -54,7 +54,7 @@ export async function PATCH(
 
     if (wasApproved === false) {
       const { origin } = new URL(request.url);
-      after(async () => {
+      await (async () => {
         const [{ data: authUser }, { data: profile }] = await Promise.all([
           supabase.auth.admin.getUserById(id),
           supabase.from('profiles').select('display_name').eq('id', id).maybeSingle(),
@@ -62,7 +62,7 @@ export async function PATCH(
         const email = authUser.user?.email;
         if (!email) return;
         await notifyUserApproved({ email, displayName: profile?.display_name ?? null, requestOrigin: origin });
-      });
+      })();
     }
   }
 

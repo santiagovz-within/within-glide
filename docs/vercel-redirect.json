@@ -1,0 +1,20 @@
+{
+  "name": "Cloud Run primary URL",
+  "description": "Move the public Vercel hostname to Cloud Run, preserving paths and query strings. Keep other deployment hostnames available for rollback.",
+  "enabled": true,
+  "srcSyntax": "path-to-regexp",
+  "route": {
+    "src": "/:path*",
+    "dest": "https://within-glide.cloud.run/:path",
+    "status": 308,
+    "headers": {
+      "Cache-Control": "private, no-store, max-age=0"
+    },
+    "has": [
+      {
+        "type": "host",
+        "value": "^within-glide\\.vercel\\.app$"
+      }
+    ]
+  }
+}

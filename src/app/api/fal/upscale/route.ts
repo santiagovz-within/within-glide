@@ -40,7 +40,6 @@ export async function POST(request: NextRequest) {
     });
 
     console.log('[fal/upscale] endpoint:', modelConfig.endpoint, '| scaleParam:', scaleParam, '| scale:', scaleFactor);
-    console.log('[fal/upscale] input:', JSON.stringify(falInput));
 
     const result = await subscribeToFalWithBilling<Record<string, unknown>>(modelConfig.endpoint, {
       input: falInput,
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
       (d.output_image as { url: string } | undefined)?.url ??
       (d.upscaled_image as { url: string } | undefined)?.url;
 
-    console.log('[fal/upscale] response keys:', Object.keys(d), '| outputUrl:', outputUrl);
+    console.log('[fal/upscale] response keys:', Object.keys(d));
 
     if (!outputUrl) {
       console.error('[fal/upscale] no URL found in response:', JSON.stringify(d));

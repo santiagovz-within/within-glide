@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       sourceId,
     });
 
-    console.log('[fal/outpaint] input:', { imageUrl, expandTop, expandRight, expandBottom, expandLeft, resizeSourceTo });
+    console.log('[fal/outpaint] dimensions:', { expandTop, expandRight, expandBottom, expandLeft, resizeSourceTo });
 
     // Optionally resize the source image before outpainting (needed when target ratio exceeds 2560px)
     let falImageUrl = imageUrl;

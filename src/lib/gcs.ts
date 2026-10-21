@@ -4,8 +4,13 @@ import { isSignedGcsUrl, extractGcsPathFromSignedUrl } from '@/lib/utils/mediaUt
 // Server-only module — never import from client components.
 
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME ?? 'within-glide';
-const READ_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 days
+// IAM-managed signing keys are guaranteed for only 12 hours. A longer URL
+// expiration can otherwise appear valid in the client after its key rotates.
+const READ_TTL_MS = (process.env.GCS_CREDENTIALS_JSON ? 7 * 24 : 12) * 60 * 60 * 1000;
 const UPLOAD_TTL_MS = 15 * 60 * 1000;           // 15 minutes
+const SIGNING_WINDOW_MS = (process.env.GCS_CREDENTIALS_JSON ? 24 : 6) * 60 * 60 * 1000;
+const signedReads = new Map<string, Promise<string>>();
+let signingWindow = 0;
 
 /**
  * Objects and their signed responses remain private. The Vercel optimizer was
@@ -19,7 +24,12 @@ let _storage: Storage | null = null;
 function getStorage(): Storage {
   if (!_storage) {
     const raw = process.env.GCS_CREDENTIALS_JSON;
-    if (!raw) throw new Error('GCS_CREDENTIALS_JSON env var is not set');
+    // Cloud Run uses its attached service identity (including IAM signBlob).
+    // Existing Vercel/local environments can continue using their JSON key.
+    if (!raw) {
+      _storage = new Storage();
+      return _storage;
+    }
     const credentials = JSON.parse(raw);
     // GCS service-account JSON stores the private key with literal \n sequences
     // when set via environment variables; unescape them so the SDK can sign URLs.
@@ -62,23 +72,35 @@ export async function uploadToGCS(
 // ── Signed read URL ───────────────────────────────────────────────────────────
 
 /**
- * Returns a signed read URL for an object that is valid for 7 days.
+ * Returns a cached signed read URL: 6–12 hours with IAM signing, or 6–7 days
+ * when using an explicitly configured service-account key.
  * `objectPath` must NOT include the `gcs:` prefix.
  */
 export async function getSignedReadUrl(objectPath: string): Promise<string> {
-  // Pin the signing timestamp to a shared seven-day epoch. This means every
-  // user receives the same URL for an object during that epoch, allowing the
-  // Vercel optimizer cache to be shared instead of fragmented by request time.
-  const accessibleAtMs = Math.floor(Date.now() / READ_TTL_MS) * READ_TTL_MS;
-  const [url] = await getGcsBucket()
+  // Share signatures across requests and coalesce concurrent IAM signing calls.
+  // Fixed windows keep URLs reusable while leaving a useful validity period,
+  // including at the boundary. IAM URLs expire before managed-key rotation.
+  const accessibleAtMs = Math.floor(Date.now() / SIGNING_WINDOW_MS) * SIGNING_WINDOW_MS;
+  if (signingWindow !== accessibleAtMs) {
+    signedReads.clear();
+    signingWindow = accessibleAtMs;
+  }
+  const existing = signedReads.get(objectPath);
+  if (existing) return existing;
+  if (signedReads.size >= 5_000) signedReads.delete(signedReads.keys().next().value!);
+  const pending = getGcsBucket()
     .file(objectPath)
     .getSignedUrl({
       action: 'read',
       version: 'v4',
       accessibleAt: new Date(accessibleAtMs),
       expires: new Date(accessibleAtMs + READ_TTL_MS - 1000),
+    }).then(([url]) => url).catch((error) => {
+      if (signedReads.get(objectPath) === pending) signedReads.delete(objectPath);
+      throw error;
     });
-  return url;
+  signedReads.set(objectPath, pending);
+  return pending;
 }
 
 /** A rolling signed URL for short-lived server-to-server work. */
