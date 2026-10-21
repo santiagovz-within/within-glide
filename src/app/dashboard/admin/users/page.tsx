@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { UserStatsCards } from './UserStatsCards';
 import { Users, Plus, Trash2, Shield, ShieldOff, RefreshCw, Edit2, Check, X, AlertTriangle, UserCheck, UserX, Clock, FlaskConical, Mail, Send } from 'lucide-react';
 
 interface AdminUser {
@@ -150,6 +151,7 @@ function AccessRequestEmailsCard() {
 }
 
 export default function AdminUsersPage() {
+  const [statsRevision, setStatsRevision] = useState(0);
   const [users, setUsers]                   = useState<AdminUser[]>([]);
   const [loading, setLoading]               = useState(true);
   const [showCreate, setShowCreate]         = useState(false);
@@ -243,6 +245,7 @@ export default function AdminUsersPage() {
         setShowCreate(false);
       }
       await loadUsers();
+      setStatsRevision(value => value + 1);
     } else {
       setCreateError(d.error ?? 'Failed to create user');
     }
@@ -286,6 +289,7 @@ export default function AdminUsersPage() {
     });
 
     if (res.ok) {
+      setStatsRevision(value => value + 1);
       setUsers(users.map((u) =>
         u.id === userId && u.profile
           ? { ...u, profile: { ...u.profile, approved: !currentApproved } }
@@ -326,6 +330,7 @@ export default function AdminUsersPage() {
     const res = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE' });
     if (res.ok) {
       setUsers(users.filter((u) => u.id !== userId));
+      setStatsRevision(value => value + 1);
     }
   }
 
@@ -362,6 +367,8 @@ export default function AdminUsersPage() {
           New User
         </button>
       </div>
+
+      <UserStatsCards revision={statsRevision} />
 
       <AccessRequestEmailsCard />
 
