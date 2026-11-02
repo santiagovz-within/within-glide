@@ -4,6 +4,7 @@ import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ReactFlowProvider } from '@xyflow/react';
 import { FlowCanvas } from '@/components/canvas/FlowCanvas';
+import { ClientPickerDialog } from '@/components/clients/ClientPickerDialog';
 import { TopBar } from '@/components/layout/TopBar';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
@@ -37,6 +38,7 @@ export default function FlowEditorPage() {
   const [isTestUser, setIsTestUser] = useState(false);
   const [isOwner, setIsOwner] = useState(true);
   const [isShared, setIsShared] = useState(false);
+  const [choosingForkClient, setChoosingForkClient] = useState(false);
   const [isForking, setIsForking] = useState(false);
 
   const loadFlow = useCallback(async () => {
@@ -69,12 +71,15 @@ export default function FlowEditorPage() {
     });
   }
 
-  async function handleFork() {
+  async function handleFork(clientId: string) {
     setIsForking(true);
     try {
-      const res = await fetch(`/api/flows/${flowId}/fork`, { method: 'POST' });
-      if (!res.ok) return;
-      const { flowId: forkedId } = await res.json();
+      const res = await fetch(`/api/flows/${flowId}/fork`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: clientId }) });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error ?? 'Could not fork flow.');
+      const forkedId = result.flowId;
+      setChoosingForkClient(false);
       router.push(`/dashboard/canvas-flow/${forkedId}`);
     } finally {
       setIsForking(false);
@@ -361,7 +366,7 @@ export default function FlowEditorPage() {
             </span>
             <div className="w-px h-4" style={{ background: 'var(--color-white-subtle)' }} />
             <button
-              onClick={handleFork}
+              onClick={() => setChoosingForkClient(true)}
               disabled={isForking}
               className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
               style={{ background: 'var(--color-accent)', color: '#fff' }}
@@ -371,6 +376,10 @@ export default function FlowEditorPage() {
           </div>
         )}
 
+        {choosingForkClient && <ClientPickerDialog title="Choose a client for your copy"
+          description="The copied flow and its new generations will belong to this client."
+          submitLabel="Fork flow" onCancel={() => setChoosingForkClient(false)}
+          onSubmit={client => handleFork(client.id)} />}
         <FlowCanvas isTestUser={isTestUser} readOnly={!isOwner} focusNodeId={focusNodeId} />
       </div>
     </ReactFlowProvider>

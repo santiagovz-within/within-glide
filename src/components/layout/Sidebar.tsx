@@ -13,6 +13,7 @@ import {
   Settings,
   PanelLeft,
   Users,
+  Building2,
   BarChart2,
   Bug,
   LoaderCircle,
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
 ];
 
 const ADMIN_ITEMS = [
+  { label: 'Clients', icon: Building2, href: '/dashboard/admin/clients' },
   { label: 'Users', icon: Users, href: '/dashboard/admin/users' },
   { label: 'All Usage', icon: BarChart2, href: '/dashboard/admin/usage' },
 ];

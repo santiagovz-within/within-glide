@@ -11,6 +11,15 @@ export interface SpendingDay {
   unpricedGenerations: number;
 }
 
+export interface ClientSpending {
+  clientId: string;
+  name: string;
+  costUsd: number;
+  generations: number;
+  workflows: number;
+  unpricedGenerations: number;
+}
+
 export interface UserSpendingData {
   period: SpendingPeriod;
   start: string | null;
@@ -19,6 +28,9 @@ export interface UserSpendingData {
   dailySpend: SpendingDay[];
   totalCostUsd: number;
   unpricedGenerations: number;
+  clients: ClientSpending[];
+  unassignedCostUsd: number;
+  unassignedGenerations: number;
   users: { userId: string; username: string; costUsd: number }[];
 }
 

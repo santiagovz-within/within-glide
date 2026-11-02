@@ -1,3 +1,4 @@
+import { FlowClientError } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { uploadToGCS, getSignedReadUrl } from '@/lib/gcs';
@@ -135,6 +136,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ mediaUrls: [signedUrl], status: 'completed' });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     const details = describeFalError(err);
     console.error('[fal/outpaint] error:', details);
     return NextResponse.json({ error: 'Outpaint failed', details }, { status: 500 });

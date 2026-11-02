@@ -1,3 +1,4 @@
+import { FlowClientError, requireGenerationClient } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenAI } from '@google/genai';
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ title: flow.title, generated: false });
     }
 
+    await requireGenerationClient(supabase, user.id, { sourceType: 'canvas', sourceId: flowId });
     const thumbnailUrl = await signStoredThumbnail(flow.thumbnail_url);
     if (!thumbnailUrl) return NextResponse.json({ error: 'Thumbnail unavailable' }, { status: 422 });
 
@@ -85,6 +87,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ title: updated?.title ?? title, generated: !!updated });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     const details = err instanceof Error ? err.message : JSON.stringify(err);
     console.error('[generate-flow-title] error:', details);
     return NextResponse.json({ error: 'Title generation failed', details }, { status: 500 });

@@ -1,3 +1,4 @@
+import { FlowClientError } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, fal } from '@fal-ai/client';
 import { createClient } from '@/lib/supabase/server';
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
       throw error;
     }
   } catch (error) {
+    if (error instanceof FlowClientError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error('Draft completion error:', describeFalError(error));
     return NextResponse.json({ error: describeFalError(error) }, { status: 500 });
   }

@@ -1,3 +1,4 @@
+import { FlowClientError, requireGenerationClient } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenAI } from '@google/genai';
@@ -10,8 +11,9 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { prompt, aspectRatio = '16:9', sourceType, sourceId, nodeId } = await request.json();
+    const { prompt, aspectRatio = '16:9', sourceType = 'chat', sourceId, nodeId } = await request.json();
 
+    await requireGenerationClient(supabase, user.id, { sourceType, sourceId });
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
     const operation = await ai.models.generateVideos({
@@ -68,6 +70,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ generationId: gen?.id, mediaUrls: [signedUrl], status: 'completed' });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error('Veo generation error:', err);
     return NextResponse.json({ error: 'Video generation failed', details: String(err) }, { status: 500 });
   }

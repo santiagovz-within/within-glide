@@ -284,3 +284,30 @@ test('full historical calendars include leap days, empty months, and six-row mon
   assert.equal(week.days[6].date, '2026-01-04');
   assert.equal(week.elapsedDays, 4);
 });
+
+test('client totals reconcile with users, include retained deleted-flow costs and separate unattributed spending', async () => {
+  const tables = {
+    generations: [
+      { ...generation('1', 'alice', 2), client_id: 'a', source_id: 'flow-1' },
+      { ...generation('2', 'bob', 3), client_id: 'a', source_id: 'flow-1' },
+      { ...generation('3', 'alice', 0), client_id: 'a', source_id: 'deleted-flow' },
+      { ...generation('4', 'alice', null), client_id: 'a', source_id: 'deleted-flow' },
+      { ...generation('5', 'bob', null), client_id: 'b', source_id: 'flow-2', billing: { costUsd: 9 } },
+      { ...generation('6', 'alice', 7), client_id: null, source_id: 'legacy-or-chat' },
+      { ...generation('7', 'alice', 100), client_id: 'a', source_id: 'flow-1', status: 'failed' },
+      { ...generation('8', 'alice', null), client_id: null },
+    ],
+    realtime_usage: [{ user_id: 'alice', usage_date: '2026-01-01', cost_usd: 4 }],
+    clients: [{ id: 'a', name: 'Renamed client' }, { id: 'b', name: 'Other client' }],
+    profiles: [],
+  };
+  const result = await getUserSpending(database(tables, { rowLimit: 2 }), 'all');
+  assert.deepEqual(result.clients, [
+    { clientId: 'b', name: 'Other client', costUsd: 9, generations: 1, workflows: 1, unpricedGenerations: 0 },
+    { clientId: 'a', name: 'Renamed client', costUsd: 5, generations: 4, workflows: 2, unpricedGenerations: 1 },
+  ]);
+  assert.equal(result.unassignedCostUsd, 11);
+  assert.equal(result.unassignedGenerations, 2);
+  assert.equal(result.totalCostUsd, result.clients.reduce((sum, client) => sum + client.costUsd, result.unassignedCostUsd));
+  await assert.rejects(getUserSpending(database(tables, { failureTable: 'clients' }), 'all'));
+});

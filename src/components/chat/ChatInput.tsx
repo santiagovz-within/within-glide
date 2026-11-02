@@ -108,7 +108,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
     const res = await fetch('/api/google/enhance-prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, mediaType: mode, modelName: settings.model }),
+      body: JSON.stringify({ prompt, mediaType: mode, modelName: settings.model, sourceType: 'chat' }),
     });
     const { enhancedPrompt } = await res.json();
     if (enhancedPrompt) setPrompt(enhancedPrompt);

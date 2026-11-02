@@ -1,3 +1,4 @@
+import { FlowClientError, validateClient } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { signFlowMedia as resignValue, signFlowMediaUrl as resignString } from '@/lib/flowMedia';
@@ -21,7 +22,7 @@ export async function GET(
     const admin = createAdminClient();
     const { data: flow, error } = await admin
       .from('flows')
-      .select('*')
+      .select('*, client:clients(id, name)')
       .eq('id', flowId)
       .single();
 
@@ -63,10 +64,14 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { flowId } = await params;
-    const body = await request.json() as {
+    const body = await request.json().catch(() => null) as {
+      client_id?: unknown;
       is_shared?: unknown;
       is_gcs_only?: unknown;
-    };
+    } | null;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Provide flow settings.' }, { status: 400 });
+    }
 
     const admin = createAdminClient();
     const { data: flow } = await admin
@@ -80,11 +85,16 @@ export async function PATCH(
     }
 
     const updates: {
+      client_id?: string;
       is_shared?: boolean;
       is_gcs_only?: boolean;
       gcs_only_eligible?: boolean;
       updated_at?: string;
     } = {};
+
+    if ('client_id' in body) {
+      updates.client_id = await validateClient(supabase, body.client_id);
+    }
 
     if (typeof body.is_shared === 'boolean') {
       updates.is_shared = body.is_shared;
@@ -98,37 +108,35 @@ export async function PATCH(
         );
       }
 
-      if (flow.is_gcs_only) {
-        return NextResponse.json({ ok: true, is_gcs_only: true });
-      }
+      if (!flow.is_gcs_only) {
+        if (!flow.gcs_only_eligible) {
+          return NextResponse.json(
+            { error: 'GCS-only mode is only available on a new Flow before its first Fal generation' },
+            { status: 409 },
+          );
+        }
 
-      if (!flow.gcs_only_eligible) {
-        return NextResponse.json(
-          { error: 'GCS-only mode is only available on a new Flow before its first Fal generation' },
-          { status: 409 },
-        );
-      }
+        const { data: profile } = await admin
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
 
-      const { data: profile } = await admin
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile?.is_admin) {
-        return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+        if (!profile?.is_admin) {
+          return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+        }
       }
       updates.is_gcs_only = true;
       updates.gcs_only_eligible = false;
     }
 
-    if (updates.is_shared === undefined && updates.is_gcs_only === undefined) {
+    if (updates.client_id === undefined && updates.is_shared === undefined && updates.is_gcs_only === undefined) {
       return NextResponse.json({ error: 'No supported Flow setting provided' }, { status: 400 });
     }
 
     updates.updated_at = new Date().toISOString();
-    let updateQuery = admin.from('flows').update(updates).eq('id', flowId);
-    if (updates.is_gcs_only) {
+    let updateQuery = admin.from('flows').update(updates).eq('id', flowId).eq('user_id', user.id);
+    if (updates.is_gcs_only && !flow.is_gcs_only) {
       // Eligibility may be consumed concurrently by the first Fal request.
       updateQuery = updateQuery
         .eq('is_gcs_only', false)
@@ -137,7 +145,7 @@ export async function PATCH(
 
     const { data: updatedRows, error } = await updateQuery.select('id');
     if (error) throw new Error(error.message);
-    if (updates.is_gcs_only && updatedRows?.length === 0) {
+    if (updates.is_gcs_only && !flow.is_gcs_only && updatedRows?.length === 0) {
       return NextResponse.json(
         { error: 'This Flow started a Fal generation before GCS-only mode was enabled' },
         { status: 409 },
@@ -146,6 +154,7 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true, ...updates });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     const detail = err instanceof Error ? err.message : String(err);
     console.error('[flows/[flowId]] PATCH error:', detail);
     return NextResponse.json({ error: 'Failed to update flow' }, { status: 500 });

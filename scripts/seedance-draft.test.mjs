@@ -11,6 +11,7 @@ function load(path, dependencies = {}) {
   });
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(name => name in dependencies ? dependencies[name]
+    : name === '@/lib/flowClients' ? load('src/lib/flowClients.ts')
     : name === '@/lib/seedanceDraft' ? draftTools : require(name), loadedModule, loadedModule.exports);
   return loadedModule.exports;
 }

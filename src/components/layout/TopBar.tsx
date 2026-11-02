@@ -1,5 +1,6 @@
 'use client';
 
+import { assignFlowClient, ClientPickerDialog } from '@/components/clients/ClientPickerDialog';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -58,6 +59,7 @@ export function TopBar({
 }: TopBarProps) {
   const router = useRouter();
   const { currentFlow, isDirty, isSaving } = useFlowStore();
+  const [editingClient, setEditingClient] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
@@ -255,6 +257,16 @@ export function TopBar({
 
   return (
     <>
+      {editingClient && currentFlow && <ClientPickerDialog title="Change flow client"
+        description="All past and future generation costs for this flow will move to the selected client."
+        initialClientId={currentFlow.client_id ?? ''} onCancel={() => setEditingClient(false)}
+        onSubmit={async client => {
+          await assignFlowClient(flowId, client.id);
+          useFlowStore.setState(state => ({ currentFlow: state.currentFlow?.id === flowId
+            ? { ...state.currentFlow, client_id: client.id, client: { id: client.id, name: client.name } } : state.currentFlow }));
+          setEditingClient(false);
+        }} />}
+
       <div
         className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between px-4 py-2.5 rounded-xl pointer-events-none"
         style={{
@@ -298,6 +310,10 @@ export function TopBar({
             {currentFlow?.title ?? 'Untitled Flow'}
           </button>
         )}
+        {currentFlow?.client && <button disabled={!isOwner} onClick={() => setEditingClient(true)}
+          className="max-w-40 truncate rounded-md px-2 py-1 text-xs hover:bg-white/10"
+          style={{ color: 'var(--color-white-muted)', border: 'var(--border-default)' }}
+          title={`Client: ${currentFlow.client.name}. Change client`}>{currentFlow.client.name}</button>}
         {isBaseFlow && (
           <span
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium"

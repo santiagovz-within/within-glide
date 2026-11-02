@@ -8,6 +8,7 @@ import {
   GripVertical, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { ClientPickerDialog } from '@/components/clients/ClientPickerDialog';
 import type { Flow } from '@/types';
 import { formatDistanceToNow } from '@/lib/utils/date';
 import { isGcsRef, isSignedGcsUrl, resolveGcsRefs } from '@/lib/utils/mediaUtils';
@@ -26,6 +27,8 @@ type FlowCardSummary = Pick<
   Flow,
   'id' | 'title' | 'description' | 'thumbnail_url' | 'created_at' | 'updated_at'
 > & {
+  client_id?: string | null;
+  client?: { id: string; name: string } | null;
   base_flow_order?: number | null;
   author_username?: string | null;
   /** Ready-to-use signed URL minted server-side by /api/flows/base and /api/flows/recent. */
@@ -234,6 +237,7 @@ export default function CanvasFlowPage() {
   const [baseFlows, setBaseFlows] = useState<FlowCardSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading]     = useState(true);
+  const [creation, setCreation] = useState<{ title: string; flowData: Record<string, unknown>; startAsDraft: boolean } | null>(null);
   const [isCreatingFlow, setIsCreatingFlow] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editingBaseId, setEditingBaseId] = useState<string | null>(null);
@@ -354,17 +358,21 @@ export default function CanvasFlowPage() {
     startAsDraft = true,
   ) {
     if (isCreatingFlow) return;
+    setCreation({ title, flowData, startAsDraft });
+  }
+
+  async function confirmCreateFlow(clientId: string) {
+    if (!creation || isCreatingFlow) return;
+    const { title, flowData, startAsDraft } = creation;
     setIsCreatingFlow(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setIsCreatingFlow(false);
-        return;
-      }
+      if (!user) throw new Error('Please sign in again.');
       const { data, error } = await supabase
         .from('flows')
         .insert({
           user_id: user.id,
+          client_id: clientId,
           title,
           flow_data: flowData,
           is_template: false,
@@ -374,15 +382,13 @@ export default function CanvasFlowPage() {
         .single();
 
       if (error || !data) {
-        console.error('[CanvasFlow] Failed to create flow:', error);
-        setIsCreatingFlow(false);
-        return;
+        throw new Error('Could not create this flow. Please try again.');
       }
 
       router.push(`/dashboard/canvas-flow/${data.id}`);
     } catch (error) {
-      console.error('[CanvasFlow] Failed to create flow:', error);
       setIsCreatingFlow(false);
+      throw error;
     }
   }
 
@@ -513,7 +519,7 @@ export default function CanvasFlowPage() {
   }
 
   const filteredFlows = flows.filter((f) =>
-    f.title.toLowerCase().includes(searchQuery.toLowerCase())
+    `${f.title} ${f.client?.name ?? ''}`.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -887,6 +893,10 @@ export default function CanvasFlowPage() {
         )}
       </section>
       </div>
+      {creation && <ClientPickerDialog title="Choose a client for your new flow"
+        description="All generation costs for this flow will be tracked under the selected client."
+        submitLabel="Create flow" onCancel={() => setCreation(null)}
+        onSubmit={async client => { await confirmCreateFlow(client.id); }} />}
     </div>
   );
 }
@@ -1075,6 +1085,9 @@ function FlowCard({
             <MoreHorizontal size={14} style={{ color: 'var(--color-white-muted)' }} />
           </button>
         </div>
+        <p className="mt-1 truncate text-xs" style={{ color: 'var(--color-accent)' }} title={flow.client?.name}>
+          {flow.client?.name ?? 'Client required'}
+        </p>
         <div className="flex items-center gap-1 mt-1">
           <Clock size={10} style={{ color: 'var(--color-white-muted)' }} />
           <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>

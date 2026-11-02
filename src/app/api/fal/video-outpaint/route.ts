@@ -1,3 +1,4 @@
+import { FlowClientError } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fal } from '@fal-ai/client';
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ requestId: request_id, status: 'pending' });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     const detail = describeFalError(err);
     console.error('[video-outpaint] submit error:', detail, err);
     return NextResponse.json({ error: 'Failed to submit outpaint job', details: detail }, { status: 500 });

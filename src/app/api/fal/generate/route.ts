@@ -1,3 +1,4 @@
+import { FlowClientError } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { registerGenerationAttempt, type GenerationAttemptInput } from '@/lib/generationAttempt';
@@ -423,6 +424,7 @@ export async function POST(request: NextRequest) {
       status: 'pending',
     });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     const details = describeFalError(err);
     console.error('Generation error:', details);
     return NextResponse.json({ error: 'Generation failed', details }, { status: 500 });

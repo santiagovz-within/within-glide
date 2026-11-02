@@ -223,7 +223,7 @@ export function PromptNode({ data, selected, id }: NodeProps & { data: PromptNod
       const res = await fetch('/api/google/enhance-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: data.prompt, geminiModel, length }),
+        body: JSON.stringify({ prompt: data.prompt, geminiModel, length, sourceType: 'canvas', sourceId: useFlowStore.getState().currentFlow?.id, nodeId: id }),
       });
       const { enhancedPrompt } = await res.json();
       if (enhancedPrompt) {

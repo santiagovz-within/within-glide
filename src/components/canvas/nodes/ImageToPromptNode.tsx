@@ -75,7 +75,7 @@ export function ImageToPromptNode({ data, selected, id }: NodeProps & { data: Im
       const res = await fetch('/api/google/image-to-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: data.inputImageUrl, length }),
+        body: JSON.stringify({ imageUrl: data.inputImageUrl, length, sourceId: useFlowStore.getState().currentFlow?.id, nodeId: id }),
       });
       const result = await res.json();
       if (result.prompt) {

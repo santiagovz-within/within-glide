@@ -13,9 +13,18 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Flow {
   id: string;
   user_id: string;
+  client_id: string | null;
+  client?: Pick<Client, 'id' | 'name'> | null;
   title: string;
   description: string | null;
   thumbnail_url: string | null;
@@ -33,6 +42,7 @@ export interface Flow {
 export interface Generation {
   id: string;
   user_id: string;
+  client_id: string | null;
   source_type: 'canvas' | 'chat';
   source_id: string | null;
   node_id: string | null;

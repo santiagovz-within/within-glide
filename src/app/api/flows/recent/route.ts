@@ -13,7 +13,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('flows')
-      .select('id, title, description, thumbnail_url, created_at, updated_at')
+      .select('id, title, description, thumbnail_url, created_at, updated_at, client_id, client:clients(id, name)')
       .eq('user_id', user.id)
       .eq('is_template', false)
       .eq('lifecycle_state', 'active')

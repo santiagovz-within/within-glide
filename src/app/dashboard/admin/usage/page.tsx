@@ -168,6 +168,7 @@ function formatSpending(value: number) {
 }
 
 function UserSpending() {
+  const [groupBy, setGroupBy] = useState<'user' | 'client'>('user');
   const [period, setPeriod] = useState<RankingPeriod>('day');
   const [selections, setSelections] = useState(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -223,7 +224,11 @@ function UserSpending() {
     <>
       <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
         <div>
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-white)' }}>User Spending</h2>
+          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-white)' }}>{groupBy === 'user' ? 'User Spending' : 'Client Spending'}</h2>
+          <div className="flex gap-2 mt-3" aria-label="Group spending by">
+            {(['user', 'client'] as const).map(group => <button key={group} onClick={() => setGroupBy(group)} aria-pressed={groupBy === group}
+              className="rounded-md px-3 py-1 text-xs" style={{ background: groupBy === group ? 'var(--color-bg-surface)' : 'transparent', color: 'var(--color-white)' }}>By {group}</button>)}
+          </div>
           <p className="text-xs mt-1" style={{ color: 'var(--color-white-muted)' }}>
             {period === 'all' ? 'All retained history' : dateLabel ?? SPENDING_LABELS[period]} · UTC · Highest spend first
           </p>
@@ -305,7 +310,27 @@ function UserSpending() {
               <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--color-white-muted)' }}>Recorded spend · USD</p>
               <p className="text-3xl font-semibold tabular-nums" style={{ color: 'var(--color-white)' }}>{formatSpending(data.totalCostUsd)}</p>
             </div>
-            {data.users.length === 0 ? (
+            {groupBy === 'client' ? (
+              <div className="overflow-auto">
+                <table className="w-full text-sm text-left">
+                  <thead style={{ color: 'var(--color-white-muted)' }}><tr>
+                    <th className="py-2 font-medium">Client</th><th className="p-2 text-right font-medium">Flows</th>
+                    <th className="p-2 text-right font-medium">Generations</th><th className="p-2 text-right font-medium">Unpriced</th>
+                    <th className="py-2 text-right font-medium">Recorded USD</th>
+                  </tr></thead>
+                  <tbody>{data.clients.map(client => <tr key={client.clientId} style={{ borderTop: 'var(--border-default)' }}>
+                    <td className="py-3">{client.name}</td><td className="p-2 text-right">{client.workflows}</td>
+                    <td className="p-2 text-right">{client.generations}</td><td className="p-2 text-right">{client.unpricedGenerations}</td>
+                    <td className="py-3 text-right tabular-nums">{formatSpending(client.costUsd)}</td>
+                  </tr>)}</tbody>
+                </table>
+                {data.clients.length === 0 && <p className="text-xs py-3">No client generations for this period.</p>}
+                <div className="flex justify-between gap-4 text-xs pt-4" style={{ borderTop: 'var(--border-default)', color: 'var(--color-white-muted)' }}>
+                  <span>Unassigned / outside flows · {data.unassignedGenerations} generations + realtime</span>
+                  <span className="tabular-nums">{formatSpending(data.unassignedCostUsd)}</span>
+                </div>
+              </div>
+            ) : data.users.length === 0 ? (
               <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>No recorded spending for this period</p>
             ) : (
               <div className="max-h-80 overflow-auto">

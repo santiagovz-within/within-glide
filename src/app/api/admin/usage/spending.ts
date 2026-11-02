@@ -4,6 +4,9 @@ import { generationCost, recordedCost, spendingWindow, type SpendingDay, type Sp
 export async function getUserSpending(supabase: SupabaseClient, period: SpendingPeriod, selection?: string): Promise<UserSpendingData> {
   const asOf = new Date();
   const { start, end } = spendingWindow(period, asOf, selection);
+  const clientCosts = new Map<string, { costUsd: number; generations: number; flowIds: Set<string>; unpricedGenerations: number }>();
+  let unassignedCostUsd = 0;
+  let unassignedGenerations = 0;
   const costs = new Map<string, number>();
   const days = new Map<string, SpendingDay>();
   const getDay = (date: string) => {
@@ -23,8 +26,8 @@ export async function getUserSpending(supabase: SupabaseClient, period: Spending
   for (let from = 0; ; ) {
     let query = supabase.from('generations')
       .select(hasBillingColumn
-        ? 'id, user_id, created_at, fal_cost_usd, billing:parameters->falBilling'
-        : 'id, user_id, created_at, billing:parameters->falBilling')
+        ? 'id, user_id, client_id, source_id, created_at, fal_cost_usd, billing:parameters->falBilling'
+        : 'id, user_id, client_id, source_id, created_at, billing:parameters->falBilling')
       .eq('status', 'completed')
       .lt('created_at', end)
       .order('created_at', { ascending: true })
@@ -39,9 +42,20 @@ export async function getUserSpending(supabase: SupabaseClient, period: Spending
       }
       throw error;
     }
-    const rows = data as unknown as { user_id: string; created_at: string; fal_cost_usd?: unknown; billing?: unknown }[];
+    const rows = data as unknown as { client_id: string | null; source_id: string | null; user_id: string; created_at: string; fal_cost_usd?: unknown; billing?: unknown }[];
     for (const row of rows) {
       const cost = generationCost(row);
+      if (row.client_id) {
+        const entry = clientCosts.get(row.client_id) ?? { costUsd: 0, generations: 0, flowIds: new Set<string>(), unpricedGenerations: 0 };
+        entry.generations++;
+        if (row.source_id) entry.flowIds.add(row.source_id);
+        if (cost === null) entry.unpricedGenerations++;
+        else entry.costUsd += cost;
+        clientCosts.set(row.client_id, entry);
+      } else {
+        unassignedGenerations++;
+        unassignedCostUsd += cost ?? 0;
+      }
       const date = new Date(row.created_at).toISOString().slice(0, 10);
       if (cost === null) {
         unpricedGenerations++;
@@ -65,7 +79,7 @@ export async function getUserSpending(supabase: SupabaseClient, period: Spending
     if (error) throw error;
     for (const row of data) {
       const cost = recordedCost(row.cost_usd);
-      if (cost !== null) addCost(row.user_id, cost, row.usage_date);
+      if (cost !== null) { addCost(row.user_id, cost, row.usage_date); unassignedCostUsd += cost; }
     }
     if (data.length === 0) break;
     from += data.length;
@@ -89,7 +103,20 @@ export async function getUserSpending(supabase: SupabaseClient, period: Spending
   })).filter(user => user.costUsd > 0)
     .sort((a, b) => b.costUsd - a.costUsd || a.username.localeCompare(b.username) || a.userId.localeCompare(b.userId));
 
+  const clientIds = [...clientCosts.keys()];
+  const clientNames = new Map<string, string>();
+  for (let from = 0; from < clientIds.length; from += 100) {
+    const { data, error } = await supabase.from('clients').select('id, name').in('id', clientIds.slice(from, from + 100));
+    if (error) throw error;
+    for (const client of data) clientNames.set(client.id, client.name);
+  }
+  const clients = clientIds.map(clientId => {
+    const entry = clientCosts.get(clientId)!;
+    return { clientId, name: clientNames.get(clientId) ?? 'Unknown client', costUsd: entry.costUsd,
+      generations: entry.generations, workflows: entry.flowIds.size, unpricedGenerations: entry.unpricedGenerations };
+  }).sort((a, b) => b.costUsd - a.costUsd || a.name.localeCompare(b.name));
+
   return { period, start, end, asOf: asOf.toISOString(),
     dailySpend: [...days.values()].sort((a, b) => a.date.localeCompare(b.date)),
-    users, unpricedGenerations, totalCostUsd: users.reduce((sum, user) => sum + user.costUsd, 0) };
+    users, clients, unassignedCostUsd, unassignedGenerations, unpricedGenerations, totalCostUsd: users.reduce((sum, user) => sum + user.costUsd, 0) };
 }

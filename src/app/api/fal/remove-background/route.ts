@@ -1,3 +1,4 @@
+import { FlowClientError } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getSignedReadUrl } from '@/lib/gcs';
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ mediaUrls: [signedUrl], status: 'completed' });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error('Remove background error:', err);
     return NextResponse.json(
       { error: 'Remove background failed', details: describeFalError(err) },

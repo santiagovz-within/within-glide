@@ -10,7 +10,8 @@
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "setup-gcs-cors": "node --env-file=.env.local scripts/setup-gcs-cors.mjs"
+    "setup-gcs-cors": "node --env-file=.env.local scripts/setup-gcs-cors.mjs",
+    "test:clients": "node --test scripts/flow-clients.test.mjs scripts/admin-spending.test.mjs"
   },
   "dependencies": {
     "@fal-ai/client": "^1.10.1",
@@ -38,6 +39,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.14",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",

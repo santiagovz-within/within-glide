@@ -1,3 +1,4 @@
+import { FlowClientError } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { fal } from '@fal-ai/client';
 import { createClient } from '@/lib/supabase/server';
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
     if (error) throw new Error(`Could not save Layerize request: ${error.message}`);
     return NextResponse.json({ requestId: request_id, status: 'pending' });
   } catch (error) {
+    if (error instanceof FlowClientError) return NextResponse.json({ error: error.message }, { status: error.status });
     return NextResponse.json({ error: describeFalError(error) }, { status: 500 });
   }
 }

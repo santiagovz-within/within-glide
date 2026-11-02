@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { requireGenerationClient } from '@/lib/flowClients';
 import { createAdminClient } from '@/lib/supabase/server';
 
 // Fal's "immediate" lifecycle is a 60-second transfer window. The app copies
@@ -22,9 +23,9 @@ export async function getFalStorageHeaders({
   sourceType?: string;
   sourceId?: string;
 }): Promise<Record<string, string> | undefined> {
-  if (sourceType !== 'canvas' || !sourceId) return undefined;
-
   const admin = createAdminClient();
+  await requireGenerationClient(admin, userId, { sourceType, sourceId });
+  if (sourceType !== 'canvas') return undefined;
 
   // Atomically consume the one-time choice when the first Fal generation
   // starts without GCS-only mode. If activation wins the row race first, this

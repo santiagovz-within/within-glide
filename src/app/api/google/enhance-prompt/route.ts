@@ -1,3 +1,4 @@
+import { FlowClientError, requireGenerationClient } from '@/lib/flowClients';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { GoogleGenAI } from '@google/genai';
@@ -15,11 +16,13 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const { prompt, geminiModel = 'gemini-3.7-flash', length = 'auto' } = await request.json();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const { sourceType = 'canvas', sourceId, nodeId, prompt, geminiModel = 'gemini-3.7-flash', length = 'auto' } = await request.json();
     if (!prompt?.trim()) {
       return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
     }
 
+    await requireGenerationClient(supabase, user.id, { sourceType, sourceId });
     const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
     const lengthInstruction = LENGTH_INSTRUCTIONS[length] ?? LENGTH_INSTRUCTIONS.auto;
@@ -48,7 +51,9 @@ export async function POST(request: NextRequest) {
         await supabase.from('generations').insert({
           id: genId,
           user_id: user.id,
-          source_type: 'canvas',
+          source_type: sourceType,
+          source_id: sourceId,
+          node_id: nodeId,
           model: geminiModel,
           prompt,
           parameters: { length },
@@ -61,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ enhancedPrompt });
   } catch (err) {
+    if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error('Prompt enhance error:', err);
     return NextResponse.json({ error: 'Enhancement failed', details: String(err) }, { status: 500 });
   }
