@@ -25,7 +25,6 @@ export function ClientPickerDialog({ title, description, submitLabel = 'Save cli
   const descriptionId = useId();
   const [clients, setClients] = useState<Client[] | null>(null);
   const [selectedId, setSelectedId] = useState(initialClientId);
-  const [search, setSearch] = useState('');
   const [loadError, setLoadError] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -51,7 +50,6 @@ export function ClientPickerDialog({ title, description, submitLabel = 'Save cli
   }, [retry]);
 
   const selected = clients?.find(client => client.id === selectedId);
-  const filtered = clients?.filter(client => client.id === selectedId || client.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <dialog ref={dialog} aria-labelledby={titleId} aria-describedby={descriptionId}
@@ -78,20 +76,14 @@ export function ClientPickerDialog({ title, description, submitLabel = 'Save cli
         ) : !clients ? <p role="status" className="text-sm">Loading clients…</p> : clients.length === 0 ? (
           <p role="alert" className="text-sm">No clients available. An administrator needs to add a client.</p>
         ) : (
-          <div className="space-y-3">
-            <input aria-label="Search clients" placeholder="Search clients…" value={search} onChange={event => setSearch(event.target.value)}
-              disabled={saving} className="w-full rounded-lg px-3 py-2.5 text-sm"
-              style={{ background: 'var(--color-bg-surface)', border: 'var(--border-default)' }} />
-            <label className="block text-sm font-medium">Client
-              <select required value={selectedId} onChange={event => setSelectedId(event.target.value)} disabled={saving}
-                className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm"
-                style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white)', border: 'var(--border-default)' }}>
-                <option value="" disabled>Choose a client</option>
-                {filtered?.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
-              </select>
-            </label>
-            {filtered?.length === 0 && <p className="text-xs">No matching clients.</p>}
-          </div>
+          <label className="block text-sm font-medium">Client
+            <select required value={selectedId} onChange={event => setSelectedId(event.target.value)} disabled={saving}
+              className="mt-1.5 w-full rounded-lg px-3 py-2.5 text-sm"
+              style={{ background: 'var(--color-bg-surface)', color: 'var(--color-white)', border: 'var(--border-default)' }}>
+              <option value="" disabled>Choose a client</option>
+              {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+            </select>
+          </label>
         )}
         {saveError && <p role="alert" className="text-sm mt-3" style={{ color: 'var(--color-error)' }}>{saveError}</p>}
         <div className="flex justify-end gap-2 mt-6">

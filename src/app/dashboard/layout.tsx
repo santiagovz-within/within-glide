@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { FlowClientGate } from '@/components/clients/FlowClientGate';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { BackgroundGenerationManager } from '@/components/layout/BackgroundGenerationManager';
@@ -33,7 +32,7 @@ export default async function DashboardLayout({
         <BackgroundGenerationManager />
         <Sidebar />
         <main className="flex-1 overflow-hidden min-w-0">
-          <FlowClientGate>{children}</FlowClientGate>
+          {children}
         </main>
       </div>
     </ThemeProvider>

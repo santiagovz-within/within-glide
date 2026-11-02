@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { imageUrl, length = 'auto', sourceId, nodeId } = await request.json();
+    const { imageUrl, length = 'auto', sourceId } = await request.json();
     if (!imageUrl) return NextResponse.json({ error: 'imageUrl is required' }, { status: 400 });
 
     const lengthInstruction: Record<string, string> = {
@@ -50,12 +50,6 @@ export async function POST(request: NextRequest) {
     const prompt = response.text?.trim();
     if (!prompt) return NextResponse.json({ error: 'No prompt generated' }, { status: 500 });
 
-    const { error: saveError } = await supabase.from('generations').insert({
-      user_id: user.id, source_type: 'canvas', source_id: sourceId, node_id: nodeId,
-      model: 'gemini-3.7-flash', prompt, parameters: { length, operation: 'image-to-prompt' },
-      media_type: 'prompt', media_url: '', status: 'completed',
-    });
-    if (saveError) throw new Error('Could not save prompt generation');
     return NextResponse.json({ prompt });
   } catch (err) {
     if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });

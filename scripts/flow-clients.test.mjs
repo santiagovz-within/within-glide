@@ -8,7 +8,7 @@ import { PGlite } from '@electric-sql/pglite';
 const require = createRequire(import.meta.url);
 function load(path, dependencies = {}) {
   const { outputText } = ts.transpileModule(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   });
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(name => name in dependencies ? dependencies[name] : require(name), loadedModule, loadedModule.exports);
@@ -107,7 +107,7 @@ test('migration enforces attribution, backfills historical costs, preserves comp
     GRANT USAGE ON SCHEMA auth TO authenticated;
     CREATE TABLE public.profiles(id uuid PRIMARY KEY, is_admin boolean);
     CREATE TABLE public.flows(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, title text, created_at timestamptz DEFAULT now());
-    CREATE TABLE public.generations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, source_type text, source_id uuid, status text, fal_cost_usd numeric, created_at timestamptz DEFAULT now());
+    CREATE TABLE public.generations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid, source_type text, source_id text, status text, fal_cost_usd numeric, created_at timestamptz DEFAULT now());
     GRANT SELECT ON public.profiles TO authenticated;
     GRANT SELECT, INSERT, UPDATE, DELETE ON public.flows, public.generations TO authenticated;
     ALTER TABLE public.flows ENABLE ROW LEVEL SECURITY;
@@ -125,6 +125,9 @@ test('migration enforces attribution, backfills historical costs, preserves comp
   assert.ok(clients.some(c => c.name === "Anthony's Goods"));
   assert.ok(clients.some(c => c.name === 'Vans, A VF Company'));
   const [first, second] = clients;
+  // Reproduce the production failure with its real polymorphic text source ID.
+  await assert.rejects(db.query('UPDATE public.flows SET client_id = $1 WHERE id = $2', [first.id, flowId]), /operator does not exist: text = uuid/);
+  await db.exec(readFileSync(new URL('../supabase/migrations/017_fix_flow_client_source_types.sql', import.meta.url), 'utf8'));
   await db.exec(`SET ROLE authenticated; SET app.user_id = '${owner}';`);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM public.clients')).rows[0].n, 36);
   await assert.rejects(db.query("INSERT INTO public.clients(name) VALUES ('Not an admin')"), /row-level security/);
@@ -159,4 +162,39 @@ test('migration enforces attribution, backfills historical costs, preserves comp
   assert.equal((await db.query('SELECT name FROM public.clients WHERE id = $1', [added.id])).rows[0].name, 'Updated Client');
   await assert.rejects(db.query("INSERT INTO public.clients(name) VALUES ('updated client')"), /unique constraint/);
   await assert.rejects(db.query("INSERT INTO public.clients(name) VALUES ('  ' )"), /check constraint/);
+});
+
+test('only an opened, owned, unassigned flow requires tagging; save failures do not unlock it', async () => {
+  const writes = [];
+  const assigned = [];
+  let fail = true;
+  let cancelled = false;
+  const Picker = () => null;
+  const { FlowClientGate } = load('src/components/clients/FlowClientGate.tsx', {
+    './ClientPickerDialog': {
+      ClientPickerDialog: Picker,
+      assignFlowClient: async (flow, client) => {
+        writes.push({ flow, client });
+        if (fail) throw new Error('Save failed');
+      },
+    },
+  });
+  const children = 'canvas';
+  const props = { isOwner: true, children, onClientAssigned: client => assigned.push(client), onCancel: () => { cancelled = true; } };
+  const flow = { id: flowId, title: 'Opened workflow', client_id: null };
+  assert.equal(FlowClientGate({ ...props, flow: { ...flow, client_id: clientId } }), children);
+  assert.equal(FlowClientGate({ ...props, flow, isOwner: false }), children);
+  assert.equal(FlowClientGate({ ...props, flow: null }).props.role, 'status');
+  const picker = FlowClientGate({ ...props, flow });
+  assert.equal(picker.type, Picker);
+  assert.equal(picker.props.submitLabel, 'Save and open flow');
+  picker.props.onCancel();
+  assert.equal(cancelled, true);
+  const client = { id: clientId, name: 'Selected client' };
+  await assert.rejects(picker.props.onSubmit(client), /Save failed/);
+  assert.equal(assigned.length, 0);
+  fail = false;
+  await picker.props.onSubmit(client);
+  assert.deepEqual(writes, [{ flow: flowId, client: clientId }, { flow: flowId, client: clientId }]);
+  assert.deepEqual(assigned, [client]);
 });

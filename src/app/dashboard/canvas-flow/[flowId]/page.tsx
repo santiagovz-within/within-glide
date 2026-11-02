@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ReactFlowProvider } from '@xyflow/react';
 import { FlowCanvas } from '@/components/canvas/FlowCanvas';
 import { ClientPickerDialog } from '@/components/clients/ClientPickerDialog';
+import { FlowClientGate } from '@/components/clients/FlowClientGate';
 import { TopBar } from '@/components/layout/TopBar';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { createClient } from '@/lib/supabase/client';
@@ -340,6 +341,13 @@ export default function FlowEditorPage() {
   }, [isDirty, saveFlow]);
 
   return (
+    <FlowClientGate flow={currentFlow?.id === flowId ? currentFlow : null} isOwner={isOwner}
+      onCancel={() => router.push('/dashboard/canvas-flow')}
+      onClientAssigned={client => {
+        useFlowStore.setState(state => ({ currentFlow: state.currentFlow?.id === flowId
+          ? { ...state.currentFlow, client_id: client.id, client: { id: client.id, name: client.name } }
+          : state.currentFlow }));
+      }}>
     <ReactFlowProvider>
       <div className="relative w-full h-full">
         <TopBar
@@ -383,5 +391,6 @@ export default function FlowEditorPage() {
         <FlowCanvas isTestUser={isTestUser} readOnly={!isOwner} focusNodeId={focusNodeId} />
       </div>
     </ReactFlowProvider>
+    </FlowClientGate>
   );
 }

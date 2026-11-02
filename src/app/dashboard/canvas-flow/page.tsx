@@ -328,6 +328,7 @@ export default function CanvasFlowPage() {
   useEffect(() => {
     const candidates = flows.filter((f) =>
       f.title === UNTITLED_FLOW_TITLE &&
+      !!f.client_id &&
       !!f.thumbnail_url &&
       !autoTitleRequestedIds.current.has(f.id)
     );
