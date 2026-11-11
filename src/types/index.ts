@@ -189,6 +189,7 @@ export interface PromptTag {
 }
 
 export interface ImageGenNodeData extends Record<string, unknown> {
+  outputFormat?: 'png' | 'jpeg' | 'gif';
   model: string;
   aspectRatio: string;
   resolution: string;
@@ -466,6 +467,7 @@ export interface ModelConfig {
 }
 
 export interface GenerateImageRequest {
+  outputFormat?: 'png' | 'jpeg' | 'gif';
   model: string;
   prompt: string;
   negativePrompt?: string;

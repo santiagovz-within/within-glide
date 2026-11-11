@@ -1,5 +1,6 @@
 'use client';
 
+import { currentImageModel, getGptImage26Size, type GptImageOutputFormat } from '@/lib/gptImage26';
 import { GenerationPreview } from './GenerationPreview';
 
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
@@ -89,7 +90,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   }, [data.prompt, promptTagCount]);
   const [tagError, setTagError] = useState<string | null>(null);
 
-  const modelConfig = IMAGE_MODELS.find((m) => m.id === data.model);
+  const selectedModel = currentImageModel(data.model);
+  const isGptImage26 = selectedModel === 'gpt-image-2-6';
+  const outputFormat = data.outputFormat ?? 'png';
+  const isGif = isGptImage26 && outputFormat === 'gif';
+  const modelConfig = IMAGE_MODELS.find((m) => m.id === selectedModel);
   const aspectOptions = modelConfig?.supportedAspectRatios.length
     ? modelConfig.supportedAspectRatios
     : ASPECT_RATIOS.map((ratio) => ratio.value);
@@ -102,10 +107,12 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const selectedResolution = resolutionOptions.includes(data.resolution)
     ? data.resolution
     : resolutionOptions[0];
-  const falConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
-  const isMultiImageModel = supportsMultipleImageReferences(data.model);
-  const usesStyleReference = usesStyleReferences(data.model);
-  const maxReferenceImages = getImageReferenceLimit(data.model);
+  const gifSize = isGif ? getGptImage26Size(selectedAspectRatio, selectedResolution, 'gif') : null;
+  const gifResolution = gifSize ? `${gifSize.width} × ${gifSize.height}` : '512 × 512';
+  const falConfig = FAL_MODELS[selectedModel as keyof typeof FAL_MODELS];
+  const isMultiImageModel = supportsMultipleImageReferences(selectedModel);
+  const usesStyleReference = usesStyleReferences(selectedModel);
+  const maxReferenceImages = getImageReferenceLimit(selectedModel);
   const portCount = isMultiImageModel
     ? imageReferencePortCount(id, storeEdges, maxReferenceImages)
     : 0;
@@ -139,7 +146,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   useLayoutEffect(() => {
     if (!isMultiImageModel || !rowsListRef.current) return;
     setRowsStartTop(rowsListRef.current.offsetTop);
-  }, [isMultiImageModel, portCount, data.generatedImages?.length, data.status]);
+  }, [isMultiImageModel, portCount, data.generatedImages?.length, data.status, isGptImage26, isGif]);
 
   function updateData(updates: Partial<ImageGenNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {
@@ -235,11 +242,12 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       data.prompt ?? '',
       promptTags,
       data.inputImageUrls,
-      getPromptReferenceStyle(data.model),
+      getPromptReferenceStyle(selectedModel),
     );
 
     const payload = {
-      model: data.model,
+      model: selectedModel,
+      ...(isGptImage26 ? { outputFormat } : {}),
       prompt: compiledPrompt,
       aspectRatio: selectedAspectRatio,
       resolution: selectedResolution,
@@ -346,7 +354,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   useLayoutEffect(() => {
     updateNodeInternals(id);
-  }, [id, outputCount, outputTops, hasLegacyOutput, updateNodeInternals]);
+  }, [id, outputCount, outputTops, hasLegacyOutput, updateNodeInternals, isGptImage26, isGif]);
 
   const footer = (
     <div className={glassStyles.footerStack}>
@@ -365,7 +373,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
           {isGenerating ? 'Generating…' : 'Generate'}
-          <FalCostEstimate description={data.model === 'nano-banana-2-1'
+          <FalCostEstimate description={selectedModel === 'nano-banana-2-1'
             ? 'Estimated USD cost from Fal token rates: output resolution, prompt length, and reference images. Excludes variable thinking and web-search tokens; actual cost may be higher.'
             : undefined} input={pricingEndpoint ? {
             endpoint: pricingEndpoint,
@@ -511,7 +519,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       {/* ── Model selector ───────────────────────────────────── */}
       <ModelSelect
         options={IMAGE_MODELS}
-        value={data.model}
+        value={selectedModel}
         onChange={handleModelChange}
         appearance="imageGenerationGlass"
       />
@@ -549,15 +557,29 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
           appearance="imageGenerationGlass"
         />
         <NodeSelect
-          options={resolutionOptions}
-          value={selectedResolution}
+          options={isGif ? [gifResolution] : resolutionOptions}
+          value={isGif ? gifResolution : selectedResolution}
           onChange={(v) => updateData({ resolution: v })}
           leadingIcon={<Image src="/node-icons/icon-resolution.svg" alt="" width={10} height={10} aria-hidden />}
           optionIcon={() => <Image src="/node-icons/icon-resolution.svg" alt="" width={10} height={10} aria-hidden />}
           appearance="imageGenerationGlass"
-          locked={resolutionOptions.length === 1}
+          locked={isGif || resolutionOptions.length === 1}
         />
       </div>
+
+      {isGptImage26 && (
+        <div className={glassStyles.sliderSection}>
+          <label className={glassStyles.microLabel}>Output format</label>
+          <NodeSelect
+            label="Output format"
+            options={['PNG', 'JPG', 'GIF']}
+            value={outputFormat === 'jpeg' ? 'JPG' : outputFormat.toUpperCase()}
+            onChange={(value) => updateData({ outputFormat: (value === 'JPG' ? 'jpeg' : value.toLowerCase()) as GptImageOutputFormat })}
+            appearance="imageGenerationGlass"
+          />
+          {isGif && <p className={glassStyles.microLabel}>9 frames · 200 ms per frame · 1.8 seconds</p>}
+        </div>
+      )}
 
       {/* ── Images to generate slider ─────────────────────────── */}
       <div className={glassStyles.sliderSection}>

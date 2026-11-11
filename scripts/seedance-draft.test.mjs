@@ -84,7 +84,7 @@ for (const mode of ['text', 'image', 'reference']) {
         endpoint: 'bytedance/seedance-2.5/text-to-video', imageToVideoEndpoint: 'bytedance/seedance-2.5/image-to-video' } } },
       '@/lib/api/referenceVideo': referenceConfig, '@/lib/generationAttempt': { registerGenerationAttempt: async () => {} },
       '@/lib/falStorage': { getFalStorageHeaders: async () => ({}) }, '@/lib/falErrors': { describeFalError: String },
-      '@/lib/falPricing': {}, '@/lib/gptImage25': {},
+      '@/lib/falPricing': {}, '@/lib/gptImage26': { currentImageModel: model => model },
     }).POST;
     const body = { model: 'seedance-2-5', prompt: 'Original scene', draft: true, videoResolution: '1080p',
       aspectRatio: '16:9', duration: 10, sourceType: 'canvas', sourceId: 'flow', nodeId: 'node',

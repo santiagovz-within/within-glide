@@ -132,7 +132,7 @@ test('API queues each reference endpoint and persists recoverable metadata; inva
     '@/lib/falStorage': { getFalStorageHeaders: async () => ({ 'storage-test': 'preserved' }) },
     '@/lib/falErrors': { describeFalError: String },
     '@/lib/generationAttempt': { registerGenerationAttempt: async () => {} },
-    '@/lib/falPricing': {}, '@/lib/gptImage25': {},
+    '@/lib/falPricing': {}, '@/lib/gptImage26': { currentImageModel: model => model },
   });
   for (const [id, endpoint] of expected) {
     const body = request(id, { generationMode: 'reference-to-video', sourceType: 'canvas', sourceId: 'flow', nodeId: 'node' });
@@ -490,7 +490,7 @@ function klingRoute() {
     '@/lib/generationAttempt': { registerGenerationAttempt: async () => {} },
     '@/lib/falStorage': { getFalStorageHeaders: async () => ({ 'test-storage': 'preserved' }) },
     '@/lib/falErrors': { describeFalError: String },
-    '@/lib/falPricing': {}, '@/lib/gptImage25': {},
+    '@/lib/falPricing': {}, '@/lib/gptImage26': { currentImageModel: model => model },
   });
   return { submitted, saved, post: overrides => POST({ json: async () => ({
     model: 'kling-4', prompt: 'A slow camera orbit.', aspectRatio: '21:9',

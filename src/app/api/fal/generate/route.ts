@@ -8,7 +8,7 @@ import { FAL_MODELS } from '@/lib/api/models';
 import { getFalStorageHeaders } from '@/lib/falStorage';
 import { describeFalError } from '@/lib/falErrors';
 import { getCustomImageSize, type FalPricingRule } from '@/lib/falPricing';
-import { getGptImage25Size } from '@/lib/gptImage25';
+import { currentImageModel, getGptImage26Size, gptImage26Output } from '@/lib/gptImage26';
 import type { GenerateImageRequest } from '@/types';
 import { validateSeedanceDraft } from '@/lib/seedanceDraft';
 
@@ -53,8 +53,9 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body: GenerateRequestBody = await request.json();
-    const { model, prompt, aspectRatio = '1:1', resolution = '1K', numImages = 1, referenceImageUrls = [], sourceType, sourceId, nodeId } = body;
+    const { model: requestedModel, prompt, aspectRatio = '1:1', resolution = '1K', numImages = 1, referenceImageUrls = [], sourceType, sourceId, nodeId } = body;
 
+    const model = currentImageModel(requestedModel);
     const modelConfig = FAL_MODELS[model as keyof typeof FAL_MODELS];
     if (!modelConfig) return NextResponse.json({ error: 'Unknown model' }, { status: 400 });
     let draft: boolean;
@@ -356,11 +357,21 @@ export async function POST(request: NextRequest) {
     // Models with a custom `image_size` (Seedream, Qwen) scale the shared UI
     // tiers into their own total-pixel range, which lives on the pricing rule.
     const pricingRule = modelConfig.pricing as FalPricingRule | undefined;
-    const gptImage25Size = model === 'gpt-image-2-5' ? getGptImage25Size(aspectRatio, resolution) : null;
-    if (model === 'gpt-image-2-5' && !gptImage25Size) {
-      return NextResponse.json({ error: 'Invalid GPT Image 2.5 aspect ratio or resolution.' }, { status: 400 });
+    const isGptImage26 = model === 'gpt-image-2-6';
+    let outputSettings: ReturnType<typeof gptImage26Output> | undefined;
+    if (isGptImage26) {
+      try {
+        outputSettings = gptImage26Output(body.outputFormat);
+      } catch (error) {
+        return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+      }
     }
-    const { width, height } = gptImage25Size ?? (usesImageSize && pricingRule?.kind === 'custom-image-size'
+    const gptImageSize = isGptImage26
+      ? getGptImage26Size(aspectRatio, resolution, body.outputFormat ?? 'png') : null;
+    if (isGptImage26 && !gptImageSize) {
+      return NextResponse.json({ error: 'Invalid GPT Image 2.6 aspect ratio or resolution.' }, { status: 400 });
+    }
+    const { width, height } = gptImageSize ?? (usesImageSize && pricingRule?.kind === 'custom-image-size'
       ? getCustomImageSize(aspectRatio, resolution, pricingRule)
       : null) ?? getImageSize(aspectRatio, resolution);
 
@@ -368,6 +379,7 @@ export async function POST(request: NextRequest) {
 
     const baseInput: Record<string, unknown> = {
       prompt,
+      ...outputSettings,
       ...(usesAspectRatio
         ? { aspect_ratio: aspectRatio, ...(supportsResolution ? { resolution } : {}) }
         : usesImageSize
@@ -417,7 +429,13 @@ export async function POST(request: NextRequest) {
           node_id: nodeId,
           model,
           prompt,
-          parameters: { generationRunId: body.generationRunId, aspectRatio, resolution, endpoint, slotIndex: body.slotIndex },
+          parameters: {
+            generationRunId: body.generationRunId, aspectRatio, resolution, endpoint, slotIndex: body.slotIndex,
+            ...(outputSettings ? { outputFormat: outputSettings.output_format,
+              ...(outputSettings.output_format === 'gif' ? {
+                frameCount: outputSettings.frame_count, frameDurationMs: outputSettings.frame_duration_ms,
+              } : {}) } : {}),
+          },
           reference_image_urls: referenceImageUrls,
           media_type: 'image',
           media_url: '',

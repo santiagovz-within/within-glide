@@ -51,6 +51,7 @@ const MODEL_SUBTITLES: Record<string, string> = {
   'nano-banana-2-1': 'IMAGE GENERATION & EDITING (UP TO 4K)',
   'nano-banana-2': 'BEST & MOST CREATIVE MODEL',
   'gpt-image-2-5': 'HIGH QUALITY IMAGE GENERATION & EDITING',
+  'gpt-image-2-6': 'IMAGE GENERATION, EDITING & ANIMATED GIFS',
   'seedream-5': 'IMAGE GENERATION & EDITING (UP TO 2K)',
   'nano-banana-pro': 'VERY GOOD ALL-AROUND MODEL',
   'gpt-image-2': 'GOOD FOR TEXT & BRANDING DESIGN',
@@ -92,6 +93,7 @@ function ModelIcon({
     case 'seedream-5':
       return <ByteDance.Color size={size} />;
     case 'gpt-image-2-5':
+    case 'gpt-image-2-6':
     case 'gpt-image-2':
       return <OpenAI size={size} />;
     case 'qwen-image-3':

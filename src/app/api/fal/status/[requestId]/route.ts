@@ -121,8 +121,8 @@ export async function GET(
 
       if (mediaType === 'image') {
         const falResult = result.data as {
-          images?: Array<{ url: string }>;
-          image?: { url: string };
+          images?: Array<{ url: string; content_type?: string }>;
+          image?: { url: string; content_type?: string };
         };
         const imageUrl = falResult.images?.[0]?.url ?? falResult.image?.url;
 
@@ -146,7 +146,12 @@ export async function GET(
           throw new Error(`Could not download completed FAL image (${imageRes.status}).`);
         }
         const imageBuffer = await imageRes.arrayBuffer();
-        const contentType = imageRes.headers.get('content-type') ?? 'image/jpeg';
+        // Preserve GIF bytes and extension even if the CDN responds as octet-stream.
+        const signature = Buffer.from(imageBuffer).subarray(0, 6).toString('ascii');
+        const contentType = signature === 'GIF87a' || signature === 'GIF89a'
+          ? 'image/gif'
+          : falResult.images?.[0]?.content_type ?? falResult.image?.content_type
+            ?? imageRes.headers.get('content-type') ?? 'image/jpeg';
         const ext = contentType.split('/')[1]?.split(';')[0] ?? 'jpg';
         const objectPath = `${user.id}/${existingGeneration.id}.${ext}`;
         const gcsRef = await uploadMediaToGCS(imageBuffer, objectPath, contentType);

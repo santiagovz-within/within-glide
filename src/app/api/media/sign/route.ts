@@ -120,6 +120,10 @@ export async function POST(request: NextRequest) {
           return [key, { original: source }] as const;
         }
 
+        // Static thumbnails/variants would flatten an animated GIF on the canvas.
+        if (kind === 'image' && /\.gif$/i.test(path)) {
+          return [key, { original: await getSignedReadUrl(path) }] as const;
+        }
         const derivativePaths = mediaDerivativePaths(path, kind);
         const [original, thumbnail, poster] = await Promise.all([
           getSignedReadUrl(path),
