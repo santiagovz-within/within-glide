@@ -53,18 +53,21 @@ export const FAL_MODELS = {
     type: 'image' as const,
   },
   'seedream-5': {
+    // Keep the saved model ID: this entry now displays its full Pro name.
     endpoint: 'bytedance/seedream/v5/pro/text-to-image',
     editEndpoint: 'bytedance/seedream/v5/pro/edit',
     editImageParam: 'image_urls',
     usesImageSize: true,
     maxReferenceImages: 10,
-    // Seedream accepts custom sizes from 1 MP to 4 MP and bills 2x above 1536².
+    // Pro schema/pricing checked 2026-11-11. Published pricing is tentative;
+    // use it only as an estimate fallback when live Fal pricing is unavailable.
     pricing: {
       kind: 'custom-image-size',
-      minPixels: 1024 * 1024,
-      maxPixels: 2048 * 2048,
+      minPixels: 921_600,
+      maxPixels: 4_624_220,
       tierThresholdPixels: 1536 * 1536,
       tierMultiplier: 2,
+      estimatedUnitPriceUsd: 0.0675,
     },
     type: 'image' as const,
   },
@@ -399,7 +402,7 @@ export const MODELS: Record<string, ModelConfig> = {
   },
   'seedream-5': {
     id: 'seedream-5',
-    name: 'Seedream v5',
+    name: 'Seedream 5 Pro',
     provider: 'fal',
     type: 'image',
     supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '4:5', '21:9'],
@@ -669,8 +672,8 @@ export const MODELS: Record<string, ModelConfig> = {
 export const IMAGE_MODELS = [
   MODELS['gpt-image-2-5'],
   MODELS['nano-banana-2-1'],
-  MODELS['nano-banana-2'],
   MODELS['seedream-5'],
+  MODELS['nano-banana-2'],
   MODELS['nano-banana-pro'],
   MODELS['gpt-image-2'],
   MODELS['qwen-image-3'],

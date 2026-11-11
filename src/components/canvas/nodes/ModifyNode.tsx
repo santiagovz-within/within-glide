@@ -33,9 +33,9 @@ import { LayerizePanel } from './LayerizePanel';
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const MODIFY_MODELS = [
+  { id: 'seedream-5',      name: 'Seedream 5 Pro Edit' },
   { id: 'nano-banana-2',   name: 'Nano Banana 2 Edit' },
   { id: 'nano-banana-pro', name: 'Nano Banana Pro Edit' },
-  { id: 'seedream-5',      name: 'Seedream v5 Edit' },
   { id: 'qwen-image-3',    name: 'Qwen Image 3.0 Edit' },
 ];
 

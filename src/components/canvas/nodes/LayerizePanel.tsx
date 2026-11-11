@@ -248,6 +248,7 @@ export function LayerizePanel({ id, data, connectedImage, sourceSlotRef, updateD
   }
 
   return <div className={cn(styles.panel, 'nodrag nowheel nopan')}>
+    <div className={styles.heading}><span>Seedream 5 Pro</span></div>
     <div ref={sourceSlotRef} className={styles.sourceHeading}>
       <span>Source Image</span>
       {!connectedImage && <IconButton title={source ? 'Replace source image' : 'Upload source image'} disabled={busy || uploading} onClick={() => sourceInput.current?.click()}><ImagePlus size={14} /></IconButton>}

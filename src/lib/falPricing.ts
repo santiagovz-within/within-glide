@@ -28,6 +28,8 @@ export type FalPricingRule =
       kind: 'custom-image-size';
       tierThresholdPixels: number;
       tierMultiplier: number;
+      /** Published estimate fallback; completed-job billing still uses Fal. */
+      estimatedUnitPriceUsd?: number;
     } & CustomImageSizeBounds)
   | { kind: 'output-megapixels' }
   | { kind: 'topaz-image' }
@@ -279,7 +281,10 @@ export function estimateFalCost(
     return outputCount * ((promptTokens + referenceTokens) * rule.inputUsdPerMillion
       + imageTokens * rule.outputUsdPerMillion) / 1_000_000;
   }
-  if (!price || price.currency !== 'USD' || !positive(price.unitPrice)) return null;
+  const unitPrice = price?.currency === 'USD' && positive(price.unitPrice)
+    ? price.unitPrice
+    : rule.kind === 'custom-image-size' ? rule.estimatedUnitPriceUsd : undefined;
+  if (!positive(unitPrice)) return null;
   let billableUnits: number | null = null;
 
   switch (rule.kind) {
@@ -442,7 +447,7 @@ export function estimateFalCost(
   }
 
   if (!positive(billableUnits)) return null;
-  const cost = price.unitPrice * billableUnits;
+  const cost = unitPrice * billableUnits;
   return positive(cost) ? cost : null;
 }
 

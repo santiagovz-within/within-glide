@@ -51,7 +51,7 @@ const MODEL_SUBTITLES: Record<string, string> = {
   'nano-banana-2-1': 'IMAGE GENERATION & EDITING (UP TO 4K)',
   'nano-banana-2': 'BEST & MOST CREATIVE MODEL',
   'gpt-image-2-5': 'HIGH QUALITY IMAGE GENERATION & EDITING',
-  'seedream-5': 'EXCELLENT ALL-AROUND MODEL',
+  'seedream-5': 'IMAGE GENERATION & EDITING (UP TO 2K)',
   'nano-banana-pro': 'VERY GOOD ALL-AROUND MODEL',
   'gpt-image-2': 'GOOD FOR TEXT & BRANDING DESIGN',
   'qwen-image-3': 'GREAT TEXT RENDERING & GOOD IMAGE QUALITY',

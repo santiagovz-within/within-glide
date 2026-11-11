@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
         image_url: imageUrl,
         prompt: 'Return name and description in English.',
         image_size: 'auto',
+        output_format: 'png',
+        enhance_prompt_mode: 'standard',
         enable_safety_checker: true,
       },
       headers,
