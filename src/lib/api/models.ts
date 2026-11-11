@@ -126,6 +126,13 @@ export const FAL_MODELS = {
     pricing: { kind: 'fixed' },
     type: 'image' as const,
   },
+  'kling-4': {
+    endpoint: 'kling/v4/text-to-video',
+    imageToVideoEndpoint: 'kling/v4/image-to-video',
+    // Published rates checked 2026-11-11: https://fal.ai/models/kling/v4/text-to-video
+    pricing: { kind: 'video-seconds-rates', resolutionRatesUsd: { '720p': 0.157, '1080p': 0.235 } },
+    type: 'video' as const,
+  },
   'google-omni-flash': {
     endpoint: 'google/gemini-omni-flash/v1.1/text-to-video',
     imageToVideoEndpoint: 'google/gemini-omni-flash/v1.1/image-to-video',
@@ -477,6 +484,18 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 15,
   },
+  'kling-4': {
+    id: 'kling-4',
+    name: 'Kling v4',
+    provider: 'fal',
+    type: 'video',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+    supportedResolutions: ['1080p', '720p'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: false,
+    estimatedTimeSeconds: 120,
+  },
   'google-omni-flash': {
     id: 'google-omni-flash',
     name: 'Google Omni Flash 1.1',
@@ -663,6 +682,7 @@ export const VIDEO_MODELS = [
   MODELS['wan-3-prime'],
   MODELS['seedance-2-5'],
   MODELS['seedance-2'],
+  MODELS['kling-4'],
   MODELS['google-omni-flash'],
   MODELS['minimax-h3-max'],
   MODELS['flux-3'],
@@ -672,7 +692,7 @@ export const VIDEO_MODELS = [
 ];
 // The new endpoint-specific controls are currently implemented on the canvas node.
 export const CHAT_VIDEO_MODELS = VIDEO_MODELS.filter(
-  m => !['google-omni-flash', 'flux-3', 'minimax-h3', 'minimax-h3-max', 'seedance-2-5', 'wan-3-prime'].includes(m.id),
+  m => !['kling-4', 'google-omni-flash', 'flux-3', 'minimax-h3', 'minimax-h3-max', 'seedance-2-5', 'wan-3-prime'].includes(m.id),
 );
 export const UPSCALE_MODELS = Object.values(MODELS).filter(m => m.type === 'upscale');
 

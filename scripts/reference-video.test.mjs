@@ -22,6 +22,7 @@ function load(path, dependencies = {}) {
 const config = load('src/lib/api/referenceVideo.ts');
 const { buildReferenceVideoInput: build, REFERENCE_VIDEO_MODELS: models } = config;
 const expected = [
+  ['kling-4', 'kling/v4/reference-to-video', 'image_urls', 'video_urls', null],
   ['seedance-2-5', 'bytedance/seedance-2.5/reference-to-video', 'image_urls', 'video_urls', 'generate_audio'],
   ['seedance-2', 'bytedance/seedance-2.0/reference-to-video', 'image_urls', 'video_urls', 'generate_audio'],
   ['google-omni-flash', 'google/gemini-omni-flash/v1.1/reference-to-video', 'image_urls', 'reference_video_urls', null],
@@ -222,6 +223,7 @@ test('Tags remain tied to the same media after earlier references are removed or
 });
 
 for (const [model, expectedPrompt] of [
+  ['kling-4', 'Use @Image2 with @Video1 and @Image1.'],
   ['seedance-2-5', 'Use @Image2 with @Video1 and @Image1.'],
   ['seedance-2', 'Use @Image2 with @Video1 and @Image1.'],
   ['google-omni-flash', 'Use <IMAGE_REF_1> with <VIDEO_REF_0> and <IMAGE_REF_0>.'],
@@ -261,6 +263,7 @@ const pricingModels = load('src/lib/api/models.ts', {
   '@/lib/layerize': { LAYERIZE_ENDPOINT: 'fal-ai/qwen-image-layered' },
 });
 const basePrices = {
+  'kling-4': 0.235,
   'seedance-2-5': 0.0214, 'seedance-2': 0.014,
   'google-omni-flash': 0.10, 'minimax-h3-max': 0.08, 'wan-3-prime': 0.28,
 };
@@ -343,7 +346,7 @@ test('Nano Banana 2.1 estimates generation/edit tokens, prompt size, resolutions
   }
 });
 
-test('Generate button estimates survive unavailable/incomplete live pricing and prefer available live rates', () => {
+test('Generate button estimates survive unavailable pricing and apply live rates only to relative rules', () => {
   const pricing = load('src/lib/falPricing.ts');
   let state = { prices: {}, status: 'unavailable', load: async () => {} };
   const hook = load('src/lib/useFalCostEstimate.ts', {
@@ -360,7 +363,7 @@ test('Generate button estimates survive unavailable/incomplete live pricing and 
     assert.ok(fallback > 0, model.name);
     const live = config.getReferenceVideoEstimatePrice(model.endpoint);
     state = { ...state, status: 'ready', prices: { [model.endpoint]: { ...live, unitPrice: live.unitPrice * 2 } } };
-    assert.equal(hook.useFalCostEstimateValue(input), fallback * 2);
+    assert.equal(hook.useFalCostEstimateValue(input), fallback * (model.pricing.kind === 'video-seconds-rates' ? 1 : 2));
     state = { ...state, prices: {} };
     assert.equal(hook.useFalCostEstimateValue([input, input]), fallback * 2);
   }
@@ -417,7 +420,7 @@ test('Pricing metadata resolves saved GCS references before loading image/video 
 
 test('Reference metadata failures never display an incomplete total; per-second models need no metadata', () => {
   for (const referenceVideos of [[null], [{ width: 1, height: 1 }], [{ width: 1, height: 1, duration: NaN }]]) {
-    for (const model of ['seedance-2', 'seedance-2-5', 'minimax-h3-max']) {
+    for (const model of ['kling-4', 'seedance-2', 'seedance-2-5', 'minimax-h3-max']) {
       assert.equal(estimate(model, { referenceVideos }), null);
     }
   }
@@ -428,4 +431,113 @@ test('Reference metadata failures never display an incomplete total; per-second 
   assert.equal(formatFalCostEstimate(estimate('wan-3-prime', { resolution: '480p' })), '~$0.34');
   assert.equal(estimateFalCost(undefined, models[0].pricing, { endpoint: models[0].endpoint }), null);
   assert.equal(formatFalCostEstimate(null), null);
+});
+
+test('Kling v4 sits immediately above Omni in both canvas model menus', () => {
+  for (const menu of [pricingModels.VIDEO_MODELS, models]) {
+    const index = menu.findIndex(model => model.id === 'kling-4');
+    assert.ok(index >= 0);
+    assert.equal(menu[index + 1].id, 'google-omni-flash');
+  }
+  assert.equal(pricingModels.CHAT_VIDEO_MODELS.some(model => model.id === 'kling-4'), false);
+  assert.deepEqual(config.referenceDurationOptions(config.getReferenceVideoModel('kling-4')),
+    Array.from({ length: 28 }, (_, index) => index + 3));
+});
+
+test('Kling v4 estimates published rates for all modes without needing live pricing', () => {
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+  for (const mode of ['text', 'image', 'reference']) {
+    const endpoint = `kling/v4/${mode}-to-video`;
+    assert.ok(pricingModels.getFalPricingEndpointIds().includes(endpoint));
+    const rule = pricingModels.getFalPricingRule(endpoint);
+    for (const [resolution, rate] of [['720p', 0.157], ['1080p', 0.235]]) {
+      for (const duration of [3, 5, 30]) {
+        close(estimateFalCost(undefined, rule, { endpoint, resolution, duration }), duration * rate);
+      }
+      close(estimateFalCost(undefined, rule, { endpoint, resolution, duration: 5, outputCount: 2 }), 10 * rate);
+    }
+    assert.equal(estimateFalCost(undefined, rule, { endpoint, resolution: '4k', duration: 5 }), null);
+    assert.equal(estimateFalCost(undefined, rule, { endpoint, resolution: '720p', duration: 0 }), null);
+  }
+  for (const [resolution, rate] of [['720p', 0.094], ['1080p', 0.141]]) {
+    const clip = duration => ({ width: 1280, height: 720, duration });
+    // Input shorter than output still bills at least twice the output duration.
+    close(estimate('kling-4', { resolution, duration: 10, referenceVideos: [clip(3)] }), 20 * rate);
+    close(estimate('kling-4', { resolution, duration: 5, referenceVideos: [clip(8), clip(7)] }), 20 * rate);
+  }
+});
+
+function klingRoute() {
+  const submitted = [], saved = [];
+  const db = {
+    auth: { getUser: async () => ({ data: { user: { id: 'test-user' } } }) },
+    from(table) {
+      assert.equal(table, 'generations');
+      return { insert(row) {
+        saved.push(row);
+        return { select: () => ({ single: async () => ({ data: { id: 'generation-id' }, error: null }) }) };
+      } };
+    },
+  };
+  const { POST } = load('src/app/api/fal/generate/route.ts', {
+    'next/server': { NextResponse: { json: (value, init) => Response.json(value, init) } },
+    '@/lib/supabase/server': { createClient: async () => db },
+    '@fal-ai/client': { fal: { config() {}, queue: { submit: async (endpoint, request) => {
+      submitted.push({ endpoint, ...request }); return { request_id: 'request-id' };
+    } } } },
+    '@/lib/api/models': pricingModels,
+    '@/lib/api/referenceVideo': config,
+    '@/lib/generationAttempt': { registerGenerationAttempt: async () => {} },
+    '@/lib/falStorage': { getFalStorageHeaders: async () => ({ 'test-storage': 'preserved' }) },
+    '@/lib/falErrors': { describeFalError: String },
+    '@/lib/falPricing': {}, '@/lib/gptImage25': {},
+  });
+  return { submitted, saved, post: overrides => POST({ json: async () => ({
+    model: 'kling-4', prompt: 'A slow camera orbit.', aspectRatio: '21:9',
+    duration: 30, videoResolution: '720p', generateAudio: true,
+    sourceType: 'canvas', sourceId: 'flow', nodeId: 'node', ...overrides,
+  }) }) };
+}
+
+for (const mode of ['text', 'image', 'reference']) {
+  test(`Kling v4 ${mode}: route queues exact payload and persists the endpoint for polling`, async () => {
+    const route = klingRoute();
+    const overrides = mode === 'image'
+      ? { startFrameUrl: 'start.png', endFrameUrl: 'end.png', aspectRatio: '4:3', prompt: '' }
+      : mode === 'reference' ? { generationMode: 'reference-to-video', referenceDuration: 30,
+        referenceImageUrls: ['image.png'], referenceVideoUrls: ['video.mp4'], prompt: '@image1 follows @video1' } : {};
+    const response = await route.post(overrides);
+    assert.equal(response.status, 200);
+    const endpoint = `kling/v4/${mode}-to-video`;
+    assert.equal((await response.json()).endpoint, endpoint);
+    assert.equal(route.submitted[0].endpoint, endpoint);
+    assert.deepEqual(route.submitted[0].headers, { 'test-storage': 'preserved' });
+    assert.deepEqual(route.submitted[0].input, {
+      prompt: mode === 'image' ? '' : mode === 'reference' ? '@Image1 follows @Video1' : 'A slow camera orbit.',
+      duration: 30, resolution: '720p',
+      ...(mode === 'image' ? { start_image_url: 'start.png', end_image_url: 'end.png' } : { aspect_ratio: '21:9' }),
+      ...(mode === 'reference' ? { image_urls: ['image.png'], video_urls: ['video.mp4'] } : {}),
+    });
+    assert.equal(route.saved[0].parameters.endpoint, endpoint);
+    assert.equal(route.saved[0].fal_request_id, 'request-id');
+    assert.equal(route.saved[0].media_type, 'video');
+  });
+}
+
+test('Kling v4 rejects invalid requests before queue submission', async () => {
+  for (const overrides of [
+    ...[2, 31, 3.5, '5'].map(duration => ({ duration })),
+    { videoResolution: '4k' }, { aspectRatio: '4:3' }, { prompt: ' ' },
+    { endFrameUrl: 'end.png' }, { draft: true },
+    { generationMode: 'reference-to-video', referenceDuration: 31, referenceImageUrls: ['a.png'] },
+  ]) {
+    const route = klingRoute();
+    assert.equal((await route.post(overrides)).status, 400, JSON.stringify(overrides));
+    assert.equal(route.submitted.length, 0);
+    assert.equal(route.saved.length, 0);
+  }
+  const route = klingRoute();
+  assert.equal((await route.post({ duration: undefined, videoResolution: undefined })).status, 200);
+  assert.equal(route.submitted[0].input.duration, 5);
+  assert.equal(route.submitted[0].input.resolution, '1080p');
 });

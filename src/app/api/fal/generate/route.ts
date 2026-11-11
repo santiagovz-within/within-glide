@@ -110,12 +110,13 @@ export async function POST(request: NextRequest) {
       const isSeedance = model === 'seedance-2' || isSeedance25 || isSeedanceMini;
       const isOmni = model === 'google-omni-flash';
       const isKling = model === 'kling-3-pro';
+      const isKling4 = model === 'kling-4';
       const isFlux3 = model === 'flux-3';
       const isMinimaxH3Max = model === 'minimax-h3-max';
       const isMinimaxH3 = model === 'minimax-h3' || isMinimaxH3Max;
       const isWan = model === 'wan-3-prime';
       const minimaxName = isMinimaxH3Max ? 'MiniMax H3 Max' : 'MiniMax H3';
-      const defaultVideoResolution = isMinimaxH3Max ? '768P' : isMinimaxH3 ? '2K' : isKling ? '1080p' : '720p';
+      const defaultVideoResolution = isMinimaxH3Max ? '768P' : isMinimaxH3 ? '2K' : isKling || isKling4 ? '1080p' : '720p';
       const requestedVideoResolution = body.videoResolution
         ?? body.seedanceResolution
         ?? defaultVideoResolution;
@@ -126,6 +127,21 @@ export async function POST(request: NextRequest) {
       const duration = isSeedance
         ? Math.min(isSeedance25 ? 30 : 15, requestedDuration < 4 ? 5 : requestedDuration)
         : requestedDuration;
+
+      if (isKling4) {
+        if (!Number.isInteger(duration) || duration < 3 || duration > 30) {
+          return NextResponse.json({ error: 'Kling v4 duration must be an integer from 3 to 30 seconds.' }, { status: 400 });
+        }
+        if (!hasImage && !['16:9', '9:16', '1:1', '21:9'].includes(aspectRatio)) {
+          return NextResponse.json({ error: 'Kling v4 does not support that aspect ratio.' }, { status: 400 });
+        }
+        if (!hasImage && (typeof prompt !== 'string' || !prompt.trim())) {
+          return NextResponse.json({ error: 'Enter a prompt.' }, { status: 400 });
+        }
+        if (endFrameUrl && !hasImage) {
+          return NextResponse.json({ error: 'Connect a start frame to use an end frame with Kling v4.' }, { status: 400 });
+        }
+      }
 
       if (isOmni && !['16:9', '9:16'].includes(aspectRatio)) {
         return NextResponse.json(
@@ -162,7 +178,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const allowedResolutions = isFlux3 || isWan
+      const allowedResolutions = isFlux3 || isWan || isKling4
         ? ['720p', '1080p']
         : isMinimaxH3Max
           ? ['480P', '768P']
@@ -215,7 +231,15 @@ export async function POST(request: NextRequest) {
         : modelConfig.endpoint;
 
       const videoInput: Record<string, unknown> = { prompt };
-      if (isOmni) {
+      if (isKling4) {
+        Object.assign(videoInput, {
+          ...(!hasImage ? { aspect_ratio: aspectRatio } : {}),
+          duration,
+          resolution: videoResolution,
+          ...(startFrameUrl ? { start_image_url: startFrameUrl } : {}),
+          ...(endFrameUrl ? { end_image_url: endFrameUrl } : {}),
+        });
+      } else if (isOmni) {
         Object.assign(videoInput, {
           aspect_ratio: aspectRatio,
           duration,

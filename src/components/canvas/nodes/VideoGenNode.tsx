@@ -38,6 +38,7 @@ const LOCKED_RESOLUTIONS: Partial<Record<string, VideoResolution>> = {
 };
 
 const DURATION_OPTIONS = ['3s', '5s', '8s', '10s'];
+const KLING_4_DURATION_OPTIONS = Array.from({ length: 28 }, (_, index) => `${index + 3}s`);
 const SEEDANCE_DURATION_OPTIONS = ['4s', '5s', '8s', '10s', '15s'];
 const SEEDANCE_2_5_DURATION_OPTIONS = ['4s', '5s', '8s', '10s', '15s', '20s', '25s', '30s'];
 const SEEDANCE_MINI_DURATION_OPTIONS = ['4s', '5s', '8s', '10s'];
@@ -78,6 +79,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
 
   const isKling     = data.model === 'kling-3-pro';
+  const isKling4    = data.model === 'kling-4';
   const isSeedanceFull = data.model === 'seedance-2';
   const isSeedance25 = data.model === 'seedance-2-5';
   const draftMode = isSeedance25 && data.draftMode === true;
@@ -94,7 +96,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const resolutionOptions = (lockedResolution
     ? [lockedResolution]
     : modelConfig.supportedResolutions) as VideoResolution[];
-  const durationOptions = isSeedanceFull
+  const durationOptions = isKling4
+    ? KLING_4_DURATION_OPTIONS
+    : isSeedanceFull
     ? SEEDANCE_DURATION_OPTIONS
     : isSeedance25
       ? SEEDANCE_2_5_DURATION_OPTIONS
@@ -117,7 +121,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     ?? (storedResolution && resolutionOptions.includes(storedResolution as VideoResolution)
       ? storedResolution as VideoResolution
       : resolutionOptions[0]) ?? '720p';
-  const followsInputAspect = hasImage && (isKling || isMinimaxH3 || isWan);
+  const followsInputAspect = hasImage && (isKling || isKling4 || isMinimaxH3 || isWan);
   const supportsEndFrame = !isFlux3;
   const supportsAudio = isSeedance || isFlux3 || isKling || isWan;
 
@@ -208,7 +212,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     const modelConfig = VIDEO_MODELS.find(option => option.id === model);
     const supportedAspectRatios = modelConfig?.supportedAspectRatios ?? [];
     const supportedResolutions = modelConfig?.supportedResolutions as VideoResolution[] | undefined;
-    const nextDurationOptions = model === 'seedance-2'
+    const nextDurationOptions = model === 'kling-4'
+      ? KLING_4_DURATION_OPTIONS
+      : model === 'seedance-2'
       ? SEEDANCE_DURATION_OPTIONS
       : model === 'seedance-2-5'
         ? SEEDANCE_2_5_DURATION_OPTIONS

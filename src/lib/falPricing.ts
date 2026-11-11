@@ -48,6 +48,13 @@ export type FalPricingRule =
       audioMultiplier?: number;
     }
   | {
+      /** Published USD rates when the pricing API base tier is ambiguous. */
+      kind: 'video-seconds-rates';
+      resolutionRatesUsd: Record<string, number>;
+      referenceVideoRatesUsd?: Record<string, number>;
+      minimumOutputDurationMultiplier?: number;
+    }
+  | {
       /**
        * Token-billed video (Seedance). Fal counts
        * `width * height * duration * fps / 1024` tokens and prices them per
@@ -250,6 +257,18 @@ export function estimateFalCost(
 ): number | null {
   if (!rule) return null;
   const outputCount = positive(input.outputCount) ? input.outputCount : 1;
+  if (rule.kind === 'video-seconds-rates') {
+    if (!positive(input.duration)) return null;
+    const referenceDuration = referenceVideoDuration(input.referenceVideos);
+    if (referenceDuration === null) return null;
+    const hasVideoReferences = referenceDuration > 0;
+    const rate = (hasVideoReferences ? rule.referenceVideoRatesUsd : rule.resolutionRatesUsd)?.[input.resolution ?? ''];
+    if (!positive(rate)) return null;
+    const seconds = hasVideoReferences
+      ? Math.max(input.duration + referenceDuration, input.duration * (rule.minimumOutputDurationMultiplier ?? 1))
+      : input.duration;
+    return seconds * rate * outputCount;
+  }
   if (rule.kind === 'image-tokens') {
     const imageTokens = rule.outputTokens[input.resolution ?? '1K'];
     if (!positive(imageTokens)) return null;

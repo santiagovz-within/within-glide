@@ -63,6 +63,7 @@ const MODEL_SUBTITLES: Record<string, string> = {
   'minimax-h3-max': 'ULTRA FAST (VIDEOS IN AS LITTLE AS 3s)',
   'flux-3': 'EXCELLENT ALL-AROUND VIDEO MODEL',
   'kling-3-pro': 'VERY GOOD & FAST VIDEO MODEL',
+  'kling-4': 'VIDEO GENERATION UP TO 30s (720p / 1080p)',
   'minimax-h3': 'HIGH QUALITY AND FAST',
   'wan-3-prime': 'HIGH QUALITY WITH AUDIO (UP TO 1080p)',
   'google-omni-flash': 'EXCELLENT & FASTEST (UP TO 4K)',
@@ -103,6 +104,7 @@ function ModelIcon({
       return <Flux size={size} />;
     case 'google-omni-flash':
       return <Google.Color size={size} />;
+    case 'kling-4':
     case 'kling-3-pro':
       return <Kling.Color size={size} />;
     case 'flux-3':

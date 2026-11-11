@@ -51,7 +51,8 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const resolution = draftMode ? '480p' : data.videoResolution && config.resolutions.includes(data.videoResolution)
     ? data.videoResolution : config.defaultResolution;
   const pricesReferenceImages = config.pricing.kind === 'video-reference-tokens';
-  const pricesReferenceVideos = pricesReferenceImages || config.pricing.kind === 'seedance-reference';
+  const pricesReferenceVideos = pricesReferenceImages || config.pricing.kind === 'seedance-reference'
+    || config.pricing.kind === 'video-seconds-rates';
   const imageMetadata = useMediaMetadata(
     pricesReferenceImages ? references.images.map(reference => reference.url ?? '') : [], 'image',
   );
@@ -160,7 +161,9 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
           {isGenerating ? 'Generating…' : draftMode ? 'Generate draft' : 'Generate'}
           <FalCostEstimate input={costEstimateInput} unavailableText="Estimate unavailable"
-            description={config.id === 'minimax-h3-max'
+            description={config.id === 'kling-4'
+              ? 'Estimated USD cost using published Fal rates. Video references bill input plus output duration, with a minimum of twice the output duration.'
+              : config.id === 'minimax-h3-max'
               ? 'Estimated USD cost including the shared reference allowance. Video references use Fal’s 24 fps, 16:9 examples, capped at output duration; other frame rates and shapes may differ.'
               : 'Estimated USD cost using live Fal pricing when available, otherwise published endpoint rates. Auto aspect ratio uses a 16:9 estimate. Seedance includes input video duration and the video-reference discount.'} />
         </span>

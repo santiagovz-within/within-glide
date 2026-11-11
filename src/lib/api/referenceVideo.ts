@@ -86,6 +86,25 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
     videoHint: 'MP4/MOV, 2–15s combined, under 50 MB total; approximately 480p–720p.',
   },
   {
+    id: 'kling-4', name: 'Kling v4',
+    endpoint: 'kling/v4/reference-to-video',
+    estimatedUnitPrice: 0.235,
+    // Published rates checked 2026-11-11: https://fal.ai/models/kling/v4/reference-to-video
+    pricing: {
+      kind: 'video-seconds-rates',
+      resolutionRatesUsd: { '720p': 0.157, '1080p': 0.235 },
+      referenceVideoRatesUsd: { '720p': 0.094, '1080p': 0.141 },
+      minimumOutputDurationMultiplier: 2,
+    },
+    aspectRatios: ['auto', '16:9', '9:16', '1:1', '21:9'], resolutions: ['720p', '1080p'],
+    minDuration: 3, maxDuration: 30, defaultDuration: 5,
+    defaultAspectRatio: '16:9', defaultResolution: '1080p',
+    imageParam: 'image_urls', videoParam: 'video_urls',
+    maxImages: 10, maxVideos: 5, maxReferences: 15,
+    referenceHint: 'Refer to images as @Image1, @Image2 and videos as @Video1, @Video2.',
+    videoHint: 'Each clip must be 3–30 seconds, with at most 30 seconds combined.',
+  },
+  {
     id: 'google-omni-flash', name: 'Gemini Omni Flash 1.1',
     endpoint: 'google/gemini-omni-flash/v1.1/reference-to-video',
     estimatedUnitPrice: 0.10,
@@ -215,6 +234,6 @@ export function compileReferenceVideoPrompt(prompt: string, model: string, image
     }
     if (model === 'google-omni-flash') return `<${kind.toUpperCase()}_REF_${index}>`;
     const modality = kind === 'image' ? 'Image' : 'Video';
-    return model.startsWith('seedance') ? `@${modality}${index + 1}` : `${modality} ${index + 1}`;
+    return model.startsWith('seedance') || model === 'kling-4' ? `@${modality}${index + 1}` : `${modality} ${index + 1}`;
   });
 }
