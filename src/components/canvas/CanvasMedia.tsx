@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { useMediaLodStore } from '@/lib/stores/mediaLodStore';
 import { CanvasNodeFocusContext } from '@/components/canvas/mediaFocus';
+import { CanvasMediaPreviewButton } from './CanvasGenerationPreview';
 import {
   resolveMediaAsset,
   type ResolvedMediaAsset,
@@ -158,6 +159,7 @@ interface LodImageProps {
   onDoubleClick?: ImgHTMLAttributes<HTMLImageElement>['onDoubleClick'];
   onLoad?: ImgHTMLAttributes<HTMLImageElement>['onLoad'];
   onAspectRatio?: (ratio: number) => void;
+  preview?: boolean;
 }
 
 function LodImage({
@@ -174,6 +176,7 @@ function LodImage({
   onDoubleClick,
   onLoad,
   onAspectRatio,
+  preview = false,
 }: LodImageProps) {
   const settledZoom = useMediaLodStore(state => state.settledZoom);
   const cameraMoving = useMediaLodStore(state => state.cameraMoving);
@@ -346,6 +349,7 @@ function LodImage({
           }}
         />
       )}
+      {preview && <CanvasMediaPreviewButton url={source} type={kind} />}
     </div>
   );
 }
@@ -354,6 +358,7 @@ export interface CanvasImageProps extends Omit<ImgHTMLAttributes<HTMLImageElemen
   src: string;
   focused?: boolean;
   fill?: boolean;
+  preview?: boolean;
 }
 
 export function CanvasImage({
@@ -367,6 +372,7 @@ export function CanvasImage({
   onClick,
   onDoubleClick,
   onLoad,
+  preview = false,
 }: CanvasImageProps) {
   const nodeFocused = useContext(CanvasNodeFocusContext);
   const focused = focusedProp ?? nodeFocused;
@@ -384,6 +390,7 @@ export function CanvasImage({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onLoad={onLoad}
+      preview={preview}
     />
   );
 }
@@ -392,6 +399,7 @@ export interface CanvasVideoProps extends Omit<VideoHTMLAttributes<HTMLVideoElem
   src: string;
   focused?: boolean;
   fill?: boolean;
+  preview?: boolean;
 }
 
 export function CanvasVideo({
@@ -407,6 +415,7 @@ export function CanvasVideo({
   playsInline,
   onClick,
   onLoadedMetadata,
+  preview = false,
 }: CanvasVideoProps) {
   const nodeFocused = useContext(CanvasNodeFocusContext);
   const [locallyFocused, setLocallyFocused] = useState(false);
@@ -462,7 +471,7 @@ export function CanvasVideo({
       ref={wrapperRef}
       className={className}
       onPointerDown={() => {
-        if (focusedProp === undefined) setLocallyFocused(true);
+        if (!preview && focusedProp === undefined) setLocallyFocused(true);
       }}
       style={{
         position: 'relative',
@@ -488,8 +497,8 @@ export function CanvasVideo({
         ref={videoRef}
         src={focused ? asset?.original : undefined}
         preload={focused ? 'metadata' : 'none'}
-        autoPlay={focused && autoPlay}
-        controls={focused && controls}
+        autoPlay={focused && !preview && autoPlay}
+        controls={focused && !preview && controls}
         loop={loop}
         muted={muted}
         playsInline={playsInline}
@@ -511,6 +520,7 @@ export function CanvasVideo({
           visibility: focused ? 'visible' : 'hidden',
         }}
       />
+      {preview && <CanvasMediaPreviewButton url={src} type="video" />}
     </div>
   );
 }

@@ -227,7 +227,7 @@ export function VideoUpscaleNode({ data, selected, id }: NodeProps & { data: Vid
           <div className={glassStyles.mediaFrame}>
             <CanvasVideo
               src={data.videoUrl}
-              controls
+              preview
               className="w-full block nodrag"
               style={{ height: 'auto' }}
             />

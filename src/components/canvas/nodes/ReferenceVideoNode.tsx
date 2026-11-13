@@ -271,7 +271,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
       )}
       <GenerationPreview pending={isGenerating || data.status === 'processing'} failed={hasFailure}
         resultSrc={displayVideoUrl} kind="video" aspectRatio={videoAspect}>
-        {displayVideoUrl && <div className={glassStyles.mediaFrame}><CanvasVideo src={displayVideoUrl} controls className="w-full block nodrag" style={{ aspectRatio: videoAspect }} /></div>}
+        {displayVideoUrl && <div className={glassStyles.mediaFrame}><CanvasVideo src={displayVideoUrl} preview className="w-full block nodrag" style={{ aspectRatio: videoAspect }} /></div>}
       </GenerationPreview>
       <TypedHandle type="source" position={Position.Right} id="video" portType="video"
         connected={edges.some(edge => edge.source === id && edge.sourceHandle === 'video')} />

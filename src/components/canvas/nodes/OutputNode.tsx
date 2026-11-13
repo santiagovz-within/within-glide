@@ -86,13 +86,14 @@ export function OutputNode({ data, selected, id }: NodeProps & { data: OutputNod
           {mediaType === 'video' ? (
             <CanvasVideo
               src={mediaUrl}
-              controls
+              preview
               className="w-full block"
               style={{ height: 'auto' }}
             />
           ) : (
             <CanvasImage
               src={mediaUrl}
+              preview
               alt="Output"
               className="w-full block"
               draggable={false}

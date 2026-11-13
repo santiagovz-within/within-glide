@@ -1227,7 +1227,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
               >
                 {data.outputImageUrl && (
                   <div className={glassStyles.mediaFrame}>
-                    <CanvasImage src={data.outputImageUrl} alt="Modified" className="w-full block nodrag" style={{ height: 'auto' }} />
+                    <CanvasImage src={data.outputImageUrl} preview alt="Modified" className="w-full block nodrag" style={{ height: 'auto' }} />
                   </div>
                 )}
               </GenerationPreview>
@@ -1319,7 +1319,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
               >
                 {data.outputImageUrl && (
                   <div className={glassStyles.mediaFrame}>
-                    <CanvasImage src={data.outputImageUrl} alt="Expanded" className="w-full block nodrag" style={{ height: 'auto' }} />
+                    <CanvasImage src={data.outputImageUrl} preview alt="Expanded" className="w-full block nodrag" style={{ height: 'auto' }} />
                   </div>
                 )}
               </GenerationPreview>
@@ -1432,7 +1432,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           >
             {hasVideoOutput && (
               <div className={glassStyles.mediaFrame}>
-                <CanvasVideo src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+                <CanvasVideo src={data.outputVideoUrl!} preview className="w-full block nodrag" style={{ height: 'auto' }} />
               </div>
             )}
           </GenerationPreview>

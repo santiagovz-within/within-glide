@@ -159,6 +159,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
           <div className={cn(glassStyles.mediaFrame, glassStyles.mediaCheckered)}>
             <CanvasImage
               src={data.outputImageUrl}
+              preview
               alt="Background removed"
               className="w-full block"
               style={{ height: 'auto' }}

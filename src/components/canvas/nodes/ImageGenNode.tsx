@@ -749,6 +749,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
                   <>
                     <CanvasImage
                       src={url}
+                      preview
                       alt={`Generated ${i + 1}`}
                       className="w-full h-full object-cover nodrag"
                       fill

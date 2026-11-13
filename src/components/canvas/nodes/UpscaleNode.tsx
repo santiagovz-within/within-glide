@@ -1,6 +1,7 @@
 'use client';
 
 import { GenerationPreview } from './GenerationPreview';
+import { useCanvasGenerationPreview } from '../CanvasGenerationPreview';
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Maximize2, Download } from 'lucide-react';
@@ -27,6 +28,8 @@ type Dims = { w: number; h: number };
 
 function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl: string }) {
   const [pct, setPct] = useState(50);
+  const openPreview = useCanvasGenerationPreview();
+  const pointerStart = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const [beforeDims, setBeforeDims] = useState<Dims | null>(null);
@@ -53,8 +56,24 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
       <div
         ref={containerRef}
         className="relative overflow-hidden select-none nodrag"
-        style={{ cursor: 'col-resize' }}
-        onMouseDown={(e) => { dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
+        style={{ cursor: 'col-resize', pointerEvents: 'auto' }}
+        role="button"
+        tabIndex={0}
+        aria-label="View upscaled image details"
+        onMouseDown={(e) => { pointerStart.current = e.clientX; dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
+        onClick={(event) => {
+          if (Math.abs(event.clientX - pointerStart.current) < 4) {
+            event.stopPropagation();
+            openPreview?.(afterUrl, 'image');
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            openPreview?.(afterUrl, 'image');
+          }
+        }}
       >
         {/* After image — sets the container height */}
         <CanvasImage

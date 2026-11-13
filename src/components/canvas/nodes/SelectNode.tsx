@@ -90,9 +90,9 @@ export function SelectNode({ data, selected, id }: NodeProps & { data: SelectNod
         }}
       >
         {mediaType === 'video' ? (
-          <CanvasVideo src={currentUrl} controls className="w-full block" style={{ height: 'auto' }} />
+          <CanvasVideo src={currentUrl} preview className="w-full block" style={{ height: 'auto' }} />
         ) : (
-          <CanvasImage src={currentUrl} alt="Selected" className="w-full block" draggable={false} style={{ height: 'auto' }} />
+          <CanvasImage src={currentUrl} preview alt="Selected" className="w-full block" draggable={false} style={{ height: 'auto' }} />
         )}
       </div>
 

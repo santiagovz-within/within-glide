@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { X, Download, Trash2 } from 'lucide-react';
 import type { Generation } from '@/types';
 import { formatDate } from '@/lib/utils/date';
@@ -18,7 +18,9 @@ function formatFalCostUsd(value: number | null | undefined): string | null {
   }).format(value);
 }
 
-function getFalCostUsd(generation: Generation): number | null | undefined {
+export type GenerationDetails = Pick<Generation, 'media_url' | 'media_type'> & Partial<Generation>;
+
+function getFalCostUsd(generation: GenerationDetails): number | null | undefined {
   if (generation.fal_cost_usd !== null && generation.fal_cost_usd !== undefined) {
     return generation.fal_cost_usd;
   }
@@ -30,14 +32,18 @@ function getFalCostUsd(generation: Generation): number | null | undefined {
   return typeof costUsd === 'number' ? costUsd : null;
 }
 
-export function GenerationModal({
+export function GenerationModal<T extends GenerationDetails>({
   generation,
   onClose,
   onDelete,
+  detailsStatus,
+  deleting = false,
 }: {
-  generation: Generation;
+  generation: T;
   onClose: () => void;
-  onDelete: (g: Generation) => void;
+  onDelete?: (g: T) => void;
+  detailsStatus?: ReactNode;
+  deleting?: boolean;
 }) {
   const isVideo = generation.media_type === 'video';
   const [expanded, setExpanded] = useState(false);
@@ -46,7 +52,9 @@ export function GenerationModal({
 
   useEffect(() => {
     let cancelled = false;
-    resolveMediaUrl(generation.media_url).then(url => { if (!cancelled) setMediaUrl(url); });
+    resolveMediaUrl(generation.media_url)
+      .then(url => { if (!cancelled) setMediaUrl(url); })
+      .catch(() => { if (!cancelled) setMediaUrl(generation.media_url); });
     return () => { cancelled = true; };
   }, [generation.media_url]);
 
@@ -63,9 +71,9 @@ export function GenerationModal({
   const falCost = formatFalCostUsd(getFalCostUsd(generation));
 
   const details = [
-    { label: 'Model',  value: generation.model },
+    ...(generation.model ? [{ label: 'Model', value: generation.model }] : []),
     { label: 'Type',   value: generation.media_type },
-    { label: 'Date',   value: formatDate(generation.created_at) },
+    ...(generation.created_at ? [{ label: 'Date', value: formatDate(generation.created_at) }] : []),
     ...(falCost ? [{ label: 'Final cost', value: falCost, icon: '$' }] : []),
     ...(generation.width && generation.height
       ? [{ label: 'Size', value: `${generation.width} × ${generation.height}` }]
@@ -80,9 +88,11 @@ export function GenerationModal({
       aria-label="Generation details"
       tabIndex={-1}
       onKeyDown={(event) => {
+        // Keep canvas shortcuts (including Delete) outside the dialog.
+        event.stopPropagation();
         if (event.key === 'Escape') onClose();
         if (event.key === 'Tab') {
-          const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button, video[controls]');
+          const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), video[controls]');
           if (!controls?.length) return;
           const first = controls[0];
           const last = controls[controls.length - 1];
@@ -152,12 +162,14 @@ export function GenerationModal({
           {/* Model + date */}
           <div>
             <h2 className="text-lg font-semibold leading-tight" style={{ color: 'var(--color-white)' }}>
-              {generation.model}
+              {generation.model ?? (isVideo ? 'Video' : 'Image')}
             </h2>
-            <p className="text-sm mt-1" style={{ color: 'var(--color-white-muted)' }}>
+            {generation.created_at && <p className="text-sm mt-1" style={{ color: 'var(--color-white-muted)' }}>
               {formatDate(generation.created_at)}
-            </p>
+            </p>}
           </div>
+
+          {detailsStatus && <div role="status" className="text-sm" style={{ color: 'var(--color-white-muted)' }}>{detailsStatus}</div>}
 
           {/* Prompt */}
           {fullPrompt && (
@@ -216,20 +228,21 @@ export function GenerationModal({
         </div>
 
         {/* Panel bottom bar — delete */}
-        <div
+        {onDelete && <div
           className="px-5 py-4"
           style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
         >
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(generation); }}
+            disabled={deleting}
             className="flex items-center justify-center gap-2 w-full py-2.5 rounded-full text-sm font-semibold transition-opacity hover:opacity-85"
             style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', cursor: 'pointer' }}
             title="Delete"
           >
             <Trash2 size={14} />
-            Delete
+            {deleting ? 'Deleting…' : 'Delete'}
           </button>
-        </div>
+        </div>}
       </div>
     </div>
   );

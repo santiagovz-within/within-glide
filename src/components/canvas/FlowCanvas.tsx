@@ -22,6 +22,7 @@ import { useFlowStore } from '@/lib/stores/flowStore';
 import { useMediaLodStore } from '@/lib/stores/mediaLodStore';
 import { useThemeStore } from '@/lib/stores/themeStore';
 import { PromptNode } from './nodes/PromptNode';
+import { CanvasGenerationPreviewProvider } from './CanvasGenerationPreview';
 import { ImageInputNode } from './nodes/ImageInputNode';
 import { ImageToPromptNode } from './nodes/ImageToPromptNode';
 import { ImageGenNode } from './nodes/ImageGenNode';
@@ -1242,6 +1243,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
   const selectedCount = nodes.filter((n) => n.selected && n.type !== 'groupNode').length;
 
   return (
+    <CanvasGenerationPreviewProvider readOnly={readOnly}>
     <div
       ref={reactFlowWrapper}
       className="w-full h-full relative"
@@ -1328,5 +1330,6 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         />
       )}
     </div>
+    </CanvasGenerationPreviewProvider>
   );
 }

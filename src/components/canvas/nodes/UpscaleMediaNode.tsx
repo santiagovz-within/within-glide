@@ -1,6 +1,7 @@
 'use client';
 
 import { GenerationPreview } from './GenerationPreview';
+import { useCanvasGenerationPreview } from '../CanvasGenerationPreview';
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Zap, Maximize2, Download, Film, X, RefreshCw, Check, AlertCircle } from 'lucide-react';
@@ -48,6 +49,8 @@ function delay(ms: number): Promise<void> {
 
 function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl: string }) {
   const [pct, setPct] = useState(50);
+  const openPreview = useCanvasGenerationPreview();
+  const pointerStart = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const [beforeDims, setBeforeDims] = useState<Dims | null>(null);
@@ -77,8 +80,24 @@ function ComparisonSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl
       <div
         ref={containerRef}
         className="relative overflow-hidden select-none nodrag"
-        style={{ cursor: 'col-resize' }}
-        onMouseDown={(e) => { dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
+        style={{ cursor: 'col-resize', pointerEvents: 'auto' }}
+        role="button"
+        tabIndex={0}
+        aria-label="View upscaled image details"
+        onMouseDown={(e) => { pointerStart.current = e.clientX; dragging.current = true; move.current(e.clientX); e.preventDefault(); }}
+        onClick={(event) => {
+          if (Math.abs(event.clientX - pointerStart.current) < 4) {
+            event.stopPropagation();
+            openPreview?.(afterUrl, 'image');
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            event.stopPropagation();
+            openPreview?.(afterUrl, 'image');
+          }
+        }}
       >
         <CanvasImage
           src={afterUrl} alt="After" className="w-full block" style={{ height: 'auto' }}
@@ -197,7 +216,7 @@ function ImageResultCard({ result, onRetry }: { result: BulkItemResult; onRetry:
       >
         {result.status === 'completed' && result.outputUrl ? (
           <>
-            <CanvasImage src={result.outputUrl} alt="" focused={false} fill className="w-full h-full" style={{ objectFit: 'cover' }} />
+            <CanvasImage src={result.outputUrl} preview alt="" focused={false} fill className="w-full h-full" style={{ objectFit: 'cover' }} />
             <button
               onClick={() => downloadFromUrl(result.outputUrl!)}
               className="absolute bottom-1 right-1 nodrag"
@@ -232,8 +251,8 @@ function ImageResultCard({ result, onRetry }: { result: BulkItemResult; onRetry:
 }
 
 function VideoResultCard({
-  result, onRetry, onExpand,
-}: { result: BulkItemResult; onRetry: () => void; onExpand: () => void }) {
+  result, onRetry,
+}: { result: BulkItemResult; onRetry: () => void }) {
   return (
     <div className="relative overflow-hidden" style={{ aspectRatio: '1', borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}>
       <GenerationPreview
@@ -245,16 +264,17 @@ function VideoResultCard({
       >
         {result.status === 'completed' && result.outputUrl ? (
           <>
-            <div className="w-full h-full cursor-pointer" onClick={onExpand}>
+            <div className="w-full h-full">
               <CanvasVideo
                 src={result.outputUrl}
+                preview
                 focused={false}
                 muted
                 fill
                 className="w-full h-full"
-                style={{ objectFit: 'cover', pointerEvents: 'none' }}
+                style={{ objectFit: 'cover' }}
               />
-              <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
                 <Film size={14} color="rgba(255,255,255,0.85)" />
               </div>
             </div>
@@ -836,7 +856,6 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
               key={i}
               result={result}
               onRetry={() => retryItem(i)}
-              onExpand={() => result.outputUrl && setExpandedUrl(result.outputUrl)}
             />
           )
         )}
@@ -1048,7 +1067,7 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
           >
             {hasVideoOutput && (
               <div className={glassStyles.mediaFrame}>
-                <CanvasVideo src={data.outputVideoUrl!} controls className="w-full block nodrag" style={{ height: 'auto' }} />
+                <CanvasVideo src={data.outputVideoUrl!} preview className="w-full block nodrag" style={{ height: 'auto' }} />
                 <p className={glassStyles.mediaCaption}>Output ({upscaleFactor}x)</p>
               </div>
             )}

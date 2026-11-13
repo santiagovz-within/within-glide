@@ -106,12 +106,12 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
                 key={`${item.sourceNodeId}-${i}`}
                 className="relative overflow-hidden cursor-pointer group"
                 style={{ aspectRatio: '1 / 1', borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}
-                onClick={() => downloadFromUrl(item.url, `gallery-${i + 1}.${item.extension}`)}
-                title="Click to download"
+                title="View generation details"
               >
                 {item.type === 'video' ? (
                   <CanvasVideo
                     src={item.url}
+                    preview
                     focused={false}
                     className="w-full h-full"
                     style={{ objectFit: 'cover' }}
@@ -120,6 +120,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
                 ) : (
                   <CanvasImage
                     src={item.url}
+                    preview
                     alt={`Gallery ${i + 1}`}
                     focused={false}
                     className="w-full h-full object-cover"
@@ -129,7 +130,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
                 )}
                 {/* Hover overlay */}
                 <div
-                  className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   style={{ background: 'rgba(0,0,0,0.5)' }}
                 >
                   {item.type === 'video'

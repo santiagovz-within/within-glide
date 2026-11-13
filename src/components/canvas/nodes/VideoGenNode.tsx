@@ -580,7 +580,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           <div className={glassStyles.mediaFrame}>
             <CanvasVideo
               src={displayVideoUrl}
-              controls
+              preview
               className="w-full block nodrag"
               style={{ aspectRatio: videoAspect }}
             />
