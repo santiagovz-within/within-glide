@@ -51,7 +51,7 @@ export interface Generation {
   negative_prompt: string | null;
   parameters: Record<string, unknown>;
   reference_image_urls: string[] | null;
-  media_type: 'image' | 'video' | 'prompt';
+  media_type: 'image' | 'video' | 'audio' | 'prompt';
   media_url: string;
   thumbnail_url: string | null;
   width: number | null;
@@ -97,6 +97,7 @@ export type NodeType =
   | 'imageToPromptNode'
   | 'imageGenNode'
   | 'videoGenNode'
+  | 'musicGenNode'
   | 'referenceVideoNode'
   | 'videoInputNode'
   | 'videoUpscaleNode'
@@ -208,6 +209,23 @@ export interface ImageGenNodeData extends Record<string, unknown> {
   status: NodeStatus;
   errorMessage?: string;
   pendingRequests?: Array<{ requestId: string; endpoint: string; slotIndex?: number }>;
+  label?: string;
+}
+
+export interface MusicGenNodeData extends Record<string, unknown> {
+  model: string;
+  duration: number;
+  numSounds: number;
+  outputFormat: string;
+  prompt?: string;
+  promptConnected?: boolean;
+  generatedAudios?: string[];
+  generationSlots?: Array<string | null>;
+  generationHistory?: string[][];
+  generationErrors?: Array<GenerationFailure | null>;
+  pendingRequests?: Array<{ requestId: string; endpoint: string; slotIndex?: number }>;
+  status: NodeStatus;
+  errorMessage?: string;
   label?: string;
 }
 
@@ -414,6 +432,7 @@ export type NodeData =
   | ImageInputNodeData
   | ImageToPromptNodeData
   | ImageGenNodeData
+  | MusicGenNodeData
   | VideoGenNodeData
   | ReferenceVideoNodeData
   | VideoInputNodeData

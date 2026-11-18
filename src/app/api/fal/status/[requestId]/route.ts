@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { ApiError, fal } from '@fal-ai/client';
+import { musicFileType } from '@/lib/api/music';
+import { uploadToGCS } from '@/lib/gcs';
 import { getSignedReadUrl, isGcsRef, signGcsRef } from '@/lib/gcs';
 import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
 import { describeFalError, isTerminalFalError } from '@/lib/falErrors';
@@ -26,7 +28,8 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { requestId } = await params;
-    const mediaType = request.nextUrl.searchParams.get('mediaType') === 'image'
+    let mediaType = request.nextUrl.searchParams.get('mediaType') === 'audio'
+      ? 'audio' : request.nextUrl.searchParams.get('mediaType') === 'image'
       ? 'image'
       : 'video';
 
@@ -36,13 +39,18 @@ export async function GET(
 
     const { data: existingGeneration, error: lookupError } = await supabase
       .from('generations')
-      .select('id, media_url, status, error_message, parameters, created_at')
+      .select('id, media_url, media_type, status, error_message, parameters, created_at')
       .eq('fal_request_id', requestId)
       .eq('user_id', user.id)
       .maybeSingle();
 
     if (lookupError) {
       throw new Error(`Could not load queued generation: ${lookupError.message}`);
+    }
+    // Audio requests must belong to the signed-in user; use the stored kind.
+    if (existingGeneration?.media_type === 'audio') mediaType = 'audio';
+    if (mediaType === 'audio' && !existingGeneration) {
+      return NextResponse.json({ error: 'Music generation not found' }, { status: 404 });
     }
     const expireRecovery = async () => {
       if (!existingGeneration) return null;
@@ -117,6 +125,33 @@ export async function GET(
         const message = describeFalError(err);
         console.error(`[fal/status] ${endpoint} request ${requestId} failed: ${message}`);
         return await failGeneration(supabase, user.id, requestId, message);
+      }
+
+      if (mediaType === 'audio' && existingGeneration) {
+        const audioResult = result.data as { audio?: { url: string }; audios?: Array<{ url: string }> };
+        const url = audioResult.audios?.[0]?.url ?? audioResult.audio?.url;
+        if (!url) return await failGeneration(supabase, user.id, requestId, 'FAL returned no audio URL.');
+        const response = await fetch(url);
+        if (!response.ok) {
+          if ([404, 410].includes(response.status)) {
+            const expired = await expireRecovery();
+            if (expired) return expired;
+          }
+          throw new Error(`Could not download completed music (${response.status}).`);
+        }
+        const format = String((storedParameters as Record<string, unknown>)?.outputFormat ?? 'mp3_44100_128');
+        const { extension, contentType } = musicFileType(format);
+        const objectPath = `${user.id}/${existingGeneration.id}.${extension}`;
+        const gcsRef = await uploadToGCS(await response.arrayBuffer(), objectPath, contentType);
+        const signedUrl = await getSignedReadUrl(objectPath);
+        const billing = await getFalBillingColumns(endpoint, result.billableUnits);
+        const { error } = await supabase.from('generations').update({
+          media_url: gcsRef, status: 'completed', parameters: mergeFalBillingParameters(storedParameters, billing),
+        }).eq('id', existingGeneration.id).eq('user_id', user.id);
+        if (error) throw new Error(`Could not save completed music: ${error.message}`);
+        await persistFalBillingBestEffort(billing, columns => supabase.from('generations')
+          .update(columns).eq('id', existingGeneration.id).eq('user_id', user.id), `music ${existingGeneration.id}`);
+        return NextResponse.json({ status: 'completed', mediaUrls: [signedUrl], generationId: existingGeneration.id });
       }
 
       if (mediaType === 'image') {

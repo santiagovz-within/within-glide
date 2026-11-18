@@ -12,6 +12,7 @@ function load(path, dependencies = {}) {
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(name => name in dependencies ? dependencies[name]
     : name === '@/lib/flowClients' ? load('src/lib/flowClients.ts')
+    : name === '@/lib/api/music' ? load('src/lib/api/music.ts')
     : name === '@/lib/seedanceDraft' ? draftTools : require(name), loadedModule, loadedModule.exports);
   return loadedModule.exports;
 }
@@ -72,8 +73,9 @@ function completionRoute(db, submit = async () => ({ request_id: 'hd-request' })
 }
 const post = (handler, body = completionBody) => handler({ json: async () => body });
 
-for (const mode of ['text', 'image', 'reference']) {
-  test(`${mode} generation submits native draft=true at 480p and preserves original inputs`, async () => {
+for (const [mode, videoResolution] of ['text', 'image', 'reference'].flatMap(mode =>
+  ['1080p', '4k'].map(resolution => [mode, resolution]))) {
+  test(`${mode} generation submits ${videoResolution} through the existing endpoint and keeps drafts at 480p`, async () => {
     const db = database(); const submitted = [];
     const handler = load('src/app/api/fal/generate/route.ts', {
       'next/server': next, '@/lib/supabase/server': { createClient: async () => db },
@@ -86,7 +88,7 @@ for (const mode of ['text', 'image', 'reference']) {
       '@/lib/falStorage': { getFalStorageHeaders: async () => ({}) }, '@/lib/falErrors': { describeFalError: String },
       '@/lib/falPricing': {}, '@/lib/gptImage26': { currentImageModel: model => model },
     }).POST;
-    const body = { model: 'seedance-2-5', prompt: 'Original scene', draft: true, videoResolution: '1080p',
+    const body = { model: 'seedance-2-5', prompt: 'Original scene', draft: true, videoResolution,
       aspectRatio: '16:9', duration: 10, sourceType: 'canvas', sourceId: 'flow', nodeId: 'node',
       ...(mode === 'image' ? { startFrameUrl: 'start.png', endFrameUrl: 'end.png' } : {}),
       ...(mode === 'reference' ? { generationMode: 'reference-to-video', referenceDuration: 10,
@@ -103,8 +105,19 @@ for (const mode of ['text', 'image', 'reference']) {
     assert.equal((await post(handler, { ...body, draft: 'true' })).status, 400);
     assert.equal(submitted.length, 1);
     assert.equal((await post(handler, { ...body, draft: false })).status, 200);
-    assert.equal(submitted[1].input.resolution, '1080p');
+    assert.equal(submitted[1].endpoint, submitted[0].endpoint);
+    assert.equal(submitted[1].input.resolution, videoResolution);
+    assert.equal(submitted[1].input.duration, '10');
     assert.equal(submitted[1].input.draft, undefined);
+    assert.equal(db.rows[1].parameters.resolution, videoResolution);
+    assert.equal(db.rows[1].parameters.endpoint, submitted[1].endpoint);
+    if (mode === 'image') {
+      assert.equal(submitted[1].input.image_url, 'start.png');
+      assert.equal(submitted[1].input.end_image_url, 'end.png');
+    }
+    if (mode === 'reference') assert.deepEqual(submitted[1].input.video_urls, ['motion.mp4']);
+    assert.equal((await post(handler, { ...body, draft: false, videoResolution: '8k' })).status, 400);
+    assert.equal(submitted.length, 2);
   });
 }
 

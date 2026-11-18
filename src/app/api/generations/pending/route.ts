@@ -157,7 +157,7 @@ async function recover(trackedJobs: TrackedJob[]) {
       const flowData = flow?.flow_data as FlowData | undefined;
       const node = flowData?.nodes?.find((candidate) => candidate.id === generation.node_id);
       if (!flow || !node || !generation.fal_request_id) return [];
-      if (node.type !== 'imageGenNode' && node.type !== 'videoGenNode' && node.type !== 'referenceVideoNode') return [];
+      if (node.type !== 'imageGenNode' && node.type !== 'videoGenNode' && node.type !== 'referenceVideoNode' && node.type !== 'musicGenNode') return [];
       // Old processing rows must not resurrect a node whose batch has ended.
       let nodeData = node.data as Record<string, unknown>;
       const tracked = trackedJobs.find((job) => job.flowId === flow.id && job.nodeId === node.id);
@@ -205,7 +205,7 @@ async function recover(trackedJobs: TrackedJob[]) {
         ...(generation.media_type === 'video' ? { videoMetadata: videoGenerationMetadata(generation) } : {}),
         errorMessage: generation.error_message || undefined,
         endpoint,
-        mediaType: generation.media_type === 'image' ? 'image' as const : 'video' as const,
+        mediaType: generation.media_type === 'audio' ? 'audio' as const : generation.media_type === 'image' ? 'image' as const : 'video' as const,
         slotIndex: typeof parameters?.slotIndex === 'number'
           ? parameters.slotIndex
           : savedRequests.find((request) => request.requestId === generation.fal_request_id)?.slotIndex,

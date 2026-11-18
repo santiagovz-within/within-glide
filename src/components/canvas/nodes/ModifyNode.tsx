@@ -492,7 +492,8 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const sourceNode    = incomingEdge ? storeNodes.find(n => n.id === incomingEdge.source) : undefined;
   const sourceHandle  = incomingEdge?.sourceHandle ?? null;
 
-  const inputMediaType = getSourceMediaType(sourceNode, sourceHandle);
+  const sourceMediaType = getSourceMediaType(sourceNode, sourceHandle);
+  const inputMediaType = sourceMediaType === 'audio' ? null : sourceMediaType;
 
   // ── Image source resolution ────────────────────────────────────────────────
 

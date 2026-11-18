@@ -537,3 +537,8 @@ body {
   background-size: 10px 6px !important;
   padding-right: 28px !important;
 }
+
+:root {
+  --port-tint-audio: rgba(245, 158, 11, 0.15);
+  --port-icon-inactive-audio: #d99520;
+}

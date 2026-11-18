@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Grid, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Grid, Play, Music } from 'lucide-react';
 import { GenerationModal } from '@/components/chat/GenerationModal';
 import { useGalleryStore } from '@/lib/stores/galleryStore';
 import { createClient } from '@/lib/supabase/client';
@@ -102,7 +102,7 @@ export default function GalleryPage() {
             className="flex rounded-lg p-0.5 gap-0.5"
             style={{ background: 'var(--color-bg-elevated)', border: 'var(--border-default)' }}
           >
-            {(['all', 'image', 'video'] as const).map((f) => (
+            {(['all', 'image', 'video', 'audio'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => handleFilterChange(f)}
@@ -216,7 +216,11 @@ function GalleryThumbnail({ generation, onClick }: { generation: Generation; onC
       style={{ aspectRatio: '1', border: 'var(--border-default)' }}
       onClick={onClick}
     >
-      {isVideo ? (
+      {generation.media_type === 'audio' ? (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-3" style={{ color: '#f59e0b', background: 'var(--color-bg-elevated)' }}>
+          <Music size={32} /><span className="text-xs">Music</span>
+        </div>
+      ) : isVideo ? (
         <video src={generation.media_url} className="w-full h-full object-cover" preload="metadata" />
       ) : (
         <ProgressiveImage

@@ -3,6 +3,12 @@ const MIME_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/webp': 'webp',
   'image/gif': 'gif',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/ogg': 'opus',
+  'audio/pcm': 'pcm',
+  'audio/basic': 'ulaw',
+  'audio/x-alaw': 'alaw',
   'video/mp4': 'mp4',
   'video/webm': 'webm',
 };

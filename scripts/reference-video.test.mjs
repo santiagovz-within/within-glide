@@ -277,12 +277,16 @@ function estimate(modelId, changes = {}) {
   );
 }
 
-test('All reference models are registered for pricing and estimate every offered resolution/aspect ratio', () => {
+test('All reference models are registered for pricing and estimate resolutions with verified rates', () => {
   for (const model of models) {
     assert.ok(pricingModels.getFalPricingEndpointIds().includes(model.endpoint));
     for (const resolution of model.resolutions) {
       for (const aspectRatio of model.aspectRatios) {
         const cost = estimate(model.id, { resolution, aspectRatio });
+        if (model.id === 'seedance-2-5' && resolution === '4k') {
+          assert.equal(cost, null, 'Do not infer a 4K price from lower resolution rates.');
+          continue;
+        }
         assert.ok(Number.isFinite(cost) && cost > 0, `${model.id}: ${resolution} ${aspectRatio}`);
       }
     }
@@ -301,6 +305,21 @@ test('Seedance bills combined input/output seconds with the reference video disc
   assert.ok(estimate('seedance-2', { resolution: '480p' }) < estimate('seedance-2'));
   assert.ok(estimate('seedance-2', { resolution: '4k' }) > estimate('seedance-2', { resolution: '1080p' }));
   assert.equal(estimate('seedance-2', { generateAudio: false }), estimate('seedance-2', { generateAudio: true }));
+});
+
+test('Seedance 2.5 offers 4K for both nodes without borrowing a lower resolution price', () => {
+  assert.ok(pricingModels.VIDEO_MODELS.find(model => model.id === 'seedance-2-5').supportedResolutions.includes('4k'));
+  assert.ok(config.getReferenceVideoModel('seedance-2-5').resolutions.includes('4k'));
+  for (const mode of ['text', 'image', 'reference']) {
+    const endpoint = `bytedance/seedance-2.5/${mode}-to-video`;
+    const price = config.getReferenceVideoEstimatePrice(endpoint);
+    const rule = pricingModels.getFalPricingRule(endpoint);
+    for (const resolution of ['720p', '1080p', '4k']) {
+      const cost = estimateFalCost(price, rule, { endpoint, resolution, aspectRatio: '16:9', duration: 5 });
+      if (resolution === '4k') assert.equal(cost, null);
+      else assert.ok(cost > 0);
+    }
+  }
 });
 
 test('MiniMax pools image/video reference tokens and deducts the included allowance once', () => {

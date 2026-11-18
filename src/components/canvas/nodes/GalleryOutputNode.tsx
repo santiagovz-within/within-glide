@@ -3,6 +3,7 @@
 import { Position, type Node, type NodeProps } from '@xyflow/react';
 import { Grid, Download, Film, Image as ImageIcon } from 'lucide-react';
 import { useFlowStore } from '@/lib/stores/flowStore';
+import { AudioTrack } from './AudioTrack';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle } from './TypedHandle';
 import { downloadFromUrl } from '@/lib/utils/download';
@@ -14,7 +15,7 @@ import glassStyles from './ImageGenerationGlass.module.css';
 
 interface MediaItem {
   url: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio';
   extension: 'jpg' | 'mp4' | 'gif';
   sourceNodeId: string;
 }
@@ -22,7 +23,7 @@ interface MediaItem {
 async function downloadAll(items: MediaItem[]) {
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    await downloadFromUrl(item.url, `gallery-${i + 1}.${item.extension}`);
+    await downloadFromUrl(item.url, item.type === 'audio' ? `gallery-${i + 1}` : `gallery-${i + 1}.${item.extension}`);
     // small delay to avoid browser blocking multiple downloads
     await new Promise((r) => setTimeout(r, 300));
   }
@@ -91,7 +92,7 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
       {mediaItems.length === 0 ? (
         <div className={glassStyles.emptyState} style={{ minHeight: 120 }}>
           <Grid size={24} style={{ color: '#f59e0b', opacity: 0.3 }} />
-          Connect image or video nodes to populate the gallery
+          Connect image, video or music nodes to populate the gallery
         </div>
       ) : (
         <>
@@ -105,10 +106,10 @@ export function GalleryOutputNode({ selected, id }: NodeProps & { data: GalleryO
               <div
                 key={`${item.sourceNodeId}-${i}`}
                 className="relative overflow-hidden cursor-pointer group"
-                style={{ aspectRatio: '1 / 1', borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}
+                style={{ gridColumn: item.type === 'audio' ? '1 / -1' : undefined, aspectRatio: item.type === 'audio' ? undefined : '1 / 1', borderRadius: 6, background: 'rgba(255,255,255,0.06)' }}
                 title="View generation details"
               >
-                {item.type === 'video' ? (
+                {item.type === 'audio' ? <AudioTrack url={item.url} label={`Track ${i + 1}`} /> : item.type === 'video' ? (
                   <CanvasVideo
                     src={item.url}
                     preview

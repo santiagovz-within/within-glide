@@ -113,6 +113,14 @@ function NodeSelectControl({
     };
   }, [open]);
 
+  const availableAbove = Math.max(0, pos.triggerTop - 8 - 3 * pos.scale);
+  const availableBelow = Math.max(0, pos.viewportHeight - pos.top - 8);
+  const preferredSpace = placement === 'top' ? availableAbove : availableBelow;
+  const openAbove = preferredSpace >= 120 * pos.scale
+    ? placement === 'top'
+    : availableAbove > availableBelow;
+  const menuMaxHeight = Math.min(280, (openAbove ? availableAbove : availableBelow) / pos.scale);
+
   const triggerContent = (
     <>
       <span
@@ -182,7 +190,7 @@ function NodeSelectControl({
   ));
 
   return (
-    <div className="nodrag" style={{ position: 'relative' }}>
+    <div className="nodrag" style={{ position: 'relative', minWidth: 0 }}>
       <button
         ref={triggerRef}
         title={label}
@@ -242,13 +250,13 @@ function NodeSelectControl({
           )}
           style={{
             position: 'fixed',
-            top: placement === 'top' ? undefined : pos.top,
-            bottom: placement === 'top' ? pos.viewportHeight - pos.triggerTop + 3 : undefined,
-            maxHeight: placement === 'top' ? Math.max(80, pos.triggerTop - 16) : undefined,
+            top: openAbove ? undefined : pos.top,
+            bottom: openAbove ? pos.viewportHeight - pos.triggerTop + 3 * pos.scale : undefined,
+            maxHeight: menuMaxHeight,
             left: pos.left,
             width: pos.width,
             transform: `scale(${pos.scale})`,
-            transformOrigin: placement === 'top' ? 'bottom left' : 'top left',
+            transformOrigin: openAbove ? 'bottom left' : 'top left',
             background: isImageGenerationGlass ? undefined : 'var(--color-bg-surface)',
             borderRadius: 11,
             border: isImageGenerationGlass ? 'none' : '1px solid rgba(255,255,255,0.1)',

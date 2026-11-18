@@ -1,7 +1,7 @@
 /** Generation fields are reconciled separately from editable canvas content. */
 const GENERATION_KEYS = [
   'status', 'generationRunId', 'resolvedRequestIds', 'pendingRequests', 'pendingRequestId',
-  'pendingEndpoint', 'generationSlots', 'generationErrors', 'generatedImages',
+  'pendingEndpoint', 'generationSlots', 'generationErrors', 'generatedImages', 'generatedAudios',
   'generationHistory', 'videoUrl', 'videoHistory', 'videoHistoryMetadata', 'errorMessage', 'errorRequestId',
 ] as const;
 
@@ -55,7 +55,7 @@ export function mergeGenerationNodes<T extends { id: string; type?: string; data
     ...incoming.flatMap((node) => {
       const saved = current.get(node.id);
       if (!saved && previous.has(node.id)) return []; // Deleted in another tab.
-      if (!saved || !['imageGenNode', 'videoGenNode', 'referenceVideoNode'].includes(node.type ?? '')) return [node];
+      if (!saved || !['imageGenNode', 'videoGenNode', 'referenceVideoNode', 'musicGenNode'].includes(node.type ?? '')) return [node];
       return [{ ...node, data: mergeGenerationData(node.data, saved.data, previous.get(node.id)?.data ?? {}) }];
     }),
     ...stored.filter((node) => !previous.has(node.id) && !incomingIds.has(node.id)),

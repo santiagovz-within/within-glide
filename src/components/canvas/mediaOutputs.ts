@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import type {
   ImageGenNodeData,
+  MusicGenNodeData,
   ImageInputNodeData,
   MediaInputNodeData,
   ModifyNodeData,
@@ -17,7 +18,7 @@ import type {
 } from '@/types';
 import { PORT_TYPE_MAP } from './nodes/TypedHandle';
 
-export type CanvasMediaType = 'image' | 'video';
+export type CanvasMediaType = 'image' | 'video' | 'audio';
 
 /** Indexed outputs select a slot; the legacy `image` output still represents a batch. */
 export function getImageOutputIndex(handle: string | null | undefined): number | null {
@@ -30,6 +31,7 @@ const STATIC_MEDIA_SOURCE_HANDLES: Partial<
   Record<NodeType, Partial<Record<CanvasMediaType, string>>>
 > = {
   imageInputNode: { image: 'image' },
+  musicGenNode: { audio: 'audio' },
   imageGenNode: { image: 'image_0' },
   videoGenNode: { video: 'video' },
   referenceVideoNode: { video: 'video' },
@@ -48,7 +50,7 @@ export function getSourceMediaType(
   if (!node?.type || !sourceHandle) return null;
   if (node.type === 'imageGenNode' && getImageOutputIndex(sourceHandle) !== null) return 'image';
   const portType = PORT_TYPE_MAP[`${node.type}:${sourceHandle}:source`];
-  return portType === 'image' || portType === 'video' ? portType : null;
+  return portType === 'image' || portType === 'video' || portType === 'audio' ? portType : null;
 }
 
 function getIncomingMediaType(
@@ -95,6 +97,7 @@ export function getNodeMediaUrls(
   mediaType: CanvasMediaType,
   sourceHandle?: string | null,
 ): string[] {
+  if (mediaType === 'audio') return node.type === 'musicGenNode' ? (node.data as MusicGenNodeData).generatedAudios ?? [] : [];
   if (mediaType === 'image') {
     switch (node.type) {
       case 'imageInputNode':

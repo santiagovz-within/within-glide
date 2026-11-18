@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useStoreApi } from '@xyflow/react';
 import { Alibaba, Bfl, ByteDance, Fal, Flux, Gemini, Google, Kling, Krea, Minimax, NanoBanana, OpenAI, Qwen, Recraft, TopazLabs } from '@lobehub/icons';
-import { Box, ChevronDown } from 'lucide-react';
+import { AudioLines, Box, ChevronDown, Music } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import glassStyles from './ImageGenerationGlass.module.css';
 
@@ -23,6 +23,7 @@ interface ModelSelectProps {
   placement?: 'top' | 'bottom';
   label?: string;
   compact?: boolean;
+  disabled?: boolean;
 }
 
 interface DropdownPosition {
@@ -48,6 +49,8 @@ function measureDropdown(trigger: HTMLButtonElement): DropdownPosition {
 }
 
 const MODEL_SUBTITLES: Record<string, string> = {
+  'elevenlabs-music': 'MUSIC GENERATION · MP3, PCM & OPUS',
+  'sonilo-v1-1': 'MUSIC GENERATION · AAC / M4A',
   'nano-banana-2-1': 'IMAGE GENERATION & EDITING (UP TO 4K)',
   'nano-banana-2': 'BEST & MOST CREATIVE MODEL',
   'gpt-image-2-5': 'HIGH QUALITY IMAGE GENERATION & EDITING',
@@ -60,7 +63,7 @@ const MODEL_SUBTITLES: Record<string, string> = {
   'recraft-v4': 'DESIGN GRADE & BRAND AESTHETIC. STYLE REFERENCE ONLY',
   'flux-2-pro': 'DRAFT QUALITY',
   'seedance-2': 'THE BEST VIDEO MODEL',
-  'seedance-2-5': 'NEW BEST VIDEO MODEL (UP TO 1080p)',
+  'seedance-2-5': 'NEW BEST VIDEO MODEL (UP TO 4K)',
   'minimax-h3-max': 'ULTRA FAST (VIDEOS IN AS LITTLE AS 3s)',
   'flux-3': 'EXCELLENT ALL-AROUND VIDEO MODEL',
   'kling-3-pro': 'VERY GOOD & FAST VIDEO MODEL',
@@ -84,6 +87,10 @@ function ModelIcon({
   appearance?: ModelSelectProps['appearance'];
 }) {
   switch (modelId) {
+    case 'elevenlabs-music':
+      return <AudioLines size={size} />;
+    case 'sonilo-v1-1':
+      return <Music size={size} />;
     case 'nano-banana-2-1':
     case 'nano-banana-2':
     case 'nano-banana-pro':
@@ -141,7 +148,7 @@ function CanvasModelSelect(props: ModelSelectProps) {
   return <ModelSelectControl {...props} reactFlowStore={reactFlowStore} />;
 }
 
-function ModelSelectControl({ options, value, onChange, appearance = 'imageGenerationGlass', placement = 'bottom', label = 'Model', compact = false, size = 'default', reactFlowStore }: ModelSelectProps & { reactFlowStore?: ReturnType<typeof useStoreApi> }) {
+function ModelSelectControl({ options, value, onChange, appearance = 'imageGenerationGlass', placement = 'bottom', label = 'Model', compact = false, disabled = false, size = 'default', reactFlowStore }: ModelSelectProps & { reactFlowStore?: ReturnType<typeof useStoreApi> }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const [pos, setPos] = useState<DropdownPosition>({ top: 0, left: 0, width: 0, scale: 1, triggerTop: 0, viewportHeight: 0 });
@@ -152,7 +159,7 @@ function ModelSelectControl({ options, value, onChange, appearance = 'imageGener
 
   function openDropdown(e: React.MouseEvent) {
     e.stopPropagation();
-    if (!triggerRef.current) return;
+    if (disabled || !triggerRef.current) return;
     setPos(measureDropdown(triggerRef.current));
     setOpen((o) => !o);
   }
@@ -295,7 +302,8 @@ function ModelSelectControl({ options, value, onChange, appearance = 'imageGener
         ref={triggerRef}
         title={label}
         aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-expanded={open && !disabled}
+        disabled={disabled}
         aria-label={label}
         className={cn(
           'nodrag',
@@ -323,7 +331,7 @@ function ModelSelectControl({ options, value, onChange, appearance = 'imageGener
         ) : triggerContent}
       </button>
 
-      {open && typeof document !== 'undefined' && createPortal(
+      {open && !disabled && typeof document !== 'undefined' && createPortal(
         <div
           ref={dropdownRef}
           role="listbox"

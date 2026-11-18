@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
         : isMinimaxH3
           ? ['768P', '2K']
           : isSeedance25
-            ? ['480p', '720p', '1080p']
+            ? ['480p', '720p', '1080p', '4k']
             : isSeedanceMini
               ? ['720p']
             : isSeedance

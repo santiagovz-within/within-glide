@@ -29,6 +29,7 @@ import { ImageGenNode } from './nodes/ImageGenNode';
 import { ReferenceVideoNode } from './nodes/ReferenceVideoNode';
 import { getReferenceVideoModel } from '@/lib/api/referenceVideo';
 import { getReferenceVideoTaggableInputs, REFERENCE_IMAGE_HANDLE, REFERENCE_VIDEO_HANDLE } from './referenceVideoInputs';
+import { MusicGenNode } from './nodes/MusicGenNode';
 import { VideoGenNode } from './nodes/VideoGenNode';
 import { UpscaleNode } from './nodes/UpscaleNode';
 import { ModifyNode } from './nodes/ModifyNode';
@@ -62,6 +63,7 @@ const nodeTypes = {
   imageToPromptNode: ImageToPromptNode,
   imageGenNode: ImageGenNode,
   videoGenNode: VideoGenNode,
+  musicGenNode: MusicGenNode,
   referenceVideoNode: ReferenceVideoNode,
   upscaleNode: UpscaleNode,
   modifyNode: ModifyNode,
@@ -86,6 +88,7 @@ const DEFAULT_NODE_DATA: Record<NodeType, NodeData> = {
   imageInputNode:     {},
   imageToPromptNode:  { status: 'idle' },
   imageGenNode:       { model: 'nano-banana-2-1', aspectRatio: '1:1', resolution: '1K', numImages: 1, status: 'idle', inputImageUrls: [], imagePortCount: 0 },
+  musicGenNode:       { model: 'elevenlabs-music', duration: 30, numSounds: 1, outputFormat: 'mp3_44100_128', status: 'idle' },
   videoGenNode:       { model: 'wan-3-prime', aspectRatio: '16:9', duration: 5, status: 'idle' },
   referenceVideoNode: { model: 'wan-3-prime', aspectRatio: 'adaptive', referenceDuration: 5, videoResolution: '1080p', generateAudio: true, status: 'idle' },
   upscaleNode:        { model: 'seedvr2', scaleFactor: 2, status: 'idle' },
@@ -120,7 +123,7 @@ interface PendingConnection {
 const PASTE_CLEAR_FIELDS = new Set([
   'outputImageUrl', 'outputVideoUrl',
   'inputImageUrl',
-  'generatedImages',
+  'generatedImages', 'generatedAudios',
   'generationSlots',
   'pendingRequests',
   'startFrameUrl', 'endFrameUrl',
@@ -626,9 +629,9 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
       };
 
       if (targetNode.type === 'galleryOutputNode' && conn.targetHandle === 'input') {
-        return srcType === 'image' || srcType === 'video'
+        return srcType === 'image' || srcType === 'video' || srcType === 'audio'
           ? true
-          : reject('Output Gallery accepts image or video outputs');
+          : reject('Output Gallery accepts image, video or audio outputs');
       }
 
       // upscaleMediaNode accepts multiple image or video connections (mode-locked, capped)
@@ -726,8 +729,9 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
   );
 
   function getAutoConnectTargetHandle(sourceHandleId: string | null, targetNodeType: NodeType): string | null {
+    if (sourceHandleId === 'audio' && targetNodeType === 'galleryOutputNode') return 'input';
     if (sourceHandleId === 'prompt') {
-      if (targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode' || targetNodeType === 'referenceVideoNode' || targetNodeType === 'modifyNode') return 'prompt';
+      if (targetNodeType === 'musicGenNode' || targetNodeType === 'imageGenNode' || targetNodeType === 'videoGenNode' || targetNodeType === 'referenceVideoNode' || targetNodeType === 'modifyNode') return 'prompt';
     }
     if (sourceHandleId === 'image' || getImageOutputIndex(sourceHandleId) !== null) {
       if (targetNodeType === 'referenceVideoNode') return REFERENCE_IMAGE_HANDLE;

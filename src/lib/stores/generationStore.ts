@@ -5,13 +5,14 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type { NodeData, NodeType, VideoGenerationMetadata } from '@/types';
 
 export type BackgroundGenerationKind =
+  | 'music-generation'
   | 'image-generation'
   | 'video-generation';
 
 export interface BackgroundGenerationRequest {
   requestId: string;
   endpoint: string;
-  mediaType: 'image' | 'video';
+  mediaType: 'image' | 'video' | 'audio';
   slotIndex: number;
   status: 'pending' | 'completed' | 'failed';
   mediaUrl?: string;

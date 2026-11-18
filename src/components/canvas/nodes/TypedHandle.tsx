@@ -7,17 +7,18 @@ import {
   useUpdateNodeInternals,
   type HandleProps,
 } from '@xyflow/react';
-import { Image as ImageIcon, Film, Type, Minus } from 'lucide-react';
+import { Image as ImageIcon, Film, Type, Music, Minus } from 'lucide-react';
 import { useLayoutEffect, useState } from 'react';
 import { cn } from '@/lib/utils/cn';
 import glassStyles from './ImageGenerationGlass.module.css';
 
-export type PortType = 'text' | 'image' | 'video' | 'neutral';
+export type PortType = 'text' | 'image' | 'video' | 'audio' | 'neutral';
 
 export const PORT_COLORS: Record<PortType, string> = {
   text:    '#3b9eff',
   image:   '#a855f7',
   video:   '#34d399',
+  audio:   '#f59e0b',
   neutral: '#6b7280',
 };
 
@@ -27,12 +28,15 @@ export const PORT_TINTS: Record<PortType, string> = {
   text:    'var(--port-tint-text)',
   image:   'var(--port-tint-image)',
   video:   'var(--port-tint-video)',
+  audio:   'var(--port-tint-audio)',
   neutral: 'var(--port-tint-neutral)',
 };
 
 // Registry: `nodeType:handleId:source|target` → PortType
 // Used by FlowCanvas.isValidConnection to enforce type safety
 export const PORT_TYPE_MAP: Record<string, PortType> = {
+  'musicGenNode:prompt:target': 'text',
+  'musicGenNode:audio:source': 'audio',
   'promptNode:prompt:source':              'text',
   'imageInputNode:image:source':           'image',
   'imageGenNode:prompt:target':            'text',
@@ -77,6 +81,7 @@ export const PORT_TYPE_MAP: Record<string, PortType> = {
 };
 
 function PortIcon({ type, size = 9 }: { type: PortType; size?: number }) {
+  if (type === 'audio') return <Music size={size} />;
   if (type === 'image')   return <ImageIcon size={size} />;
   if (type === 'video')   return <Film size={size} />;
   if (type === 'neutral') return <Minus size={size} />;
@@ -181,7 +186,7 @@ export function TypedHandle({
                     ? glassStyles.handleIdleText
                     : portType === 'video'
                       ? glassStyles.handleIdleVideo
-                      : portType === 'neutral'
+                      : portType === 'neutral' || portType === 'audio'
                         ? glassStyles.handleIdleNeutral
                         : glassStyles.handleIdleImage,
                 ],

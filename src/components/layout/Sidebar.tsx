@@ -199,7 +199,7 @@ export function Sidebar() {
       {activeGenerations.length > 0 && (
         <div className={cn('max-h-48 overflow-y-auto px-2 pb-2 space-y-1.5', collapsed && 'px-1.5')}>
           {activeGenerations.map((generation) => {
-            const mediaType = generation.kind === 'image-generation' ? 'image' : 'video';
+            const mediaType = generation.kind === 'music-generation' ? 'audio' : generation.kind === 'image-generation' ? 'image' : 'video';
             return (
               <Link
                 key={generation.id}

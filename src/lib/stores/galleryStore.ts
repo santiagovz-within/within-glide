@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Generation } from '@/types';
 
-type GalleryFilter = 'all' | 'image' | 'video';
+type GalleryFilter = 'all' | 'image' | 'video' | 'audio';
 type GallerySort = 'newest' | 'oldest';
 
 interface GalleryStore {

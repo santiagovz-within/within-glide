@@ -40,18 +40,18 @@ export async function registerGenerationAttempt(
     }
     const node = existing;
     if (!node || node.id !== input.nodeId
-      || !['imageGenNode', 'videoGenNode', 'referenceVideoNode'].includes(node.type)) {
+      || !['imageGenNode', 'videoGenNode', 'referenceVideoNode', 'musicGenNode'].includes(node.type)) {
       throw new Error('The generation node could not be saved');
     }
     const data: Record<string, unknown> = { ...node.data, status: 'processing' as const, generationRunId: input.generationRunId };
     for (const key of ['pendingRequests', 'pendingRequestId', 'pendingEndpoint', 'resolvedRequestIds', 'errorMessage', 'errorRequestId']) {
       delete data[key];
     }
-    if (node.type === 'imageGenNode') {
-      const count = input.generationSlotCount ?? Number(node.data.numImages ?? 1);
+    if (node.type === 'imageGenNode' || node.type === 'musicGenNode') {
+      const count = input.generationSlotCount ?? Number(node.data.numImages ?? node.data.numSounds ?? 1);
       if (!Number.isInteger(count) || count < 1 || count > 4) throw new Error('Invalid generation batch size');
       data.generationSlots = Array<string | null>(count).fill(null);
-      data.generatedImages = [];
+      data[node.type === 'musicGenNode' ? 'generatedAudios' : 'generatedImages'] = [];
       delete data.generationErrors;
     }
     const nextNode = { ...node, data: data as typeof node.data };

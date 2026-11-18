@@ -197,6 +197,8 @@ export const FAL_MODELS = {
     imageToVideoEndpoint: 'bytedance/seedance-2.5/image-to-video',
     // Fal bills Seedance per 1000 video tokens ($0.0214 at 480p/720p, $0.0234 at
     // 1080p). The pricing API only exposes the base rate, so scale 1080p here.
+    // 4K is supported, but its token rate is not yet published (checked 2026-11-18).
+    // Leave its multiplier unset so estimates remain unavailable instead of guessing.
     pricing: { kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000, resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 0.0234 / 0.0214 } },
     type: 'video' as const,
   },
@@ -341,7 +343,7 @@ export function resolveUpscaleVariant(modelId: string, requested?: string): stri
 export function getFalPricingEndpointIds(): string[] {
   // Layer counts are model-selected, so price actual billable units without
   // presenting a fixed pre-generation estimate for Layerize.
-  const endpoints = new Set<string>([LAYERIZE_ENDPOINT, ...REFERENCE_VIDEO_MODELS.map(model => model.endpoint)]);
+  const endpoints = new Set<string>(['fal-ai/elevenlabs/music', 'sonilo/v1.1/text-to-music', LAYERIZE_ENDPOINT, ...REFERENCE_VIDEO_MODELS.map(model => model.endpoint)]);
   for (const config of Object.values(FAL_MODELS)) {
     endpoints.add(config.endpoint);
     if ('editEndpoint' in config) endpoints.add(config.editEndpoint);
@@ -614,7 +616,7 @@ export const MODELS: Record<string, ModelConfig> = {
     provider: 'fal',
     type: 'video',
     supportedAspectRatios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
-    supportedResolutions: ['720p', '1080p'],
+    supportedResolutions: ['720p', '1080p', '4k'],
     maxBatchSize: 1,
     supportsImageInput: true,
     supportsNegativePrompt: false,

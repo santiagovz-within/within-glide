@@ -12,6 +12,7 @@ function load(path, dependencies = {}) {
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(
     name => name in dependencies ? dependencies[name]
+      : name === '@/lib/api/music' ? load('src/lib/api/music.ts')
       : name === '@/lib/seedanceDraft' ? load('src/lib/seedanceDraft.ts') : require(name), loadedModule, loadedModule.exports,
   );
   return loadedModule.exports;
@@ -871,4 +872,41 @@ test('stale autosave preserves draft metadata together with the winning video re
   assert.deepEqual(merged.videoHistoryMetadata, current.videoHistoryMetadata);
   assert.deepEqual(merged.videoHistory, current.videoHistory);
   assert.equal(merged.prompt, 'Edited prompt');
+});
+
+test('Music batch preserves successful audio and per-slot failures after background completion', async () => {
+  const h = harness(job({ kind: 'music-generation', nodeType: 'musicGenNode', slotCount: 2, slots: [null, null],
+    requests: [{ requestId: 'good', endpoint: 'sonilo/v1.1/text-to-music', slotIndex: 0, mediaType: 'audio', status: 'pending' },
+      { requestId: 'bad', endpoint: 'sonilo/v1.1/text-to-music', slotIndex: 1, mediaType: 'audio', status: 'pending' }] }));
+  const saves = [];
+  globalThis.fetch = async (url, options) => {
+    if (options?.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({}); }
+    assert.ok(url.includes('mediaType=audio'));
+    return url.includes('good') ? json({ status: 'completed', mediaUrls: ['https://example.com/music.m4a'] })
+      : json({ status: 'failed', error: 'Prompt rejected' });
+  };
+  await h.progressBackgroundGenerations();
+  assert.deepEqual(saves[0].data.generatedAudios, ['https://example.com/music.m4a']);
+  assert.deepEqual(saves[0].data.generationSlots, ['https://example.com/music.m4a', null]);
+  assert.equal(saves[0].data.generationErrors[1].message, 'Prompt rejected');
+  assert.equal(saves[0].data.videoUrl, undefined);
+  assert.equal(saves[0].data.generatedImages, undefined);
+  assert.equal(h.state().jobs['flow:node'], undefined);
+});
+test('Music recovery restores the entire batch, then saves audio history on completion', async () => {
+  const h = harness(null);
+  const saves = [];
+  globalThis.fetch = async () => json({ generations: [recovered({ nodeType: 'musicGenNode', mediaType: 'audio', slotIndex: 1,
+    nodeData: { numSounds: 2, generationSlots: ['first.mp3', null], pendingRequests: [{ requestId: 'request' }] } })] });
+  await h.recoverBackgroundGenerations();
+  assert.equal(h.state().jobs['flow:node'].kind, 'music-generation');
+  assert.deepEqual(h.state().jobs['flow:node'].slots, ['first.mp3', null]);
+  globalThis.fetch = async (url, options) => {
+    if (options?.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({}); }
+    return json({ status: 'completed', mediaUrls: ['second.mp3'] });
+  };
+  await h.progressBackgroundGenerations();
+  assert.equal(h.state().jobs['flow:node'], undefined);
+  assert.deepEqual(saves[0].data.generatedAudios, ['first.mp3', 'second.mp3']);
+  assert.deepEqual(saves[0].data.generationHistory, [['first.mp3', 'second.mp3']]);
 });

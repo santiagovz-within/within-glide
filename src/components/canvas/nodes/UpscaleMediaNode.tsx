@@ -331,7 +331,8 @@ export function UpscaleMediaNode({ data, selected, id }: NodeProps & { data: Ups
   const firstSourceNode = firstIncomingEdge
     ? storeNodes.find((node) => node.id === firstIncomingEdge.source)
     : undefined;
-  const inputMediaType = getSourceMediaType(firstSourceNode, firstIncomingEdge?.sourceHandle);
+  const sourceMediaType = getSourceMediaType(firstSourceNode, firstIncomingEdge?.sourceHandle);
+  const inputMediaType = sourceMediaType === 'audio' ? null : sourceMediaType;
 
   const inputItems = incomingEdges.map((edge) => {
     const sourceNode = storeNodes.find((n) => n.id === edge.source);

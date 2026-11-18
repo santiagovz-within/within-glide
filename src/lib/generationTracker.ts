@@ -3,6 +3,7 @@
 import type {
   GenerationFailure,
   ImageGenNodeData,
+  MusicGenNodeData,
   NodeData,
   NodeType,
   VideoGenNodeData,
@@ -45,7 +46,7 @@ interface RecoveredGeneration {
   nodeData: NodeData;
   requestId: string;
   endpoint: string;
-  mediaType: 'image' | 'video';
+  mediaType: 'image' | 'video' | 'audio';
   slotIndex?: number;
   createdAt: string;
   runId?: string;
@@ -96,6 +97,7 @@ function submissionMetadata(job: BackgroundGenerationJob) {
 
 function propagateCompletedMedia(job: BackgroundGenerationJob, mediaUrl: string) {
   if (useFlowStore.getState().currentFlow?.id !== job.flowId) return;
+  if (job.kind === 'music-generation') return;
   if (job.kind === 'image-generation') {
     document.dispatchEvent(new CustomEvent('node:image-propagate', {
       detail: { sourceNodeId: job.nodeId, imageUrl: mediaUrl },
@@ -187,12 +189,12 @@ export function syncJobToCurrentFlow(job: BackgroundGenerationJob | undefined) {
   const expected = job.runId ?? job.requests.map((request) => request.requestId).sort().join(',');
   if (identity && identity !== expected && !unsavedAttempt) return;
   if (unsavedAttempt) applyNodeData(job.flowId, job.nodeId, { generationRunId: job.runId, resolvedRequestIds: undefined });
-  if (job.kind === 'image-generation') {
+  if (job.kind === 'image-generation' || job.kind === 'music-generation') {
     applyNodeData(job.flowId, job.nodeId, {
       status: 'processing',
       errorMessage: undefined,
       generationErrors: undefined,
-      generatedImages: job.slots.filter((url): url is string => !!url),
+      [job.kind === 'music-generation' ? 'generatedAudios' : 'generatedImages']: job.slots.filter((url): url is string => !!url),
       generationSlots: job.slots,
       pendingRequests: pendingNodeRequests(job),
     });
@@ -256,12 +258,12 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
   const completedMedia = job.slots.filter((url): url is string => !!url);
   const currentData = activeNodeData(job.flowId, job.nodeId);
 
-  if (job.kind === 'image-generation') {
+  if (job.kind === 'image-generation' || job.kind === 'music-generation') {
     const history = (currentData as ImageGenNodeData | undefined)?.generationHistory
       ?? job.imageHistory;
     return failed
       ? {
-          generatedImages: completedMedia,
+          [job.kind === 'music-generation' ? 'generatedAudios' : 'generatedImages']: completedMedia,
           generationSlots: job.slots,
           generationErrors: failuresBySlot(job),
           generationHistory: preserveImageBatch(history, completedMedia),
@@ -270,7 +272,7 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
           pendingRequests: undefined,
         }
       : {
-          generatedImages: completedMedia,
+          [job.kind === 'music-generation' ? 'generatedAudios' : 'generatedImages']: completedMedia,
           generationSlots: undefined,
           generationErrors: undefined,
           generationHistory: preserveImageBatch(history, completedMedia),
@@ -441,7 +443,7 @@ function failOrphanedJobs() {
         requests: [...job.requests, {
           requestId: 'incomplete-recovery',
           endpoint: '',
-          mediaType: job.kind === 'image-generation' ? 'image' : 'video',
+          mediaType: job.kind === 'music-generation' ? 'audio' : job.kind === 'image-generation' ? 'image' : 'video',
           slotIndex: missingSlots[0] ?? 0,
           status: 'failed',
           errorMessage: 'Part of this generation could not be recovered.',
@@ -535,6 +537,7 @@ export async function progressBackgroundGenerations() {
 }
 
 function recoveredKind(nodeType: NodeType): BackgroundGenerationKind | null {
+  if (nodeType === 'musicGenNode') return 'music-generation';
   if (nodeType === 'imageGenNode') return 'image-generation';
   if (nodeType === 'videoGenNode' || nodeType === 'referenceVideoNode') return 'video-generation';
   return null;
@@ -609,7 +612,7 @@ export async function recoverBackgroundGenerations() {
       if (!relevantGenerations.length) continue;
       const recoveredSlotCount = Math.max(
         relevantGenerations.length,
-        kind === 'image-generation' ? imageData.generationSlots?.length ?? imageData.numImages ?? 1 : 1,
+        kind !== 'video-generation' ? imageData.generationSlots?.length ?? Number(first.nodeData.numSounds ?? imageData.numImages ?? 1) : 1,
         ...relevantGenerations.map((generation) => (generation.slotIndex ?? 0) + 1),
       );
 
@@ -680,21 +683,23 @@ export async function recoverBackgroundGenerations() {
   }
 }
 
-export async function startTrackedImageGeneration(input: {
+async function startTrackedBatchGeneration(input: {
+  kind: 'image-generation' | 'music-generation';
   flowId: string;
   flowTitle: string;
   nodeId: string;
-  data: ImageGenNodeData;
+  data: ImageGenNodeData | MusicGenNodeData;
   endpoint: string;
   payload: Record<string, unknown>;
   slotCount: number;
 }) {
+  if (useGenerationStore.getState().jobs[generationJobId(input.flowId, input.nodeId)]) return;
   const job = initialJob({
     flowId: input.flowId,
     flowTitle: input.flowTitle,
     nodeId: input.nodeId,
-    nodeType: 'imageGenNode',
-    kind: 'image-generation',
+    nodeType: input.kind === 'music-generation' ? 'musicGenNode' : 'imageGenNode',
+    kind: input.kind,
     slotCount: input.slotCount,
     imageHistory: input.data.generationHistory ?? [],
     previousIdentity: generationIdentity(input.data),
@@ -726,13 +731,13 @@ export async function startTrackedImageGeneration(input: {
         useGenerationStore.getState().addRequest(job.id, {
           requestId: pending.requestId,
           endpoint: pending.endpoint,
-          mediaType: 'image',
+          mediaType: input.kind === 'music-generation' ? 'audio' : 'image',
           slotIndex,
           status: 'pending', lastVerifiedAt: Date.now(),
         });
         syncJobToCurrentFlow(useGenerationStore.getState().jobs[job.id]);
       } else {
-        throw new Error(result.details ?? result.error ?? 'Image generation returned no output.');
+        throw new Error(result.details ?? result.error ?? 'Generation returned no output.');
       }
     } catch (error) {
       if (!isCurrentJob(job)) return;
@@ -745,10 +750,10 @@ export async function startTrackedImageGeneration(input: {
             {
               requestId: `submission-${slotIndex}`,
               endpoint: '',
-              mediaType: 'image',
+              mediaType: input.kind === 'music-generation' ? 'audio' : 'image',
               slotIndex,
               status: 'failed',
-              errorMessage: error instanceof Error ? error.message : 'Image generation failed.',
+              errorMessage: error instanceof Error ? error.message : 'Generation failed.',
             },
           ],
         });
@@ -850,4 +855,12 @@ export async function startTrackedVideoGeneration(input: {
     ) ? 'processing' : 'submitting',
   });
   await progressBackgroundGenerations();
+}
+
+export function startTrackedImageGeneration(input: Omit<Parameters<typeof startTrackedBatchGeneration>[0], 'kind'> & { data: ImageGenNodeData }) {
+  return startTrackedBatchGeneration({ ...input, kind: 'image-generation' });
+}
+
+export function startTrackedMusicGeneration(input: Omit<Parameters<typeof startTrackedBatchGeneration>[0], 'kind'> & { data: MusicGenNodeData }) {
+  return startTrackedBatchGeneration({ ...input, kind: 'music-generation' });
 }

@@ -6,6 +6,7 @@ import type { Generation } from '@/types';
 import { formatDate } from '@/lib/utils/date';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { resolveMediaUrl } from '@/lib/utils/mediaUtils';
+import { AudioTrack } from '@/components/canvas/nodes/AudioTrack';
 import { ProgressiveImage } from '@/components/ui/ProgressiveImage';
 
 function formatFalCostUsd(value: number | null | undefined): string | null {
@@ -92,7 +93,7 @@ export function GenerationModal<T extends GenerationDetails>({
         event.stopPropagation();
         if (event.key === 'Escape') onClose();
         if (event.key === 'Tab') {
-          const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), video[controls]');
+          const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), video[controls], audio[controls]');
           if (!controls?.length) return;
           const first = controls[0];
           const last = controls[controls.length - 1];
@@ -112,7 +113,7 @@ export function GenerationModal<T extends GenerationDetails>({
         className="flex-1 flex items-center justify-center min-w-0 min-h-0 p-4 sm:p-10"
         onClick={(e) => e.stopPropagation()}
       >
-        {mediaUrl && (isVideo ? (
+        {mediaUrl && (generation.media_type === 'audio' ? <div className="w-full max-w-xl"><AudioTrack url={mediaUrl} /></div> : isVideo ? (
           <video
             src={mediaUrl}
             controls
