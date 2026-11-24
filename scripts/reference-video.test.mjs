@@ -283,10 +283,6 @@ test('All reference models are registered for pricing and estimate resolutions w
     for (const resolution of model.resolutions) {
       for (const aspectRatio of model.aspectRatios) {
         const cost = estimate(model.id, { resolution, aspectRatio });
-        if (model.id === 'seedance-2-5' && resolution === '4k') {
-          assert.equal(cost, null, 'Do not infer a 4K price from lower resolution rates.');
-          continue;
-        }
         assert.ok(Number.isFinite(cost) && cost > 0, `${model.id}: ${resolution} ${aspectRatio}`);
       }
     }
@@ -307,7 +303,7 @@ test('Seedance bills combined input/output seconds with the reference video disc
   assert.equal(estimate('seedance-2', { generateAudio: false }), estimate('seedance-2', { generateAudio: true }));
 });
 
-test('Seedance 2.5 offers 4K for both nodes without borrowing a lower resolution price', () => {
+test('Seedance 2.5 estimates 4K using published rates for all three endpoints', () => {
   assert.ok(pricingModels.VIDEO_MODELS.find(model => model.id === 'seedance-2-5').supportedResolutions.includes('4k'));
   assert.ok(config.getReferenceVideoModel('seedance-2-5').resolutions.includes('4k'));
   for (const mode of ['text', 'image', 'reference']) {
@@ -316,10 +312,21 @@ test('Seedance 2.5 offers 4K for both nodes without borrowing a lower resolution
     const rule = pricingModels.getFalPricingRule(endpoint);
     for (const resolution of ['720p', '1080p', '4k']) {
       const cost = estimateFalCost(price, rule, { endpoint, resolution, aspectRatio: '16:9', duration: 5 });
-      if (resolution === '4k') assert.equal(cost, null);
-      else assert.ok(cost > 0);
+      assert.ok(cost > 0);
+      if (resolution === '4k') {
+        assert.equal(formatFalCostEstimate(cost), '~$9.14');
+        const live = { ...price, unitPrice: price.unitPrice * 2 };
+        assert.equal(estimateFalCost(live, rule, { endpoint, resolution, aspectRatio: '16:9', duration: 5 }), cost * 2);
+      }
     }
   }
+});
+
+test('Seedance 2.5 4K uses its published video-reference rate and bills both durations', () => {
+  const cost = estimate('seedance-2-5', { resolution: '4k', duration: 5,
+    referenceVideos: [{ width: 1280, height: 720, duration: 8 }] });
+  const expected = 3840 * 2160 * 13 * 24 / 1024 / 1000 * 0.0058;
+  assert.ok(Math.abs(cost - expected) < 1e-10);
 });
 
 test('MiniMax pools image/video reference tokens and deducts the included allowance once', () => {

@@ -196,10 +196,9 @@ export const FAL_MODELS = {
     endpoint: 'bytedance/seedance-2.5/text-to-video',
     imageToVideoEndpoint: 'bytedance/seedance-2.5/image-to-video',
     // Fal bills Seedance per 1000 video tokens ($0.0214 at 480p/720p, $0.0234 at
-    // 1080p). The pricing API only exposes the base rate, so scale 1080p here.
-    // 4K is supported, but its token rate is not yet published (checked 2026-11-18).
-    // Leave its multiplier unset so estimates remain unavailable instead of guessing.
-    pricing: { kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000, resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 0.0234 / 0.0214 } },
+    // 1080p, $0.0094 at 4K). Scale the pricing API base rate by resolution.
+    // Source: https://fal.ai/models/bytedance/seedance-2.5/text-to-video (2026-11-24).
+    pricing: { kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000, resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 0.0234 / 0.0214, '4k': 0.0094 / 0.0214 } },
     type: 'video' as const,
   },
   'seedance-2-mini': {

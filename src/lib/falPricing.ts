@@ -72,6 +72,8 @@ export type FalPricingRule =
   | { kind: 'video-frame-megapixels' }
   | {
       kind: 'seedance-reference';
+      /** Resolution-specific video reference discount; defaults to 0.6. */
+      referenceVideoRateMultipliers?: Record<string, number>;
       fps: number;
       tokensPerUnit: number;
       resolutionRateMultipliers: Record<string, number>;
@@ -379,9 +381,12 @@ export function estimateFalCost(
       const referenceDuration = referenceVideoDuration(input.referenceVideos);
       const rateMultiplier = rule.resolutionRateMultipliers[input.resolution ?? ''];
       if (!dimensions || referenceDuration === null || !positive(rateMultiplier)) break;
-      // Video references bill input + output seconds at 60% of the base token rate.
+      // Video references bill input + output seconds at the discounted token rate.
       const tokens = dimensions.width * dimensions.height * (input.duration + referenceDuration) * rule.fps / 1024;
-      billableUnits = tokens / rule.tokensPerUnit * rateMultiplier * (referenceDuration > 0 ? 0.6 : 1) * outputCount;
+      const referenceMultiplier = referenceDuration > 0
+        ? rule.referenceVideoRateMultipliers?.[input.resolution ?? ''] ?? 0.6
+        : 1;
+      billableUnits = tokens / rule.tokensPerUnit * rateMultiplier * referenceMultiplier * outputCount;
       break;
     }
 

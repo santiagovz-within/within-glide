@@ -161,7 +161,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
           {isGenerating ? 'Generating…' : draftMode ? 'Generate draft' : 'Generate'}
           <FalCostEstimate input={costEstimateInput} unavailableText="Estimate unavailable"
-            unavailableDescription={config.id === 'seedance-2-5' && resolution === '4k' ? 'A verified Seedance 2.5 4K price estimate is not available yet.' : undefined}
+            unavailableDescription={duration === 'auto' ? 'Select a duration to estimate the cost. Auto duration is chosen during generation.' : undefined}
             description={config.id === 'kling-4'
               ? 'Estimated USD cost using published Fal rates. Video references bill input plus output duration, with a minimum of twice the output duration.'
               : config.id === 'minimax-h3-max'

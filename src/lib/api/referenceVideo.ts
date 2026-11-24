@@ -55,10 +55,12 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
     id: 'seedance-2-5', name: 'Seedance 2.5',
     endpoint: 'bytedance/seedance-2.5/reference-to-video',
     estimatedUnitPrice: 0.0214,
-    // 4K's token rate is not yet published (checked 2026-11-18); omit its estimate.
+    // Published 4K rates: $0.0094/1K tokens, or $0.0058 with video references.
+    // Source: https://fal.ai/models/bytedance/seedance-2.5/reference-to-video (2026-11-24).
     pricing: {
       kind: 'seedance-reference', fps: 24, tokensPerUnit: 1000,
-      resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 0.0234 / 0.0214 },
+      resolutionRateMultipliers: { '480p': 1, '720p': 1, '1080p': 0.0234 / 0.0214, '4k': 0.0094 / 0.0214 },
+      referenceVideoRateMultipliers: { '4k': 0.0058 / 0.0094 },
     },
     aspectRatios: seedanceAspects, resolutions: ['480p', '720p', '1080p', '4k'],
     minDuration: 4, maxDuration: 30, defaultDuration: 5,

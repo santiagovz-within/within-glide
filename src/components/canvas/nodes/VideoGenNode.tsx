@@ -352,9 +352,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
           {isGenerating ? 'Generating…' : draftMode ? 'Generate draft' : 'Generate'}
-          <FalCostEstimate input={costEstimateInput}
-            unavailableText={isSeedance25 && selectedResolution === '4k' ? 'Estimate unavailable' : undefined}
-            unavailableDescription={isSeedance25 && selectedResolution === '4k' ? 'A verified Seedance 2.5 4K price estimate is not available yet.' : undefined} />
+          <FalCostEstimate input={costEstimateInput} />
         </span>
       </button>
 
