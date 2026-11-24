@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     if (!outputUrl) return NextResponse.json({ error: 'No output image returned' }, { status: 500 });
 
     const imageRes = await fetch(outputUrl);
+    if (!imageRes.ok) throw new Error(`Could not download the background-removed image (${imageRes.status}).`);
     const imageBuffer = await imageRes.arrayBuffer();
     const contentType = imageRes.headers.get('content-type') ?? 'image/png';
     const ext = contentType.split('/')[1] ?? 'png';
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ mediaUrls: [signedUrl], status: 'completed' });
   } catch (err) {
     if (err instanceof FlowClientError) return NextResponse.json({ error: err.message }, { status: err.status });
-    console.error('Remove background error:', err);
+    console.error('Remove background error:', describeFalError(err));
     return NextResponse.json(
       { error: 'Remove background failed', details: describeFalError(err) },
       { status: 500 },

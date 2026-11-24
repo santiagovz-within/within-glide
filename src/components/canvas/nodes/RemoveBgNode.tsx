@@ -6,13 +6,14 @@ import { Position, type NodeProps } from '@xyflow/react';
 import { Scissors, Download } from 'lucide-react';
 import Image from 'next/image';
 import { SendToFigmaButton } from './SendToFigmaButton';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { playSuccessSound } from '@/lib/utils/sound';
 import { getNodeMediaUrls } from '../mediaOutputs';
 import { NodeWrapper } from './NodeWrapper';
 import { TypedHandle, PORT_COLORS } from './TypedHandle';
-import type { RemoveBgNodeData, ImageInputNodeData, UpscaleNodeData, SelectNodeData, ModifyNodeData, MediaInputNodeData } from '@/types';
+import type { RemoveBgNodeData } from '@/types';
+import { prepareBackgroundRemovalImage } from '@/lib/utils/backgroundRemoval';
 import { useFlowStore } from '@/lib/stores/flowStore';
 import { CanvasImage } from '@/components/canvas/CanvasMedia';
 import { cn } from '@/lib/utils/cn';
@@ -22,21 +23,14 @@ import FalCostEstimate from './FalCostEstimate';
 
 export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveBgNodeData }) {
   const [isProcessing, setIsProcessing] = useState(false);
+  const processingRef = useRef(false);
 
   const storeEdges = useFlowStore(state => state.edges);
   const storeNodes = useFlowStore(state => state.nodes);
 
-  // Derive input image directly from connected source node (same pattern as UpscaleNode)
   const incomingEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'image');
   const sourceNode = incomingEdge ? storeNodes.find(n => n.id === incomingEdge.source) : undefined;
-  let inputImageUrl: string | undefined;
-  if (sourceNode?.type === 'imageInputNode')  inputImageUrl = (sourceNode.data as ImageInputNodeData).imageUrl;
-  else if (sourceNode?.type === 'imageGenNode')  inputImageUrl = getNodeMediaUrls(sourceNode, 'image', incomingEdge?.sourceHandle)[0];
-  else if (sourceNode?.type === 'upscaleNode')   inputImageUrl = (sourceNode.data as UpscaleNodeData).outputImageUrl;
-  else if (sourceNode?.type === 'modifyNode')    inputImageUrl = (sourceNode.data as ModifyNodeData).outputImageUrl;
-  else if (sourceNode?.type === 'selectNode')    inputImageUrl = (sourceNode.data as SelectNodeData).selectedImageUrl;
-  else if (sourceNode?.type === 'removeBgNode')  inputImageUrl = (sourceNode.data as RemoveBgNodeData).outputImageUrl;
-  else if (sourceNode?.type === 'mediaInputNode') inputImageUrl = (sourceNode.data as MediaInputNodeData).imageUrl;
+  const inputImageUrl = sourceNode ? getNodeMediaUrls(sourceNode, 'image', incomingEdge?.sourceHandle)[0] : undefined;
 
   function updateData(updates: Partial<RemoveBgNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {
@@ -45,17 +39,19 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
   }
 
   async function handleRemove() {
-    if (!inputImageUrl || isProcessing) return;
+    if (!inputImageUrl || processingRef.current) return;
+    processingRef.current = true;
     setIsProcessing(true);
-    updateData({ status: 'processing' });
-    useFlowStore.getState().consumeGcsOnlyEligibility();
+    updateData({ status: 'processing', errorMessage: undefined });
 
     try {
+      const preparedImageUrl = await prepareBackgroundRemovalImage(inputImageUrl);
+      useFlowStore.getState().consumeGcsOnlyEligibility();
       const res = await fetch('/api/fal/remove-background', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          imageUrl: inputImageUrl,
+          imageUrl: preparedImageUrl,
           sourceType: 'canvas',
           sourceId: useFlowStore.getState().currentFlow?.id,
           nodeId: id,
@@ -75,6 +71,7 @@ export function RemoveBgNode({ data, selected, id }: NodeProps & { data: RemoveB
     } catch (err) {
       updateData({ status: 'error', errorMessage: err instanceof Error ? err.message : 'Network error — check your connection.' });
     } finally {
+      processingRef.current = false;
       setIsProcessing(false);
     }
   }
