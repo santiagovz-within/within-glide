@@ -364,7 +364,10 @@ export interface ModifyNodeData extends Record<string, unknown> {
   expandAnchor?: string;
   // Video outpaint fields (active when a video source is connected)
   outpaintAspectRatio?: string;
-  outpaintResolution?: '720p' | '1080p';
+  outpaintModel?: string;
+  outpaintResolution?: '480p' | '540p' | '720p' | '768p' | '1080p';
+  outpaintAnchor?: string;
+  outpaintSourceScale?: number;
   outpaintFps?: number;
   outpaintPrompt?: string;
   outpaintNegativePrompt?: string;

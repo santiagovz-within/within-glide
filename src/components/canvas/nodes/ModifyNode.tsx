@@ -29,6 +29,7 @@ import glassStyles from './ImageGenerationGlass.module.css';
 import { FAL_MODELS, FAL_NODE_ENDPOINTS } from '@/lib/api/models';
 import FalCostEstimate from './FalCostEstimate';
 import { LayerizePanel } from './LayerizePanel';
+import { VIDEO_OUTPAINT_MODELS, VIDEO_OUTPAINT_ANCHORS, getVideoOutpaintSettings, videoOutpaintPlacement, buildVideoOutpaintInput, type VideoOutpaintAnchor } from '@/lib/api/videoOutpaint';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -51,8 +52,6 @@ const ASPECT_PRESETS = [
   { label: '9:16', ratio: 9 / 16 },
   { label: '3:4',  ratio: 3 / 4 },
 ];
-
-const OUTPAINT_ASPECT_RATIOS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'];
 
 const VIDEO_OUTPAINT_DEFAULT_PROMPT = 'This same scene, extending the environment naturally beyond the original frame.';
 const VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT = 'color distortion, overexposure, static, blurry details, subtitles, style, artwork, painting, frame, still, dim overall tone, worst quality, low quality, JPEG compression artifacts, ugly, mutilated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, motionless frame, cluttered background, three legs, crowded background, walking backwards';
@@ -378,15 +377,15 @@ function AnchorPicker({ value, onChange }: { value: AnchorKey; onChange: (v: Anc
 // Measures actual video dimensions via onLoadedMetadata instead of trusting
 // source-node metadata, which is often missing or wrong for video inputs.
 
-function VideoOutpaintCanvas({ videoUrl, tgtAspect, onDuration }: {
+function VideoOutpaintCanvas({ videoUrl, tgtAspect, anchor, sourceScale, onMetadata }: {
   videoUrl?: string;
   tgtAspect: string;
-  onDuration: (duration: number) => void;
+  anchor: VideoOutpaintAnchor;
+  sourceScale: number;
+  onMetadata: (metadata: { url: string; width: number; height: number; duration: number }) => void;
 }) {
-  const [videoSize, setVideoSize] = useState<{ w: number; h: number } | null>(null);
-
-  // Reset measured size whenever the source URL changes.
-  useEffect(() => { setVideoSize(null); }, [videoUrl]);
+  const [measuredVideo, setVideoSize] = useState<{ url: string; w: number; h: number } | null>(null);
+  const videoSize = measuredVideo?.url === videoUrl ? measuredVideo : null;
 
   const [tgtW, tgtH] = tgtAspect.split(':').map(Number);
   const tgtRatio = tgtW / tgtH;
@@ -399,22 +398,12 @@ function VideoOutpaintCanvas({ videoUrl, tgtAspect, onDuration }: {
   const tgtDispW = rawH <= CANVAS_MAX_H ? CANVAS_MAX_W : Math.round(CANVAS_MAX_H * tgtRatio);
   const tgtDispH = rawH <= CANVAS_MAX_H ? Math.round(rawH) : CANVAS_MAX_H;
 
-  // Source inside target (centered)
-  let srcDispW: number, srcDispH: number, srcX: number, srcY: number;
-  if (tgtRatio >= srcRatio) {
-    srcDispH = tgtDispH;
-    srcDispW = Math.round(tgtDispH * srcRatio);
-    srcX = Math.round((tgtDispW - srcDispW) / 2);
-    srcY = 0;
-  } else {
-    srcDispW = tgtDispW;
-    srcDispH = Math.round(tgtDispW / srcRatio);
-    srcX = 0;
-    srcY = Math.round((tgtDispH - srcDispH) / 2);
-  }
-
-  // Only show expansion chrome once we've actually measured the video.
-  const hasExpansion = videoSize !== null && Math.abs(tgtRatio - srcRatio) > 0.01;
+  const rect = videoOutpaintPlacement(videoSize?.w ?? tgtW, videoSize?.h ?? tgtH, tgtAspect, anchor, sourceScale);
+  const srcDispW = rect.width * tgtDispW;
+  const srcDispH = rect.height * tgtDispH;
+  const srcX = rect.x * tgtDispW;
+  const srcY = rect.y * tgtDispH;
+  const hasExpansion = videoSize !== null && (Math.abs(tgtRatio - srcRatio) > 0.01 || sourceScale < 1);
   const STRIPE = 'repeating-linear-gradient(-45deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 3px, transparent 3px, transparent 7px)';
 
   return (
@@ -440,8 +429,10 @@ function VideoOutpaintCanvas({ videoUrl, tgtAspect, onDuration }: {
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
             onLoadedMetadata={(e) => {
               const v = e.currentTarget;
-              if (v.videoWidth && v.videoHeight) setVideoSize({ w: v.videoWidth, h: v.videoHeight });
-              if (Number.isFinite(v.duration)) onDuration(v.duration);
+              if (v.videoWidth && v.videoHeight) setVideoSize({ url: videoUrl, w: v.videoWidth, h: v.videoHeight });
+              if (Number.isFinite(v.duration) && v.videoWidth && v.videoHeight) {
+                onMetadata({ url: videoUrl, width: v.videoWidth, height: v.videoHeight, duration: v.duration });
+              }
             }}
           />
         )}
@@ -464,6 +455,12 @@ function VideoOutpaintCanvas({ videoUrl, tgtAspect, onDuration }: {
 // ── ModifyNode ─────────────────────────────────────────────────────────────────
 
 export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNodeData }) {
+  function updateData(updates: Partial<ModifyNodeData>) {
+    document.dispatchEvent(new CustomEvent('node:update', {
+      detail: { nodeId: id, data: updates },
+    }));
+  }
+
   const [isGenerating, setIsGenerating] = useState(false);
   const isGeneratingRef = useRef(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -475,7 +472,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [imageHandleTop, setImageHandleTop]   = useState(130);
   const [naturalSize, setNaturalSize] = useState<{ imageUrl: string; w: number; h: number } | null>(null);
-  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [videoMetadata, setVideoMetadata] = useState<{ url: string; width: number; height: number; duration: number } | null>(null);
   const prevInputMediaTypeRef = useRef<'image' | 'video' | null>(null);
 
   const mode         = data.mode ?? 'prompt';
@@ -584,10 +581,8 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMediaType, id]);
 
-  // Reset video duration when source changes
-  useEffect(() => {
-    setVideoDuration(null);
-  }, [inputVideoUrl]);
+  const sourceVideoMetadata = videoMetadata?.url === inputVideoUrl ? videoMetadata : null;
+  const videoDuration = sourceVideoMetadata?.duration ?? null;
 
   const safeIndex    = Math.min(selectedIndex, Math.max(availableImages.length - 1, 0));
   const selectedImage = availableImages[safeIndex];
@@ -658,11 +653,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     }
   });
 
-  function updateData(updates: Partial<ModifyNodeData>) {
-    document.dispatchEvent(new CustomEvent('node:update', {
-      detail: { nodeId: id, data: updates },
-    }));
-  }
 
   function handleExpandChange(updates: Partial<Record<'top' | 'right' | 'bottom' | 'left', number>>) {
     const mapped: Partial<ModifyNodeData> = {};
@@ -862,18 +852,11 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   async function handleVideoOutpaintGenerate() {
     // Synchronous ref guard prevents double-fire before React re-renders the disabled button
     if (isGeneratingRef.current || !inputVideoUrl) return;
-    const prompt = data.outpaintPrompt?.trim() || VIDEO_OUTPAINT_DEFAULT_PROMPT;
-    if (!prompt) return;
-
+    if (videoValidationMessage) return;
     isGeneratingRef.current = true;
     setIsGenerating(true);
-    updateData({ status: 'processing' });
+    updateData({ status: 'processing', errorMessage: undefined });
 
-    const aspectRatio = data.outpaintAspectRatio ?? '16:9';
-    const resolution  = data.outpaintResolution  ?? '720p';
-    const fps         = data.outpaintFps         ?? 24;
-    const negativePrompt = data.outpaintNegativePrompt ?? VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT;
-    const numFrames = videoDuration !== null ? Math.max(1, Math.round(videoDuration * fps)) : undefined;
     useFlowStore.getState().consumeGcsOnlyEligibility();
 
     try {
@@ -881,9 +864,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          videoUrl: inputVideoUrl,
-          aspectRatio, resolution, fps, numFrames,
-          prompt, negativePrompt,
+          ...videoOutpaintRequest,
           sourceId: useFlowStore.getState().currentFlow?.id,
           nodeId: id,
         }),
@@ -906,7 +887,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     let consecutiveErrors = 0;
     const interval = setInterval(async () => {
       attempts++;
-      if (attempts > 120) {
+      if (attempts > 360) {
         clearInterval(interval);
         updateData({ status: 'error', errorMessage: 'Video outpaint timed out. The job may still be running — try restarting.' });
         stopGenerating();
@@ -927,7 +908,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
           consecutiveErrors++;
           if (result.status === 'failed' || consecutiveErrors >= 3) {
             clearInterval(interval);
-            updateData({ status: 'error', errorMessage: result.error ?? 'Video outpaint failed on the server.' });
+            updateData({ status: 'error', errorMessage: result.error ?? result.detail ?? 'Video outpaint failed on the server.' });
             stopGenerating();
           }
         } else {
@@ -959,10 +940,25 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const outputPortType = inputMediaType === 'video' ? 'video' : inputMediaType === 'image' || mode === 'layerize' ? 'image' : 'neutral';
   const accentColor    = inputMediaType === 'video' ? PORT_COLORS.video : PORT_COLORS.image;
 
-  const outpaintAspect     = data.outpaintAspectRatio ?? '16:9';
-  const outpaintResolution = data.outpaintResolution  ?? '720p';
-  const outpaintFps        = data.outpaintFps         ?? 24;
-  const hasOutpaintPrompt  = !!(data.outpaintPrompt?.trim() ?? VIDEO_OUTPAINT_DEFAULT_PROMPT);
+  const { model: outpaintModel, aspectRatio: outpaintAspect, resolution: outpaintResolution } = getVideoOutpaintSettings(data);
+  const outpaintFps = data.outpaintFps ?? 24;
+  const outpaintAnchor = outpaintModel.placement && VIDEO_OUTPAINT_ANCHORS.includes(data.outpaintAnchor as VideoOutpaintAnchor)
+    ? data.outpaintAnchor as VideoOutpaintAnchor : 'center';
+  const outpaintSourceScale = outpaintModel.placement ? data.outpaintSourceScale ?? 1 : 1;
+  const videoOutpaintRequest = {
+    model: outpaintModel.id, videoUrl: inputVideoUrl ?? '', aspectRatio: outpaintAspect, resolution: outpaintResolution,
+    fps: outpaintFps, numFrames: videoDuration ? Math.max(1, Math.round(videoDuration * outpaintFps)) : undefined,
+    prompt: data.outpaintPrompt ?? VIDEO_OUTPAINT_DEFAULT_PROMPT,
+    negativePrompt: data.outpaintNegativePrompt ?? VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT,
+    duration: videoDuration ?? undefined, sourceWidth: sourceVideoMetadata?.width, sourceHeight: sourceVideoMetadata?.height,
+    anchor: outpaintAnchor, sourceScale: outpaintSourceScale,
+  };
+  const videoValidationMessage = (() => {
+    if (inputMediaType !== 'video' || !inputVideoUrl) return null;
+    if (!sourceVideoMetadata) return 'Loading source video details…';
+    try { buildVideoOutpaintInput(videoOutpaintRequest); return null; }
+    catch (error) { return error instanceof Error ? error.message : 'Invalid video settings.'; }
+  })();
   const hasVideoOutput     = inputMediaType === 'video' && !!data.outputVideoUrl;
   const hasPendingEditRequest = !!data.pendingRequestId && !!data.pendingEndpoint;
   const promptModelConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
@@ -996,7 +992,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
         <>
           <button
             onClick={handleVideoOutpaintGenerate}
-            disabled={isGenerating || !inputVideoUrl || !hasOutpaintPrompt}
+            disabled={isGenerating || !inputVideoUrl || !!videoValidationMessage}
             className={cn(
               glassStyles.glassSurface,
               glassStyles.button,
@@ -1008,14 +1004,18 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
               <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
               {isGenerating ? 'Outpainting…' : 'Outpaint Video'}
               <FalCostEstimate input={videoDuration ? {
-                endpoint: FAL_NODE_ENDPOINTS.videoOutpaint.endpoint,
+                endpoint: outpaintModel.endpoint,
                 aspectRatio: outpaintAspect,
                 resolution: outpaintResolution,
                 duration: videoDuration,
                 fps: outpaintFps,
-              } : null} />
+              } : null}
+                unavailableText={outpaintModel.id === 'minimax-h3-max' && videoDuration !== null && videoDuration > 5 ? 'Variable cost' : undefined}
+                unavailableDescription="Long clips bill overlapping sections. Fal does not publish the overlap formula, so a reliable total is unavailable."
+                description="Estimated USD cost at the selected resolution. Luma bills each started source second." />
             </span>
           </button>
+          {videoValidationMessage && <p className="text-[10px] text-amber-300/80">{videoValidationMessage}</p>}
           {hasVideoOutput && (
             <button
               onClick={() => downloadFromUrl(data.outputVideoUrl!)}
@@ -1344,18 +1344,32 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             <span className={glassStyles.glassContent}>Source Video</span>
           </div>
 
+          <div className={glassStyles.field}>
+            <span className={glassStyles.microLabel}>Expansion Model</span>
+            <NodeSelect options={VIDEO_OUTPAINT_MODELS.map(model => model.name)} value={outpaintModel.name} locked={isGenerating}
+              onChange={name => {
+                const model = VIDEO_OUTPAINT_MODELS.find(option => option.name === name)!;
+                const settings = getVideoOutpaintSettings({ ...data, outpaintModel: model.id });
+                updateData({ outpaintModel: model.id, outpaintAspectRatio: settings.aspectRatio,
+                  outpaintResolution: settings.resolution as ModifyNodeData['outpaintResolution'] });
+              }} />
+            <p className="text-[10px] leading-relaxed text-white/45">{outpaintModel.hint}</p>
+          </div>
+
           {/* Outpaint canvas preview */}
           <VideoOutpaintCanvas
             videoUrl={inputVideoUrl}
             tgtAspect={outpaintAspect}
-            onDuration={setVideoDuration}
+            anchor={outpaintAnchor}
+            sourceScale={outpaintSourceScale}
+            onMetadata={setVideoMetadata}
           />
 
           {/* Target aspect ratio */}
           <div className={glassStyles.field}>
             <span className={glassStyles.microLabel}>Target Aspect Ratio</span>
             <div className={glassStyles.chipRow}>
-              {OUTPAINT_ASPECT_RATIOS.map((ratio) => (
+              {outpaintModel.aspects.map((ratio) => (
                 <button
                   key={ratio}
                   className={cn(
@@ -1378,24 +1392,38 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             <div className={glassStyles.field}>
               <span className={glassStyles.microLabel}>Resolution</span>
               <NodeSelect
-                options={['720p', '1080p']}
+                options={[...outpaintModel.resolutions]}
                 value={outpaintResolution}
-                onChange={(v) => updateData({ outpaintResolution: v as '720p' | '1080p' })}
+                onChange={(v) => updateData({ outpaintResolution: v as ModifyNodeData['outpaintResolution'] })}
               />
             </div>
-            <div className={glassStyles.field}>
+            {outpaintModel.id === 'ltx-2.3' && <div className={glassStyles.field}>
               <span className={glassStyles.microLabel}>FPS</span>
               <NodeSelect
                 options={['24', '30', '60']}
                 value={String(outpaintFps)}
                 onChange={(v) => updateData({ outpaintFps: Number(v) })}
               />
-            </div>
+            </div>}
           </div>
 
+          {outpaintModel.placement && <div className={glassStyles.grid2}>
+            <div className={glassStyles.field}>
+              <span className={glassStyles.microLabel}>Source Position</span>
+              <NodeSelect options={VIDEO_OUTPAINT_ANCHORS.map(anchor => anchor.replaceAll('_', ' '))}
+                value={outpaintAnchor.replaceAll('_', ' ')}
+                onChange={anchor => updateData({ outpaintAnchor: anchor.replaceAll(' ', '_') })} />
+            </div>
+            <div className={glassStyles.field}>
+              <span className={glassStyles.microLabel}>Source Scale</span>
+              <NodeSelect options={['100%', '90%', '80%', '70%', '60%', '50%']} value={`${Math.round(outpaintSourceScale * 100)}%`}
+                onChange={scale => updateData({ outpaintSourceScale: Number.parseInt(scale) / 100 })} />
+            </div>
+          </div>}
+
           {/* Prompt */}
-          <div className={glassStyles.field}>
-            <span className={glassStyles.microLabel}>Prompt</span>
+          {outpaintModel.prompt !== 'none' && <div className={glassStyles.field}>
+            <span className={glassStyles.microLabel}>{outpaintModel.prompt === 'optional' ? 'Prompt (optional)' : 'Prompt'}</span>
             <div className={cn(glassStyles.glassSurface, glassStyles.promptSection, glassStyles.promptSurface)}>
               <textarea
                 ref={outpaintPromptRef}
@@ -1406,10 +1434,10 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
                 onChange={(e) => { autoResize(e.target); updateData({ outpaintPrompt: e.target.value }); }}
               />
             </div>
-          </div>
+          </div>}
 
           {/* Negative prompt */}
-          <div className={glassStyles.field}>
+          {outpaintModel.id === 'ltx-2.3' && <div className={glassStyles.field}>
             <span className={glassStyles.microLabel}>Negative Prompt</span>
             <div className={cn(glassStyles.glassSurface, glassStyles.promptSection, glassStyles.promptSurface)}>
               <textarea
@@ -1421,7 +1449,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
                 style={{ color: 'rgba(255,255,255,0.6)' }}
               />
             </div>
-          </div>
+          </div>}
 
           {/* Output video */}
           <GenerationPreview

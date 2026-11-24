@@ -5,7 +5,7 @@ import { getSignedReadUrl } from '@/lib/gcs';
 import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
 import { describeFalError, isTerminalFalError } from '@/lib/falErrors';
 import { failGeneration } from '@/lib/generationFailures';
-import { FAL_NODE_ENDPOINTS } from '@/lib/api/models';
+import { getVideoOutpaintEndpoint } from '@/lib/api/videoOutpaint';
 import {
   fetchFalQueueResult,
   getFalBillingColumns,
@@ -14,8 +14,6 @@ import {
 } from '@/lib/falResult';
 
 fal.config({ credentials: process.env.FAL_KEY });
-
-const FAL_ENDPOINT = FAL_NODE_ENDPOINTS.videoOutpaint.endpoint;
 
 export async function GET(
   _request: NextRequest,
@@ -30,7 +28,7 @@ export async function GET(
 
     const { data: existingGeneration, error: lookupError } = await supabase
       .from('generations')
-      .select('id, parameters')
+      .select('id, model, parameters')
       .eq('fal_request_id', requestId)
       .eq('user_id', user.id)
       .maybeSingle();
@@ -42,7 +40,8 @@ export async function GET(
       throw new Error('Queued video outpaint record was not found.');
     }
 
-    const status = await fal.queue.status(FAL_ENDPOINT, { requestId, logs: false });
+    const endpoint = getVideoOutpaintEndpoint(existingGeneration.parameters, existingGeneration.model);
+    const status = await fal.queue.status(endpoint, { requestId, logs: false });
 
     if (status.status === 'COMPLETED') {
       // A failed run is also reported COMPLETED — fetching the result is what
@@ -70,12 +69,13 @@ export async function GET(
       }
 
       const videoRes = await fetch(videoUrl);
+      if (!videoRes.ok) throw new Error(`Could not download expanded video (${videoRes.status}).`);
       const videoBuffer = await videoRes.arrayBuffer();
       const genId = existingGeneration.id;
       const objectPath = `${user.id}/${genId}.mp4`;
       const gcsRef = await uploadMediaToGCS(videoBuffer, objectPath, 'video/mp4');
       const signedUrl = await getSignedReadUrl(objectPath);
-      const billing = await getFalBillingColumns(FAL_ENDPOINT, result.billableUnits);
+      const billing = await getFalBillingColumns(endpoint, result.billableUnits);
 
       const { error: updateError } = await supabase
         .from('generations')

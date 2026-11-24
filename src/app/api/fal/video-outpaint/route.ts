@@ -4,17 +4,9 @@ import { createClient } from '@/lib/supabase/server';
 import { fal } from '@fal-ai/client';
 import { getFalStorageHeaders } from '@/lib/falStorage';
 import { describeFalError } from '@/lib/falErrors';
-import { FAL_NODE_ENDPOINTS } from '@/lib/api/models';
+import { buildVideoOutpaintInput, type VideoOutpaintRequest } from '@/lib/api/videoOutpaint';
 
 fal.config({ credentials: process.env.FAL_KEY });
-
-const FAL_ENDPOINT = FAL_NODE_ENDPOINTS.videoOutpaint.endpoint;
-
-function getOutpaintDimensions(aspectRatio: string, resolution: '720p' | '1080p') {
-  const baseHeight = resolution === '1080p' ? 1080 : 720;
-  const [w, h] = aspectRatio.split(':').map(Number);
-  return { width: Math.round(baseHeight * w / h), height: baseHeight };
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,58 +14,31 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const {
-      videoUrl,
-      aspectRatio = '16:9',
-      resolution = '720p',
-      fps = 24,
-      numFrames,
-      prompt,
-      negativePrompt,
-      sourceId,
-      nodeId,
-    } = await request.json();
-
-    if (!videoUrl) return NextResponse.json({ error: 'videoUrl is required' }, { status: 400 });
-    if (!prompt?.trim()) return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
-
-    const dimensions = getOutpaintDimensions(aspectRatio, resolution as '720p' | '1080p');
+    const body = await request.json() as VideoOutpaintRequest & { sourceId?: string; nodeId?: string };
+    const { sourceId, nodeId } = body;
+    let requestConfig;
+    try {
+      requestConfig = buildVideoOutpaintInput(body);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid video expansion request.' }, { status: 400 });
+    }
+    const { model, input, aspectRatio, resolution } = requestConfig;
     const falHeaders = await getFalStorageHeaders({
       userId: user.id,
       sourceType: 'canvas',
       sourceId,
     });
 
-    const { request_id } = await fal.queue.submit(FAL_ENDPOINT, {
-      input: {
-        video_url: videoUrl,
-        prompt: prompt.trim(),
-        negative_prompt: negativePrompt?.trim() || undefined,
-        aspect_ratio: aspectRatio,
-        output_resolution: resolution,
-        resolution: dimensions,
-        frames_per_second: fps,
-        ...(numFrames ? { num_frames: numFrames } : {}),
-        source_scale: 1,
-        generate_audio: false,
-        video_strength: 1,
-        num_inference_steps: 15,
-        guidance_scale: 1,
-        enable_prompt_expansion: true,
-        video_quality: 'high',
-        video_write_mode: 'balanced',
-      },
-      headers: falHeaders,
-    });
+    const { request_id } = await fal.queue.submit(model.endpoint, { input, headers: falHeaders });
 
     const { error: insertError } = await supabase.from('generations').insert({
       user_id: user.id,
       source_type: 'canvas',
       source_id: sourceId,
       node_id: nodeId ?? null,
-      model: FAL_ENDPOINT,
-      prompt: prompt.trim(),
-      parameters: { aspectRatio, resolution, fps, endpoint: FAL_ENDPOINT },
+      model: model.endpoint,
+      prompt: typeof input.prompt === 'string' ? input.prompt : '',
+      parameters: { aspectRatio, resolution, duration: body.duration, endpoint: model.endpoint, input },
       media_type: 'video',
       media_url: '',
       status: 'processing',

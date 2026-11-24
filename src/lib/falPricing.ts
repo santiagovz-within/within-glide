@@ -55,6 +55,9 @@ export type FalPricingRule =
       resolutionRatesUsd: Record<string, number>;
       referenceVideoRatesUsd?: Record<string, number>;
       minimumOutputDurationMultiplier?: number;
+      roundSecondsUp?: boolean;
+      /** Omit an estimate beyond the verified billing window. */
+      maxEstimateDuration?: number;
     }
   | {
       /**
@@ -262,7 +265,7 @@ export function estimateFalCost(
   if (!rule) return null;
   const outputCount = positive(input.outputCount) ? input.outputCount : 1;
   if (rule.kind === 'video-seconds-rates') {
-    if (!positive(input.duration)) return null;
+    if (!positive(input.duration) || (rule.maxEstimateDuration && input.duration > rule.maxEstimateDuration)) return null;
     const referenceDuration = referenceVideoDuration(input.referenceVideos);
     if (referenceDuration === null) return null;
     const hasVideoReferences = referenceDuration > 0;
@@ -271,7 +274,7 @@ export function estimateFalCost(
     const seconds = hasVideoReferences
       ? Math.max(input.duration + referenceDuration, input.duration * (rule.minimumOutputDurationMultiplier ?? 1))
       : input.duration;
-    return seconds * rate * outputCount;
+    return (rule.roundSecondsUp ? Math.ceil(seconds) : seconds) * rate * outputCount;
   }
   if (rule.kind === 'image-tokens') {
     const imageTokens = rule.outputTokens[input.resolution ?? '1K'];

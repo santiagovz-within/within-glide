@@ -281,6 +281,20 @@ export const FAL_NODE_ENDPOINTS = {
     endpoint: 'fal-ai/ltx-2.3-quality/outpaint',
     pricing: { kind: 'video-frame-megapixels' },
   },
+  // Published reframe rates checked 2026-11-24 on each endpoint's Fal page.
+  videoReframeLtx25: {
+    endpoint: 'lightricks/ltx-2.5/reframe',
+    pricing: { kind: 'video-seconds-rates', resolutionRatesUsd: { '720p': 0.10, '1080p': 0.20 } },
+  },
+  videoReframeLuma: {
+    endpoint: 'luma/agent/ray/v3.2/reframe',
+    pricing: { kind: 'video-seconds-rates', resolutionRatesUsd: { '540p': 0.06, '720p': 0.12, '1080p': 0.36 }, roundSecondsUp: true },
+  },
+  videoReframeMinimax: {
+    endpoint: 'minimax/h3-max/reframe-video',
+    // Fal publishes a 5s example but no overlap-window formula for longer clips.
+    pricing: { kind: 'video-seconds-rates', resolutionRatesUsd: { '480p': 0.05, '768p': 0.08, '1080p': 0.16 }, maxEstimateDuration: 5 },
+  },
   videoUpscale: {
     endpoint: 'fal-ai/topaz/upscale/video',
     pricing: { kind: 'topaz-video' },
