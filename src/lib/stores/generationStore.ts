@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { NodeData, NodeType, VideoGenerationMetadata } from '@/types';
+import type { GenerationPromptSnapshot, NodeData, NodeType, VideoGenerationMetadata } from '@/types';
 
 export type BackgroundGenerationKind =
   | 'music-generation'
@@ -40,6 +40,8 @@ export interface BackgroundGenerationJob {
   requests: BackgroundGenerationRequest[];
   submissionsComplete: boolean;
   imageHistory: string[][];
+  promptSnapshot?: GenerationPromptSnapshot | null;
+  generationPromptHistory?: Array<GenerationPromptSnapshot | null>;
   videoHistory: string[];
   videoHistoryMetadata?: Array<VideoGenerationMetadata | null>;
   finalData?: Partial<NodeData>;

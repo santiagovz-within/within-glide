@@ -5,6 +5,7 @@ import { signFlowMedia } from '@/lib/flowMedia';
 import { FAL_MODELS } from '@/lib/api/models';
 import type { FlowData, NodeType } from '@/types';
 import { videoGenerationMetadata } from '@/lib/seedanceDraft';
+import { savedGenerationPrompt } from '@/lib/generationPromptHistory';
 
 interface TrackedJob {
   id: string;
@@ -61,7 +62,7 @@ async function recover(trackedJobs: TrackedJob[]) {
 
     const admin = createAdminClient();
     const pending = [];
-    const selection = 'id, source_id, node_id, model, media_type, fal_request_id, parameters, reference_image_urls, created_at, status, media_url, error_message';
+    const selection = 'id, source_id, node_id, model, prompt, media_type, fal_request_id, parameters, reference_image_urls, created_at, status, media_url, error_message';
     for (let offset = 0; ; offset += PAGE_SIZE) {
       const { data, error } = await admin.from('generations')
         .select(selection)
@@ -198,6 +199,7 @@ async function recover(trackedJobs: TrackedJob[]) {
         nodeId: node.id,
         nodeType: node.type as NodeType,
         nodeData,
+        promptSnapshot: savedGenerationPrompt(generation),
         requestId: generation.fal_request_id,
         runId: typeof parameters?.generationRunId === 'string' ? parameters.generationRunId : undefined,
         status: generation.status,

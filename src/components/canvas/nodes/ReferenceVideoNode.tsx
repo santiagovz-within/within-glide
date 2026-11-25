@@ -24,6 +24,7 @@ import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { AspectRatioGlyph } from './AspectRatioGlyph';
 import { GenerationPreview } from './GenerationPreview';
+import { useGenerationHistoryPrompt } from '@/lib/useGenerationHistoryPrompt';
 import FalCostEstimate from './FalCostEstimate';
 import { GenerationFailureOverlay, RegenerateGate } from './GenerationFailure';
 import glassStyles from './ImageGenerationGlass.module.css';
@@ -31,6 +32,7 @@ import { SeedanceDraftActions, SeedanceDraftToggle } from './SeedanceDraftContro
 
 export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: ReferenceVideoNodeData }) {
   const currentFlow = useFlowStore(state => state.currentFlow);
+  const { restoreVersion, restoringPrompt, promptHistoryError } = useGenerationHistoryPrompt(id);
   const nodes = useFlowStore(state => state.nodes);
   const edges = useFlowStore(state => state.edges);
   const promptEdge = edges.find(edge => edge.target === id && edge.targetHandle === 'prompt');
@@ -40,7 +42,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const draftMode = config.id === 'seedance-2-5' && data.draftMode === true;
   const references = getReferenceVideoInputs(id, nodes, edges);
   const taggable = getReferenceVideoTaggableInputs(id, nodes, edges);
-  const reconciled = data.promptConnected ? null : reconcileMediaPromptTags(data.prompt ?? '', data.promptTags ?? [], taggable);
+  const reconciled = data.promptConnected && !data.promptHistorySource ? null : reconcileMediaPromptTags(data.prompt ?? '', data.promptTags ?? [], taggable);
   const prompt = reconciled?.prompt ?? data.prompt ?? '';
   const promptTags = reconciled?.tags ?? syncTagsWithText(prompt, data.promptTags ?? [], taggable);
   const missingTags = missingPromptTags(promptTags, taggable);
@@ -69,7 +71,10 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
     referenceVideos: references.videos.map(reference => videoMetadata.get(reference.url ?? '') ?? null),
   };
   const videoHistory = data.videoHistory ?? [];
-  const [historyIndex, setHistoryIndex] = useState(Math.max(0, videoHistory.length - 1));
+  const [historyIndex, setHistoryIndex] = useState(() => {
+    const savedIndex = data.videoUrl ? videoHistory.lastIndexOf(data.videoUrl) : -1;
+    return savedIndex >= 0 ? savedIndex : Math.max(0, videoHistory.length - 1);
+  });
   const [historyLength, setHistoryLength] = useState(videoHistory.length);
   if (historyLength !== videoHistory.length) {
     setHistoryLength(videoHistory.length);
@@ -133,29 +138,27 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   }
 
   function generate() {
-    if (!currentFlow || isGenerating || validationMessage || hasFailure) return;
+    if (!currentFlow || isGenerating || restoringPrompt || validationMessage || hasFailure) return;
     const payload = generationPayload();
     // Recheck immediately before submission, including limits after a model switch.
     const { endpoint } = buildReferenceVideoInput(payload);
     useFlowStore.getState().consumeGcsOnlyEligibility();
     void startTrackedVideoGeneration({
       flowId: currentFlow.id, flowTitle: currentFlow.title, nodeId: id,
-      nodeType: 'referenceVideoNode', data, endpoint, payload,
+      nodeType: 'referenceVideoNode', data: { ...data, prompt, promptTags }, endpoint, payload,
     });
   }
 
   function navigateHistory(index: number) {
     setHistoryIndex(index);
-    const videoUrl = videoHistory[index];
-    if (!videoUrl) return;
-    useFlowStore.getState().updateNodeData(id, { videoUrl });
-    document.dispatchEvent(new CustomEvent('node:video-propagate', { detail: { sourceNodeId: id, videoUrl } }));
+    restoreVersion(index);
   }
 
   const footer = (
     <div className={glassStyles.footerStack}>
+      {(restoringPrompt || promptHistoryError) && <p className={glassStyles.microLabel} role="status">{restoringPrompt ? 'Restoring prompt…' : promptHistoryError}</p>}
       {validationMessage && <p className={cn(glassStyles.microLabel, 'nodrag')} role="status">{validationMessage}</p>}
-      <button onClick={generate} disabled={isGenerating || hasFailure || !!validationMessage || !currentFlow}
+      <button onClick={generate} disabled={isGenerating || restoringPrompt || hasFailure || !!validationMessage || !currentFlow}
         className={cn(glassStyles.glassSurface, glassStyles.button, glassStyles.generateButton, 'nodrag disabled:opacity-40')}>
         <span className={cn(glassStyles.glassContent, glassStyles.buttonContent)}>
           <Image src="/node-icons/icon-generate.svg" alt="" width={11} height={11} aria-hidden />
@@ -193,7 +196,7 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
       <TypedHandle type="target" position={Position.Left} id={REFERENCE_VIDEO_HANDLE} portType="video"
         offset={`${offsets[2]}px`} connected={references.videos.length > 0} title="Connect video references" />
 
-      {data.promptConnected ? (
+      {data.promptConnected && !data.promptHistorySource ? (
         <div ref={promptRef} className={cn(glassStyles.glassSurface, glassStyles.promptSection,
           glassStyles.promptSurface, glassStyles.connectedTextPrompt)}>
           <div className={cn(glassStyles.glassContent, glassStyles.connectedPrompt)} title={prompt}>

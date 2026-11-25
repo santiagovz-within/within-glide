@@ -187,3 +187,13 @@ test('completed GIF uploads original bytes and a GIF MIME type even with generic
     assert.equal(updates[0].media_url, 'gcs:user/gen.gif');
   } finally { globalThis.fetch = savedFetch; }
 });
+
+test('image generation saves the editable prompt separately from the provider prompt', async () => {
+  const route = routeHarness('src/app/api/fal/generate/route.ts');
+  const promptSnapshot = { prompt: 'Paint @image1', promptTags: [{ label: 'image1', portIndex: 0, edgeId: 'image-edge' }] };
+  const response = await route.post({ model: model.id, prompt: 'Paint the first reference image',
+    aspectRatio: '1:1', resolution: '1K', sourceType: 'canvas', promptSnapshot });
+  assert.equal(response.status, 200);
+  assert.equal(route.submitted[0].input.prompt, 'Paint the first reference image');
+  assert.deepEqual(route.rows[0].parameters.promptSnapshot, promptSnapshot);
+});

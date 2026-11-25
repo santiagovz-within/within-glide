@@ -3,9 +3,14 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Sparkles, Plus, Minus, ImagePlus, Image as ImageIcon, Video, X, AlertTriangle, Loader2, Timer, Maximize } from 'lucide-react';
 import { useChatStore } from '@/lib/stores/chatStore';
-import { IMAGE_MODELS, CHAT_VIDEO_MODELS, MODELS } from '@/lib/api/models';
-import { ASPECT_RATIOS, ACCEPTED_IMAGE_TYPES } from '@/lib/utils/constants';
+import { IMAGE_MODELS, VIDEO_MODELS, MODELS } from '@/lib/api/models';
+import { ACCEPTED_IMAGE_TYPES } from '@/lib/utils/constants';
 import { processImageFile } from '@/lib/utils/imageProcessing';
+import { getVideoGenerationSettings } from '@/lib/videoGenerationSettings';
+import { useFalCostEstimateValue } from '@/lib/useFalCostEstimate';
+import { formatFalCostEstimate } from '@/lib/falPricing';
+import { ExpensiveGenerationDialog } from '@/components/canvas/nodes/ExpensiveGenerationDialog';
+import { SeedanceDraftToggle } from '@/components/canvas/nodes/SeedanceDraftControls';
 
 import { ModelSelect } from '@/components/canvas/nodes/ModelSelect';
 import { NodeSelect } from '@/components/canvas/nodes/NodeSelect';
@@ -14,8 +19,6 @@ import { cn } from '@/lib/utils/cn';
 import glass from '@/components/canvas/nodes/ImageGenerationGlass.module.css';
 import styles from './ImageVideo.module.css';
 
-const RESOLUTIONS = ['1K', '2K', '4K'] as const;
-const DURATIONS   = [3, 5, 8, 10] as const;
 interface ChatInputProps {
   onSubmit: () => void;
 }
@@ -39,13 +42,18 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
   const fileEndRef   = useRef<HTMLInputElement>(null);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
 
-  const models        = mode === 'image' ? IMAGE_MODELS : CHAT_VIDEO_MODELS;
-  const currentModel  = MODELS[settings.model];
-  const isSeedance    = settings.model === 'seedance-2';
-
-  const validAspects = currentModel?.supportedAspectRatios?.length
-    ? ASPECT_RATIOS.filter(r => (currentModel.supportedAspectRatios as readonly string[]).includes(r.value))
-    : ASPECT_RATIOS;
+  const models = mode === 'image' ? IMAGE_MODELS : VIDEO_MODELS;
+  const currentModel = MODELS[settings.model];
+  const video = getVideoGenerationSettings({ ...settings, startFrameUrl: referenceImages[0] });
+  const isSeedance = mode === 'video' && ['seedance-2', 'seedance-2-5'].includes(settings.model);
+  const [confirmingCost, setConfirmingCost] = useState(false);
+  const estimatedCost = useFalCostEstimateValue(mode === 'video' ? {
+    endpoint: video.endpoint, aspectRatio: settings.aspectRatio, resolution: video.resolution,
+    duration: video.duration, generateAudio: settings.generateAudio ?? true,
+  } : null);
+  const validAspects = currentModel?.supportedAspectRatios ?? [];
+  const inputWarning = mode === 'video' && video.supportsEndFrame && referenceImages[1] && !referenceImages[0]
+    ? 'Add a start frame to use an end frame.' : undefined;
 
   // ── Shared upload pipeline: validate → compress → POST ──────────────────────
   async function uploadFile(file: File): Promise<string | null> {
@@ -86,7 +94,9 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
     try {
       const url = await uploadFile(file);
       if (url) {
-        const next = [...referenceImages];
+        const latest = useChatStore.getState();
+        if (latest.mode !== 'video') return;
+        const next = [...latest.referenceImages];
         next[slot] = url;
         setReferenceImages(next);
       }
@@ -114,20 +124,17 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
     if (enhancedPrompt) setPrompt(enhancedPrompt);
   }
 
-  function handleModelChange(newModel: string) {
-    const newConfig = MODELS[newModel];
-    const updates: Partial<typeof settings> = { model: newModel };
-    if (
-      newConfig?.supportedAspectRatios?.length &&
-      !(newConfig.supportedAspectRatios as readonly string[]).includes(settings.aspectRatio)
-    ) {
-      updates.aspectRatio = newConfig.supportedAspectRatios[0];
-    }
-    updateSettings(updates);
+  function handleModelChange(model: string) {
+    updateSettings({ model });
   }
 
   const isUploading = imgUploadingCount > 0 || videoUploadingSlots.size > 0;
-  const canGenerate = !!prompt.trim() && !isGenerating && !isUploading;
+  const canGenerate = !!prompt.trim() && !isGenerating && !isUploading && !inputWarning;
+  function submit() {
+    if (!canGenerate) return;
+    if (isSeedance && estimatedCost !== null && estimatedCost > 8) setConfirmingCost(true);
+    else onSubmit();
+  }
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -170,7 +177,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
           onKeyDown={e => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
-              if (canGenerate) onSubmit();
+              submit();
             }
           }}
           className={styles.prompt}
@@ -194,7 +201,7 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
 
       {mode === 'video' && (
         <div className={styles.references}>
-          {([0, 1] as const).map(slot => {
+          {([0, 1] as const).filter(slot => slot === 0 || video.supportsEndFrame).map(slot => {
             const label = slot === 0 ? 'Start frame' : 'End frame';
             const fileRef = slot === 0 ? fileStartRef : fileEndRef;
             const url = referenceImages[slot];
@@ -215,6 +222,21 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
         </div>
       )}
 
+      {mode === 'video' && (video.supportsAudio || settings.model === 'seedance-2-5') && (
+        <div className={styles.videoOptions}>
+          {settings.model === 'seedance-2-5' && <SeedanceDraftToggle enabled={video.draftMode} disabled={isGenerating}
+            onChange={draftMode => updateSettings({ draftMode })} />}
+          {video.supportsAudio && <div className={styles.audioOption}>
+            <span>Generate audio</span>
+            <button type="button" aria-label="Generate audio" aria-pressed={settings.generateAudio ?? true}
+              onClick={() => updateSettings({ generateAudio: !(settings.generateAudio ?? true) })}
+              className={cn(glass.glassSurface, glass.switch, (settings.generateAudio ?? true) && glass.switchOn)}>
+              <span className={cn(glass.glassContent, glass.switchKnob)} />
+            </button>
+          </div>}
+        </div>
+      )}
+      {inputWarning && <p className={styles.warning} role="status">{inputWarning}</p>}
       {uploadError && (
         <div className={styles.error} role="alert">
           <AlertTriangle size={14} /><span>{uploadError}</span>
@@ -233,10 +255,10 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
         <div className={styles.model}>
           <ModelSelect standalone size="large" compact placement="top" options={models} value={settings.model} onChange={handleModelChange} />
         </div>
-        <NodeSelect standalone size="large" placement="top" label="Aspect ratio" options={validAspects.map(r => r.value)} value={settings.aspectRatio} onChange={aspectRatio => updateSettings({ aspectRatio })} leadingIcon={<AspectRatioGlyph ratio={settings.aspectRatio} />} optionIcon={value => <AspectRatioGlyph ratio={value} />} />
+        <NodeSelect standalone size="large" placement="top" label="Aspect ratio" options={validAspects} value={mode === 'video' && video.followsInputAspect ? 'From start frame' : settings.aspectRatio} locked={mode === 'video' && video.followsInputAspect} onChange={aspectRatio => updateSettings({ aspectRatio })} leadingIcon={<AspectRatioGlyph ratio={settings.aspectRatio} />} optionIcon={value => <AspectRatioGlyph ratio={value} />} />
         {mode === 'image' ? (
           <>
-            <NodeSelect standalone size="large" placement="top" label="Resolution" options={[...RESOLUTIONS]} value={settings.resolution} onChange={resolution => updateSettings({ resolution: resolution as typeof settings.resolution })} leadingIcon={<Maximize size={12} />} />
+            <NodeSelect standalone size="large" placement="top" label="Resolution" options={currentModel?.supportedResolutions ?? ['1K']} value={settings.resolution} onChange={resolution => updateSettings({ resolution: resolution as typeof settings.resolution })} leadingIcon={<Maximize size={12} />} />
             <div className={cn(glass.glassSurface, styles.stepper)} role="group" aria-label="Number of images">
               <button onClick={() => updateSettings({ numGenerations: settings.numGenerations - 1 })} disabled={settings.numGenerations <= 1} title="Fewer images" aria-label="Fewer images"><Minus size={13} /></button>
               <output aria-label="Image count">{settings.numGenerations}/4</output>
@@ -244,19 +266,26 @@ export function ChatInput({ onSubmit }: ChatInputProps) {
             </div>
           </>
         ) : (
-          <NodeSelect standalone size="large" placement="top" label="Duration" options={DURATIONS.map(d => `${d}s`)} value={`${settings.duration ?? 5}s`} onChange={duration => updateSettings({ duration: Number.parseInt(duration, 10) })} leadingIcon={<Timer size={12} />} />
+          <>
+            <NodeSelect standalone size="large" placement="top" label="Duration" options={video.durations.map(d => `${d}s`)} value={`${video.duration}s`} onChange={duration => updateSettings({ duration: Number.parseInt(duration, 10) })} leadingIcon={<Timer size={12} />} />
+            <NodeSelect standalone size="large" placement="top" label="Video resolution" options={video.resolutions} value={video.resolution} locked={!!video.lockedResolution}
+              onChange={videoResolution => updateSettings({ videoResolution: videoResolution as typeof settings.videoResolution })} leadingIcon={<Maximize size={12} />} />
+          </>
         )}
-        {isSeedance && <span className={styles.warning} title="Expensive model"><AlertTriangle size={13} />Expensive</span>}
+        {isSeedance && estimatedCost !== null && estimatedCost > 8 && <span className={styles.warning} title="Estimated cost exceeds $8"><AlertTriangle size={13} />Expensive</span>}
         <div className={styles.actions}>
           <button className={cn(glass.glassSurface, styles.iconButton)} onClick={handleEnhance} disabled={!prompt.trim()} title="Enhance prompt" aria-label="Enhance prompt"><Sparkles size={15} /></button>
-          <button className={cn(glass.glassSurface, glass.button, glass.generateButton, styles.generate)} onClick={onSubmit} disabled={!canGenerate}>
+          <button className={cn(glass.glassSurface, glass.button, glass.generateButton, styles.generate)} onClick={submit} disabled={!canGenerate}>
             <span className={cn(glass.glassContent, styles.generateContent)}>
               {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {isGenerating ? 'Generating...' : 'Generate'}
+              {isGenerating ? 'Generating...' : mode === 'video' && video.draftMode ? 'Generate draft' : 'Generate'}
+              {mode === 'video' && estimatedCost !== null && <span>{formatFalCostEstimate(estimatedCost)}</span>}
             </span>
           </button>
         </div>
       </div>
+      {confirmingCost && estimatedCost !== null && <ExpensiveGenerationDialog estimatedCostUsd={estimatedCost}
+        onCancel={() => setConfirmingCost(false)} onConfirm={() => { setConfirmingCost(false); if (canGenerate) onSubmit(); }} />}
     </div>
   );
 }

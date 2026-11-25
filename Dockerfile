@@ -10,7 +10,8 @@ ARG NEXT_PUBLIC_APP_URL
 ARG APP_DEPLOYMENT_ID
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY . .
-RUN npm run build && npm run build:media-job
+# Use Webpack to avoid the Turbopack Google Fonts import-map build failure.
+RUN npm run build -- --webpack && npm run build:media-job
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app

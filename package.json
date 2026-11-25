@@ -7,6 +7,7 @@
     "build": "node ./node_modules/next/dist/bin/next build",
     "build:media-job": "node scripts/build-media-job.mjs",
     "test:cloud-run": "node --test scripts/cloud-run-media.test.mjs",
+    "test:canvas-history": "node --test scripts/canvas-history.test.mjs",
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

@@ -11,6 +11,7 @@ function load(path, dependencies = {}) {
   });
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(name => name in dependencies ? dependencies[name]
+    : name === '@/lib/generationPromptHistory' ? load('src/lib/generationPromptHistory.ts')
     : name === '@/lib/flowClients' ? load('src/lib/flowClients.ts')
     : name === '@/lib/api/music' ? load('src/lib/api/music.ts')
     : name === '@/lib/seedanceDraft' ? draftTools : require(name), loadedModule, loadedModule.exports);
@@ -35,10 +36,11 @@ const completionBody = { draftGenerationId: 'draft-gen', sourceType: 'canvas', s
   generationRunId: 'new-run', previousIdentity: 'old-run' };
 
 // Model real JSON snapshots and conditional updates, including racing HTTP requests.
-function database(rows = [], { authenticated = true, rejectInsert = false } = {}) {
+function database(rows = [], { authenticated = true, rejectInsert = false, sessions = [] } = {}) {
   return { rows, auth: { getUser: async () => ({ data: { user: authenticated ? { id: 'user' } : null } }) },
     from(table) {
-      assert.equal(table, 'generations');
+      assert.ok(['generations', 'chat_sessions'].includes(table));
+      const tableRows = table === 'chat_sessions' ? sessions : rows;
       const filters = []; let update, insert, single = false;
       const q = {
         select() { return q; },
@@ -52,7 +54,7 @@ function database(rows = [], { authenticated = true, rejectInsert = false } = {}
             const row = { id: `gen-${rows.length}`, created_at: started, ...structuredClone(insert) };
             rows.push(row); matches = [row];
           } else {
-            matches = rows.filter(row => filters.every(filter => filter(row)));
+            matches = tableRows.filter(row => filters.every(filter => filter(row)));
             if (update) matches.forEach(row => Object.assign(row, structuredClone(update)));
           }
           return { data: structuredClone(single ? matches[0] ?? null : matches), error: null };
@@ -89,6 +91,7 @@ for (const [mode, videoResolution] of ['text', 'image', 'reference'].flatMap(mod
       '@/lib/falPricing': {}, '@/lib/gptImage26': { currentImageModel: model => model },
     }).POST;
     const body = { model: 'seedance-2-5', prompt: 'Original scene', draft: true, videoResolution,
+      promptSnapshot: { prompt: 'Original @image1', promptTags: [{ label: 'image1', portIndex: 0 }] },
       aspectRatio: '16:9', duration: 10, sourceType: 'canvas', sourceId: 'flow', nodeId: 'node',
       ...(mode === 'image' ? { startFrameUrl: 'start.png', endFrameUrl: 'end.png' } : {}),
       ...(mode === 'reference' ? { generationMode: 'reference-to-video', referenceDuration: 10,
@@ -99,6 +102,7 @@ for (const [mode, videoResolution] of ['text', 'image', 'reference'].flatMap(mod
     assert.equal(submitted[0].input.draft, true);
     assert.equal(submitted[0].input.resolution, '480p');
     assert.equal(db.rows[0].parameters.resolution, '480p');
+    assert.deepEqual(db.rows[0].parameters.promptSnapshot, body.promptSnapshot);
     assert.deepEqual(db.rows[0].parameters.input, submitted[0].input);
     if (mode === 'image') assert.equal(submitted[0].input.end_image_url, 'end.png');
     if (mode === 'reference') assert.deepEqual(submitted[0].input.video_urls, ['motion.mp4']);
@@ -139,7 +143,7 @@ test('completion uses the owned saved draft only and creates a separately billed
   const handler = completionRoute(db, async (endpoint, payload) => {
     submitted.push({ endpoint, ...payload }); return { request_id: 'hd-request' };
   }, async (_db, user, body) => registered.push({ user, body }));
-  const response = await post(handler, { ...completionBody, draft_id: 'forged', prompt: 'Changed prompt', resolution: '4k' });
+  const response = await post(handler, { ...completionBody, draft_id: 'forged', prompt: 'Changed prompt', promptSnapshot: { prompt: 'Wrong edited prompt', promptTags: [] }, resolution: '4k' });
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.endpoint, endpoint);
@@ -149,6 +153,7 @@ test('completion uses the owned saved draft only and creates a separately billed
   assert.equal(final.parameters.sourceDraftGenerationId, 'draft-gen');
   assert.equal(final.fal_request_id, 'hd-request');
   assert.equal(final.prompt, 'Original scene');
+  assert.deepEqual(final.parameters.promptSnapshot, { prompt: 'Original scene', promptTags: [] });
   assert.deepEqual(final.parameters.referenceVideoUrls, ['motion.mp4']);
   assert.deepEqual(final.parameters.input, input);
   assert.equal(final.parameters.draft, false);
@@ -338,3 +343,39 @@ test('expired drafts disable HD; a linked final navigates history without anothe
   assert.equal(c.requests.length, 0);
   assert.equal(c.SeedanceDraftActions({ ...props, data: { videoHistory: ['legacy.mp4'] } }), null);
 });
+
+test('chat drafts complete into the owned session with the saved prompt and a separate result', async () => {
+  const draft = draftRow({ source_type: 'chat', source_id: 'session', node_id: null });
+  const db = database([draft], { sessions: [{ id: 'session', user_id: 'user' }] });
+  const submissions = [];
+  const handler = completionRoute(db, async (endpoint, payload) => {
+    submissions.push({ endpoint, ...payload }); return { request_id: 'chat-hd' };
+  }, () => assert.fail('Chat completion must not register a canvas attempt'));
+  const body = { sourceType: 'chat', sourceId: 'session', draftGenerationId: draft.id,
+    prompt: 'Edited prompt', resolution: '4k' };
+  const response = await post(handler, body);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  const final = db.rows.find(row => row.id === result.generationId);
+  assert.equal(final.source_type, 'chat');
+  assert.equal(final.source_id, 'session');
+  assert.equal(final.node_id, null);
+  assert.equal(final.prompt, 'Original scene');
+  assert.equal(final.parameters.sourceDraftGenerationId, draft.id);
+  assert.equal(final.parameters.resolution, '1080p');
+  assert.equal(draft.media_url, 'draft.mp4');
+  assert.equal((await post(handler, body)).status, 409);
+  assert.equal(submissions.length, 1);
+});
+
+for (const scenario of ['wrong-session', 'wrong-owner', 'canvas-draft', 'missing-session']) {
+  test(`chat completion rejects ${scenario} before submitting paid work`, async () => {
+    const draft = draftRow({ source_type: scenario === 'canvas-draft' ? 'canvas' : 'chat', source_id: 'session' });
+    const db = database([draft], { sessions: scenario === 'missing-session' ? [] : [
+      { id: 'session', user_id: scenario === 'wrong-owner' ? 'someone-else' : 'user' },
+    ] });
+    const handler = completionRoute(db, () => assert.fail('Invalid chat completion must never queue'));
+    const response = await post(handler, { sourceType: 'chat', sourceId: scenario === 'wrong-session' ? 'other' : 'session', draftGenerationId: draft.id });
+    assert.ok([403, 404].includes(response.status));
+  });
+}

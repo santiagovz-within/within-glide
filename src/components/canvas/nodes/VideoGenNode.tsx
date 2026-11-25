@@ -1,6 +1,7 @@
 'use client';
 
 import { GenerationPreview } from './GenerationPreview';
+import { useGenerationHistoryPrompt } from '@/lib/useGenerationHistoryPrompt';
 
 import { Position, type NodeProps } from '@xyflow/react';
 import { Film, AlertTriangle, Download, ChevronLeft, ChevronRight, Clock3 } from 'lucide-react';
@@ -15,7 +16,8 @@ import { getVideoFrameTaggableInputs, syncTagsWithText, missingPromptTags, compi
 import { ReferenceInputRow } from './ReferenceInputRow';
 import { DisconnectInputButton } from './DisconnectInputButton';
 import type { VideoGenNodeData, ImageInputNodeData, ImageGenNodeData, MediaInputNodeData } from '@/types';
-import { VIDEO_MODELS, FAL_MODELS } from '@/lib/api/models';
+import { VIDEO_MODELS } from '@/lib/api/models';
+import { getVideoGenerationSettings } from '@/lib/videoGenerationSettings';
 import { ModelSelect } from './ModelSelect';
 import { NodeSelect } from './NodeSelect';
 import { useFlowStore } from '@/lib/stores/flowStore';
@@ -32,20 +34,6 @@ import { SeedanceDraftActions, SeedanceDraftToggle } from './SeedanceDraftContro
 
 type VideoResolution = NonNullable<VideoGenNodeData['videoResolution']>;
 
-const LOCKED_RESOLUTIONS: Partial<Record<string, VideoResolution>> = {
-  'seedance-2-mini': '720p',
-  'kling-3-pro': '1080p',
-};
-
-const DURATION_OPTIONS = ['3s', '5s', '8s', '10s'];
-const KLING_4_DURATION_OPTIONS = Array.from({ length: 28 }, (_, index) => `${index + 3}s`);
-const SEEDANCE_DURATION_OPTIONS = ['4s', '5s', '8s', '10s', '15s'];
-const SEEDANCE_2_5_DURATION_OPTIONS = ['4s', '5s', '8s', '10s', '15s', '20s', '25s', '30s'];
-const SEEDANCE_MINI_DURATION_OPTIONS = ['4s', '5s', '8s', '10s'];
-const FLUX_DURATION_OPTIONS = ['5s', '8s', '10s', '15s', '20s'];
-const MINIMAX_DURATION_OPTIONS = ['5s', '8s', '10s', '15s'];
-const WAN_DURATION_OPTIONS = ['3s', '5s', '8s', '10s', '15s', '20s', '25s', '30s'];
-
 /** Seedance 2.0 / 2.5 runs estimated above this get a warning and a confirm step. */
 const EXPENSIVE_VIDEO_COST_USD = 8;
 
@@ -58,7 +46,10 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const activeJobId = currentFlow ? generationJobId(currentFlow.id, id) : '';
   const isGenerating = useGenerationStore((state) => !!state.jobs[activeJobId]);
   const videoHistory = data.videoHistory ?? [];
-  const [histIdx, setHistIdx] = useState(() => Math.max(0, videoHistory.length - 1));
+  const [histIdx, setHistIdx] = useState(() => {
+    const savedIndex = data.videoUrl ? videoHistory.lastIndexOf(data.videoUrl) : -1;
+    return savedIndex >= 0 ? savedIndex : Math.max(0, videoHistory.length - 1);
+  });
   const [historyLength, setHistoryLength] = useState(videoHistory.length);
   if (historyLength !== videoHistory.length) {
     setHistoryLength(videoHistory.length);
@@ -72,61 +63,25 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const [endFrameHandleTop, setEndFrameHandleTop] = useState(261);
 
   const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
+  const { restoreVersion, restoringPrompt, promptHistoryError } = useGenerationHistoryPrompt(id, setLocalPrompt);
   const isFocused = useRef(false);
   useEffect(() => {
     if (!isFocused.current) setLocalPrompt(data.prompt ?? '');
   }, [data.prompt]);
 
 
-  const isKling     = data.model === 'kling-3-pro';
-  const isKling4    = data.model === 'kling-4';
   const isSeedanceFull = data.model === 'seedance-2';
   const isSeedance25 = data.model === 'seedance-2-5';
-  const draftMode = isSeedance25 && data.draftMode === true;
-  const isSeedanceMini = data.model === 'seedance-2-mini';
-  const isSeedance  = isSeedanceFull || isSeedance25 || isSeedanceMini;
-  const isFlux3     = data.model === 'flux-3';
-  const isMinimaxH3 = data.model === 'minimax-h3' || data.model === 'minimax-h3-max';
-  const isWan       = data.model === 'wan-3-prime';
-  const hasImage    = !!data.startFrameUrl;
-  const modelConfig = VIDEO_MODELS.find(option => option.id === data.model) ?? VIDEO_MODELS[0];
-
-  const aspectRatios = modelConfig.supportedAspectRatios;
-  const lockedResolution = draftMode ? '480p' : LOCKED_RESOLUTIONS[data.model];
-  const resolutionOptions = (lockedResolution
-    ? [lockedResolution]
-    : modelConfig.supportedResolutions) as VideoResolution[];
-  const durationOptions = isKling4
-    ? KLING_4_DURATION_OPTIONS
-    : isSeedanceFull
-    ? SEEDANCE_DURATION_OPTIONS
-    : isSeedance25
-      ? SEEDANCE_2_5_DURATION_OPTIONS
-      : isSeedanceMini
-        ? SEEDANCE_MINI_DURATION_OPTIONS
-      : isFlux3
-        ? FLUX_DURATION_OPTIONS
-        : isMinimaxH3
-          ? MINIMAX_DURATION_OPTIONS
-          : isWan
-            ? WAN_DURATION_OPTIONS
-            : DURATION_OPTIONS;
-  const requestedDuration = `${data.duration ?? 5}s`;
-  const selectedDuration = Number.parseInt(
-    durationOptions.includes(requestedDuration) ? requestedDuration : durationOptions[0],
-    10,
-  );
-  const storedResolution = data.videoResolution ?? data.seedanceResolution;
-  const selectedResolution = lockedResolution
-    ?? (storedResolution && resolutionOptions.includes(storedResolution as VideoResolution)
-      ? storedResolution as VideoResolution
-      : resolutionOptions[0]) ?? '720p';
-  const followsInputAspect = hasImage && (isKling || isKling4 || isMinimaxH3 || isWan);
-  const supportsEndFrame = !isFlux3;
-  const supportsAudio = isSeedance || isFlux3 || isKling || isWan;
+  const videoSettings = getVideoGenerationSettings(data);
+  const { draftMode, lockedResolution, followsInputAspect, supportsEndFrame, supportsAudio } = videoSettings;
+  const aspectRatios = videoSettings.model.supportedAspectRatios;
+  const resolutionOptions = videoSettings.resolutions;
+  const durationOptions = videoSettings.durations.map(duration => `${duration}s`);
+  const selectedDuration = videoSettings.duration;
+  const selectedResolution = videoSettings.resolution;
 
   const costEstimateInput = {
-    endpoint: getFalEndpoint(),
+    endpoint: videoSettings.endpoint,
     aspectRatio: data.aspectRatio,
     resolution: selectedResolution,
     duration: selectedDuration,
@@ -209,65 +164,17 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   }
 
   function handleModelChange(model: string) {
-    const modelConfig = VIDEO_MODELS.find(option => option.id === model);
-    const supportedAspectRatios = modelConfig?.supportedAspectRatios ?? [];
-    const supportedResolutions = modelConfig?.supportedResolutions as VideoResolution[] | undefined;
-    const nextDurationOptions = model === 'kling-4'
-      ? KLING_4_DURATION_OPTIONS
-      : model === 'seedance-2'
-      ? SEEDANCE_DURATION_OPTIONS
-      : model === 'seedance-2-5'
-        ? SEEDANCE_2_5_DURATION_OPTIONS
-        : model === 'seedance-2-mini'
-          ? SEEDANCE_MINI_DURATION_OPTIONS
-        : model === 'flux-3'
-          ? FLUX_DURATION_OPTIONS
-          : model === 'minimax-h3' || model === 'minimax-h3-max'
-            ? MINIMAX_DURATION_OPTIONS
-            : model === 'wan-3-prime'
-              ? WAN_DURATION_OPTIONS
-              : DURATION_OPTIONS;
-    const nextLockedResolution = LOCKED_RESOLUTIONS[model];
-    const nextResolution = nextLockedResolution
-      ?? (storedResolution && supportedResolutions?.includes(storedResolution as VideoResolution)
-        ? storedResolution as VideoResolution
-        : supportedResolutions?.[0]);
-    updateData({
-      model,
-      ...(!supportedAspectRatios.includes(data.aspectRatio) && supportedAspectRatios[0]
-        ? { aspectRatio: supportedAspectRatios[0] }
-        : {}),
-      ...(nextResolution ? { videoResolution: nextResolution } : {}),
-      ...(!nextDurationOptions.includes(`${data.duration ?? 5}s`)
-        ? { duration: Number.parseInt(nextDurationOptions[0], 10) }
-        : {}),
-    });
+    const next = getVideoGenerationSettings({ ...data, model, draftMode: false });
+    updateData({ model, aspectRatio: next.aspectRatio, videoResolution: next.resolution, duration: next.duration });
   }
 
   function navigateHistory(idx: number) {
     setHistIdx(idx);
-    const url = videoHistory[idx];
-    if (url) {
-      // Update store directly so downstream nodes re-render before propagation fires.
-      useFlowStore.getState().updateNodeData(id, { videoUrl: url });
-      document.dispatchEvent(new CustomEvent('node:video-propagate', {
-        detail: { sourceNodeId: id, videoUrl: url },
-      }));
-    }
-  }
-
-  // Derive the FAL endpoint for the current model/mode so the status poller uses the right one.
-  function getFalEndpoint(): string {
-    const modelConfig = FAL_MODELS[data.model as keyof typeof FAL_MODELS];
-    if (!modelConfig) return 'fal-ai/kling-video/v3/pro/text-to-video';
-    if (hasImage && 'imageToVideoEndpoint' in modelConfig) {
-      return (modelConfig as { imageToVideoEndpoint: string }).imageToVideoEndpoint;
-    }
-    return (modelConfig as { endpoint: string }).endpoint;
+    restoreVersion(idx);
   }
 
   function handleGenerate() {
-    if (isGenerating || !currentFlow || inputWarning) return;
+    if (isGenerating || restoringPrompt || !currentFlow || inputWarning) return;
     if (needsCostConfirmation) {
       setConfirmingCost(true);
       return;
@@ -281,15 +188,15 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   }
 
   function startGeneration() {
-    if (isGenerating || !currentFlow || inputWarning) return;
+    if (isGenerating || restoringPrompt || !currentFlow || inputWarning) return;
 
-    const endpoint = getFalEndpoint();
+    const endpoint = videoSettings.endpoint;
     useFlowStore.getState().consumeGcsOnlyEligibility();
     void startTrackedVideoGeneration({
       flowId: currentFlow.id,
       flowTitle: currentFlow.title,
       nodeId: id,
-      data,
+      data: { ...data, promptTags },
       endpoint,
       payload: {
         model: data.model,
@@ -333,10 +240,11 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
 
   const footer = (
     <div className={glassStyles.footerStack}>
+      {(restoringPrompt || promptHistoryError) && <p className={glassStyles.microLabel} role="status">{restoringPrompt ? 'Restoring prompt…' : promptHistoryError}</p>}
       {inputWarning && <p className={glassStyles.microLabel} role="status">{inputWarning}</p>}
       <button
         onClick={handleGenerate}
-        disabled={isGenerating || hasFailure || !!inputWarning}
+        disabled={isGenerating || restoringPrompt || hasFailure || !!inputWarning}
         title={
           hasFailure
             ? 'Change the prompt or inputs, then confirm below to regenerate'
@@ -431,7 +339,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
       )}
 
       {/* Prompt */}
-      {data.promptConnected ? (
+      {data.promptConnected && !data.promptHistorySource ? (
         <div ref={promptSectionRef} className={cn(glassStyles.glassSurface, glassStyles.promptSection,
           glassStyles.promptSurface, glassStyles.connectedTextPrompt)}>
           <div className={cn(glassStyles.glassContent, glassStyles.connectedPrompt)}>

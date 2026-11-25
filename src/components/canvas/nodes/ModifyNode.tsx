@@ -54,7 +54,6 @@ const ASPECT_PRESETS = [
 ];
 
 const VIDEO_OUTPAINT_DEFAULT_PROMPT = 'This same scene, extending the environment naturally beyond the original frame.';
-const VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT = 'color distortion, overexposure, static, blurry details, subtitles, style, artwork, painting, frame, still, dim overall tone, worst quality, low quality, JPEG compression artifacts, ugly, mutilated, extra fingers, poorly drawn hands, poorly drawn face, deformed, disfigured, malformed limbs, fused fingers, motionless frame, cluttered background, three legs, crowded background, walking backwards';
 
 type AnchorKey = 'tl' | 't' | 'tr' | 'l' | 'c' | 'r' | 'bl' | 'b' | 'br';
 const ANCHOR_GRID: AnchorKey[][] = [
@@ -467,7 +466,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
   const promptSectionRef = useRef<HTMLDivElement>(null);
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const outpaintPromptRef = useRef<HTMLTextAreaElement>(null);
-  const outpaintNegPromptRef = useRef<HTMLTextAreaElement>(null);
   const imageSlotRef = useRef<HTMLDivElement>(null);
   const [promptHandleTop, setPromptHandleTop] = useState(50);
   const [imageHandleTop, setImageHandleTop]   = useState(130);
@@ -639,7 +637,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
 
   useLayoutEffect(() => {
     if (outpaintPromptRef.current) autoResize(outpaintPromptRef.current);
-    if (outpaintNegPromptRef.current) autoResize(outpaintNegPromptRef.current);
   });
 
   useLayoutEffect(() => {
@@ -949,7 +946,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
     model: outpaintModel.id, videoUrl: inputVideoUrl ?? '', aspectRatio: outpaintAspect, resolution: outpaintResolution,
     fps: outpaintFps, numFrames: videoDuration ? Math.max(1, Math.round(videoDuration * outpaintFps)) : undefined,
     prompt: data.outpaintPrompt ?? VIDEO_OUTPAINT_DEFAULT_PROMPT,
-    negativePrompt: data.outpaintNegativePrompt ?? VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT,
     duration: videoDuration ?? undefined, sourceWidth: sourceVideoMetadata?.width, sourceHeight: sourceVideoMetadata?.height,
     anchor: outpaintAnchor, sourceScale: outpaintSourceScale,
   };
@@ -1387,7 +1383,7 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
             </div>
           </div>
 
-          {/* Resolution + FPS */}
+          {/* Resolution */}
           <div className={glassStyles.grid2}>
             <div className={glassStyles.field}>
               <span className={glassStyles.microLabel}>Resolution</span>
@@ -1397,14 +1393,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
                 onChange={(v) => updateData({ outpaintResolution: v as ModifyNodeData['outpaintResolution'] })}
               />
             </div>
-            {outpaintModel.id === 'ltx-2.3' && <div className={glassStyles.field}>
-              <span className={glassStyles.microLabel}>FPS</span>
-              <NodeSelect
-                options={['24', '30', '60']}
-                value={String(outpaintFps)}
-                onChange={(v) => updateData({ outpaintFps: Number(v) })}
-              />
-            </div>}
           </div>
 
           {outpaintModel.placement && <div className={glassStyles.grid2}>
@@ -1432,21 +1420,6 @@ export function ModifyNode({ data, selected, id }: NodeProps & { data: ModifyNod
                 placeholder="Describe the outpainted surroundings…"
                 value={data.outpaintPrompt ?? VIDEO_OUTPAINT_DEFAULT_PROMPT}
                 onChange={(e) => { autoResize(e.target); updateData({ outpaintPrompt: e.target.value }); }}
-              />
-            </div>
-          </div>}
-
-          {/* Negative prompt */}
-          {outpaintModel.id === 'ltx-2.3' && <div className={glassStyles.field}>
-            <span className={glassStyles.microLabel}>Negative Prompt</span>
-            <div className={cn(glassStyles.glassSurface, glassStyles.promptSection, glassStyles.promptSurface)}>
-              <textarea
-                ref={outpaintNegPromptRef}
-                className={cn(glassStyles.glassContent, glassStyles.promptContent, 'outline-none nodrag')}
-                rows={3}
-                value={data.outpaintNegativePrompt ?? VIDEO_OUTPAINT_DEFAULT_NEGATIVE_PROMPT}
-                onChange={(e) => { autoResize(e.target); updateData({ outpaintNegativePrompt: e.target.value }); }}
-                style={{ color: 'rgba(255,255,255,0.6)' }}
               />
             </div>
           </div>}

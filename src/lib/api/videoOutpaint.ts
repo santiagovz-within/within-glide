@@ -1,10 +1,12 @@
 import { FAL_NODE_ENDPOINTS } from '@/lib/api/models';
 
-export const VIDEO_OUTPAINT_MODELS = [
-  { id: 'ltx-2.3', name: 'LTX 2.3 Outpaint', endpoint: FAL_NODE_ENDPOINTS.videoOutpaint.endpoint,
+// Retained only for legacy API requests and jobs already in flight.
+const LEGACY_VIDEO_OUTPAINT_MODEL = { id: 'ltx-2.3', name: 'LTX 2.3 Outpaint', endpoint: FAL_NODE_ENDPOINTS.videoOutpaint.endpoint,
     aspects: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21'], resolutions: ['720p', '1080p'],
     defaultResolution: '720p', prompt: 'required', placement: false, maxDuration: null,
-    hint: 'Prompt-guided expansion. Output has no audio.' },
+    hint: 'Prompt-guided expansion. Output has no audio.' } as const;
+
+export const VIDEO_OUTPAINT_MODELS = [
   { id: 'ltx-2.5', name: 'LTX 2.5 Reframe', endpoint: FAL_NODE_ENDPOINTS.videoReframeLtx25.endpoint,
     aspects: ['16:9', '9:16', '1:1', '4:5', '5:4'], resolutions: ['720p', '1080p'],
     defaultResolution: '720p', prompt: 'none', placement: true, maxDuration: 60,
@@ -22,13 +24,14 @@ export const VIDEO_OUTPAINT_MODELS = [
 export const VIDEO_OUTPAINT_ANCHORS = ['center', 'top', 'bottom', 'left', 'right', 'top_left', 'top_right', 'bottom_left', 'bottom_right'] as const;
 export type VideoOutpaintAnchor = typeof VIDEO_OUTPAINT_ANCHORS[number];
 
-/** Missing model IDs belong to saved LTX 2.3 nodes and in-flight legacy jobs. */
+/** Preserve legacy API requests that omitted the model ID. */
 export function getVideoOutpaintModel(id?: string) {
-  return VIDEO_OUTPAINT_MODELS.find(model => model.id === (id ?? 'ltx-2.3'));
+  if (!id || id === LEGACY_VIDEO_OUTPAINT_MODEL.id) return LEGACY_VIDEO_OUTPAINT_MODEL;
+  return VIDEO_OUTPAINT_MODELS.find(model => model.id === id);
 }
 
 export function getVideoOutpaintSettings(data: { outpaintModel?: string; outpaintAspectRatio?: string; outpaintResolution?: string }) {
-  const model = getVideoOutpaintModel(data.outpaintModel) ?? VIDEO_OUTPAINT_MODELS[0];
+  const model = VIDEO_OUTPAINT_MODELS.find(model => model.id === data.outpaintModel) ?? VIDEO_OUTPAINT_MODELS[0];
   return { model,
     aspectRatio: (model.aspects as readonly string[]).includes(data.outpaintAspectRatio ?? '') ? data.outpaintAspectRatio! : '16:9',
     resolution: (model.resolutions as readonly string[]).includes(data.outpaintResolution ?? '') ? data.outpaintResolution! : model.defaultResolution,
@@ -120,6 +123,6 @@ export function buildVideoOutpaintInput(body: VideoOutpaintRequest) {
 export function getVideoOutpaintEndpoint(parameters: unknown, savedModel?: string) {
   const endpoint = parameters && typeof parameters === 'object' && 'endpoint' in parameters
     ? parameters.endpoint : savedModel ?? FAL_NODE_ENDPOINTS.videoOutpaint.endpoint;
-  if (!VIDEO_OUTPAINT_MODELS.some(model => model.endpoint === endpoint)) throw new Error('Unknown saved video expansion endpoint.');
+  if (endpoint !== LEGACY_VIDEO_OUTPAINT_MODEL.endpoint && !VIDEO_OUTPAINT_MODELS.some(model => model.endpoint === endpoint)) throw new Error('Unknown saved video expansion endpoint.');
   return endpoint as string;
 }

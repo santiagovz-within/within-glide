@@ -32,10 +32,12 @@ const registry = load('src/lib/api/models.ts');
 const body = (model, changes = {}) => ({ model, videoUrl: 'https://example.com/source.mp4',
   prompt: 'Continue the scene', duration: 5, sourceWidth: 1920, sourceHeight: 1080, ...changes });
 
-test('saved nodes retain LTX 2.3 and switching models normalizes unsupported settings', () => {
-  assert.equal(settings({}).model.id, 'ltx-2.3');
+test('saved nodes default to LTX 2.5 and switching models normalizes unsupported settings', () => {
+  assert.deepEqual(models.map(model => model.id), ['ltx-2.5', 'luma-ray-3.2', 'minimax-h3-max']);
+  assert.equal(settings({}).model.id, 'ltx-2.5');
+  assert.equal(settings({ outpaintModel: 'ltx-2.3' }).model.id, 'ltx-2.5');
   assert.deepEqual(settings({ outpaintModel: 'minimax-h3-max', outpaintResolution: '720p', outpaintAspectRatio: '4:5' }),
-    { model: models[3], aspectRatio: '16:9', resolution: '768p' });
+    { model: models[2], aspectRatio: '16:9', resolution: '768p' });
   assert.equal(settings({ outpaintModel: 'ltx-2.5', outpaintResolution: '1080p', outpaintAspectRatio: '4:5' }).aspectRatio, '4:5');
   const legacy = build(body(undefined, { fps: 30, numFrames: 150 }));
   assert.equal(legacy.model.endpoint, 'fal-ai/ltx-2.3-quality/outpaint');
@@ -113,7 +115,7 @@ function database(rows = [], signedIn = true) {
 }
 const next = { NextResponse: { json: (data, options) => Response.json(data, options) } };
 
-test('submission routes all four models and saves the exact endpoint and settings', async () => {
+test('submission routes all three models and saves the exact endpoint and settings', async () => {
   for (const model of models) {
     const db = database(); const requests = [];
     const { POST } = load('src/app/api/fal/video-outpaint/route.ts', {
@@ -139,7 +141,7 @@ test('status and actual billing use the saved endpoint, including legacy jobs, s
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response('video data');
   try {
-    for (const model of models) {
+    for (const model of [...models, config.getVideoOutpaintModel('ltx-2.3')]) {
       const row = { id: 'generation', user_id: 'owner', fal_request_id: 'request', model: model.endpoint,
         parameters: model.id === 'ltx-2.3' ? {} : { endpoint: model.endpoint } };
       const db = database([row]); const polled = [], billed = [];
@@ -166,7 +168,7 @@ test('status and actual billing use the saved endpoint, including legacy jobs, s
     }
   } finally { globalThis.fetch = originalFetch; }
   assert.throws(() => config.getVideoOutpaintEndpoint({ endpoint: 'untrusted/model' }));
-  assert.equal(config.getVideoOutpaintEndpoint(null), models[0].endpoint);
+  assert.equal(config.getVideoOutpaintEndpoint(null), 'fal-ai/ltx-2.3-quality/outpaint');
 });
 
 function elements(tree) {
@@ -222,7 +224,7 @@ test('Modify video UI exposes every model, persists switching, and submits the s
       const preview = nodes.find(node => node.props?.onMetadata);
       preview.props.onMetadata({ url: 'https://example.com/source.mp4', width: 1920, height: 1080, duration: 5 });
       nodes = harness.render({ outpaintModel: model.id });
-      assert.equal(nodes.filter(node => node.type === 'textarea').length, model.id === 'ltx-2.3' ? 2 : model.id === 'ltx-2.5' ? 0 : 1);
+      assert.equal(nodes.filter(node => node.type === 'textarea').length, model.id === 'ltx-2.5' ? 0 : 1);
       const generate = nodes.find(node => node.type === 'button' && elements(node).some(child => child.type === 'CostEstimate'));
       assert.equal(generate.props.disabled, false);
       await generate.props.onClick();

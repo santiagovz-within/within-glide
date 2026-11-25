@@ -38,12 +38,14 @@ export function GenerationModal<T extends GenerationDetails>({
   onClose,
   onDelete,
   detailsStatus,
+  actions,
   deleting = false,
 }: {
   generation: T;
   onClose: () => void;
   onDelete?: (g: T) => void;
   detailsStatus?: ReactNode;
+  actions?: ReactNode;
   deleting?: boolean;
 }) {
   const isVideo = generation.media_type === 'video';
@@ -200,6 +202,8 @@ export function GenerationModal<T extends GenerationDetails>({
             <Download size={14} />
             Download
           </button>
+
+          {actions}
 
           {/* Details list */}
           <div>

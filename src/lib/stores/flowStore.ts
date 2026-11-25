@@ -33,6 +33,7 @@ interface FlowStore {
   edges: Edge[];
   setNodes: (nodes: Node<NodeData>[]) => void;
   setEdges: (edges: Edge[]) => void;
+  setCanvas: (nodes: Node<NodeData>[], edges: Edge[]) => void;
   onNodesChange: (changes: NodeChange<Node<NodeData>>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -81,6 +82,10 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
     set({ nodes, isDirty: true });
   },
   setEdges: (edges) => set({ edges, isDirty: true }),
+  setCanvas: (nodes, edges) => {
+    removeDeletedNodeJobs(get().currentFlow?.id, nodes);
+    set({ nodes, edges, isDirty: true });
+  },
 
   onNodesChange: (changes) => {
     const nodes = applyNodeChanges(changes, get().nodes);

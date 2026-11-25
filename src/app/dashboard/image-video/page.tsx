@@ -11,6 +11,9 @@ import { GenerationModal } from '@/components/chat/GenerationModal';
 import { Images } from 'lucide-react';
 import styles from '@/components/chat/ImageVideo.module.css';
 import { MODELS } from '@/lib/api/models';
+import { buildChatGenerationRequest } from '@/lib/chatGeneration';
+import { useChatGenerationPolling } from '@/lib/useChatGenerationPolling';
+import { ChatDraftActions } from '@/components/chat/ChatDraftActions';
 import type { ChatSession, ChatMessage, Generation } from '@/types';
 
 export default function ImageVideoPage() {
@@ -18,13 +21,17 @@ export default function ImageVideoPage() {
     sessions, setSessions, addSession,
     activeSessionId, setActiveSessionId,
     messages, setMessages, addMessage,
-    generations, addGeneration, updateGeneration,
+    generations, addGeneration,
     prompt, referenceImages,
     settings, mode,
     isGenerating, setIsGenerating,
     updateSession, removeGeneration,
   } = useChatStore();
   const [selectedGen, setSelectedGen] = useState<Generation | null>(null);
+  const [completingDraftId, setCompletingDraftId] = useState<string | null>(null);
+  const completingDraft = useRef(false);
+  const submittingGeneration = useRef(false);
+  useChatGenerationPolling();
   const [toast, setToast] = useState('');
   const [itemsPerRow, setItemsPerRow] = useState(4);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -64,9 +71,10 @@ export default function ImageVideoPage() {
       .eq('kind', 'image-video')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
-    setSessions(data ?? []);
-    if (data?.[0] && !activeSessionIdRef.current) {
-      setActiveSessionId(data[0].id);
+    const imageVideoSessions = (data ?? []).filter((session: ChatSession) => session.kind !== 'audio');
+    setSessions(imageVideoSessions);
+    if (imageVideoSessions[0] && !activeSessionIdRef.current) {
+      setActiveSessionId(imageVideoSessions[0].id);
     }
   }, [supabase, setSessions, setActiveSessionId]);
 
@@ -84,15 +92,10 @@ export default function ImageVideoPage() {
         .order('created_at', { ascending: true });
       if (msgs) setMessages(activeSessionId!, msgs);
 
-      // Load generations for these messages
-      const genIds = msgs?.flatMap((m: ChatMessage) => m.generation_ids ?? []) ?? [];
-      if (genIds.length > 0) {
-        const { data: gens } = await supabase
-          .from('generations')
-          .select('*')
-          .in('id', genIds);
-        gens?.forEach((g: Generation) => addGeneration(g));
-      }
+      // Include queued requests even if the browser closed before linking a message.
+      const { data: gens } = await supabase.from('generations').select('*')
+        .eq('source_type', 'chat').eq('source_id', activeSessionId);
+      gens?.forEach((generation: Generation) => addGeneration(generation));
     }
     loadMessages();
   }, [activeSessionId, supabase, setMessages, addGeneration]);
@@ -135,55 +138,54 @@ export default function ImageVideoPage() {
   }
 
   async function handleGenerate() {
-    if (!prompt.trim() || isGenerating) return;
-
-    let sessionId = activeSessionId;
-    if (!sessionId) {
-      sessionId = await createNewSession();
-      if (!sessionId) return;
-    }
-
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
+    if (!prompt.trim() || isGenerating || submittingGeneration.current) return;
+    submittingGeneration.current = true;
     setIsGenerating(true);
-
-    // Capture before any async saves so values are stable
-    const capturedPrompt = prompt;
-    const capturedRefImages = [...referenceImages];
-
-    // Save user message (include reference images for display in history)
-    const { data: userMsg } = await supabase
-      .from('chat_messages')
-      .insert({
-        session_id: sessionId,
-        user_id: user.id,
-        role: 'user',
-        content: capturedPrompt,
-        generation_ids: [],
-        reference_image_urls: capturedRefImages.length > 0 ? capturedRefImages : null,
-      })
-      .select()
-      .single();
-    if (userMsg) addMessage(sessionId, userMsg as ChatMessage);
-
-    // Fire-and-forget title generation on first message
-    const sessionMessages = messages[sessionId] ?? [];
-
-    if (sessionMessages.length === 0) {
-      fetch('/api/google/generate-title', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: capturedPrompt }),
-      }).then(r => r.json()).then(async ({ title }) => {
-        if (title && title !== 'New Session') {
-          await supabase.from('chat_sessions').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId!);
-          updateSession(sessionId!, { title });
-        }
-      }).catch(() => {});
-    }
-
     try {
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        sessionId = await createNewSession();
+        if (!sessionId) return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Capture before any async saves so values are stable
+      const capturedPrompt = prompt;
+      const capturedRefImages = [...referenceImages];
+
+      // Save user message (include reference images for display in history)
+      const { data: userMsg } = await supabase
+        .from('chat_messages')
+        .insert({
+          session_id: sessionId,
+          user_id: user.id,
+          role: 'user',
+          content: capturedPrompt,
+          generation_ids: [],
+          reference_image_urls: capturedRefImages.length > 0 ? capturedRefImages : null,
+        })
+        .select()
+        .single();
+      if (userMsg) addMessage(sessionId, userMsg as ChatMessage);
+
+      // Fire-and-forget title generation on first message
+      const sessionMessages = messages[sessionId] ?? [];
+
+      if (sessionMessages.length === 0) {
+        fetch('/api/google/generate-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: capturedPrompt }),
+        }).then(r => r.json()).then(async ({ title }) => {
+          if (title && title !== 'New Session') {
+            await supabase.from('chat_sessions').update({ title, updated_at: new Date().toISOString() }).eq('id', sessionId!);
+            updateSession(sessionId!, { title });
+          }
+        }).catch(() => {});
+      }
+
       const modelConfig = MODELS[settings.model];
       const isGoogleImageModel = mode === 'image' && modelConfig?.provider === 'google';
       const endpoint = isGoogleImageModel ? '/api/google/generate' : '/api/fal/generate';
@@ -192,27 +194,7 @@ export default function ImageVideoPage() {
       const generationIds: string[] = [];
 
       for (let i = 0; i < count; i++) {
-        const body = mode === 'image'
-          ? {
-              model: settings.model,
-              prompt: capturedPrompt,
-              aspectRatio: settings.aspectRatio,
-              resolution: settings.resolution,
-              numImages: 1,
-              referenceImageUrls: capturedRefImages,
-              sourceType: 'chat',
-              sourceId: sessionId,
-            }
-          : {
-              model: settings.model,
-              prompt: capturedPrompt,
-              aspectRatio: settings.aspectRatio,
-              duration: settings.duration ?? 5,
-              startFrameUrl: capturedRefImages[0] ?? undefined,
-              endFrameUrl: capturedRefImages[1] ?? undefined,
-              sourceType: 'chat',
-              sourceId: sessionId,
-            };
+        const body = buildChatGenerationRequest(mode, settings, capturedPrompt, capturedRefImages, sessionId);
 
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -224,9 +206,11 @@ export default function ImageVideoPage() {
           requestId?: string;
           endpoint?: string;
           status?: string;
+          error?: string;
           requests?: Array<{ requestId: string; generationId?: string; endpoint: string }>;
         };
 
+        if (!res.ok) throw new Error(result.error ?? 'Generation failed. Please try again.');
         if (result.generationId) {
           generationIds.push(result.generationId);
 
@@ -248,41 +232,6 @@ export default function ImageVideoPage() {
             }
           }
         }
-
-        const pendingRequest = result.requests?.[0];
-        const requestId = pendingRequest?.requestId ?? result.requestId;
-        const requestEndpoint = pendingRequest?.endpoint ?? result.endpoint;
-
-        // Handle queued image and video generation
-        if (requestId && result.status === 'pending') {
-          // Poll
-          let attempts = 0;
-          const pollInterval = setInterval(async () => {
-            attempts++;
-            if (attempts > 100) { clearInterval(pollInterval); return; }
-            const query = new URLSearchParams();
-            if (requestEndpoint) query.set('endpoint', requestEndpoint);
-            if (mode === 'image') query.set('mediaType', 'image');
-            const statusRes = await fetch(`/api/fal/status/${requestId}?${query.toString()}`);
-            const status = await statusRes.json();
-            if (status.status === 'completed' && status.generationId) {
-              clearInterval(pollInterval);
-              const { data: gen } = await supabase
-                .from('generations')
-                .select('*')
-                .eq('id', status.generationId)
-                .single();
-              if (gen) {
-                if (!generationIds.includes(status.generationId)) {
-                  generationIds.push(status.generationId);
-                }
-                addGeneration(gen as Generation);
-                addToGallery(gen as Generation);
-                updateGeneration(status.generationId, gen as Partial<Generation>);
-              }
-            }
-          }, 3000);
-        }
       }
 
       // Save system message with generation IDs
@@ -302,8 +251,34 @@ export default function ImageVideoPage() {
       }
     } catch (err) {
       console.error('Generation failed:', err);
+      setToast(err instanceof Error ? err.message : 'Generation failed. Please try again.');
     } finally {
+      submittingGeneration.current = false;
       setIsGenerating(false);
+    }
+  }
+
+  async function handleCompleteDraft(draft: Generation) {
+    if (!draft.source_id || completingDraft.current) return;
+    completingDraft.current = true;
+    setCompletingDraftId(draft.id);
+    try {
+      const response = await fetch('/api/fal/draft/complete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draftGenerationId: draft.id, sourceType: 'chat', sourceId: draft.source_id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? 'Could not complete this draft.');
+      const { data: gen, error } = await supabase.from('generations').select('*').eq('id', result.generationId).single();
+      if (error || !gen) throw new Error('The 1080p request was submitted. Reopen the session to view its progress.');
+      addGeneration(gen as Generation);
+      addToGallery(gen as Generation);
+      addGeneration({ ...draft, parameters: { ...draft.parameters, draftCompletionGenerationId: result.generationId } });
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Could not complete this draft.');
+    } finally {
+      completingDraft.current = false;
+      setCompletingDraftId(null);
     }
   }
 
@@ -328,7 +303,10 @@ export default function ImageVideoPage() {
         <div ref={dockRef} className={styles.dock}><ChatInput onSubmit={handleGenerate} /></div>
       </div>
       {selectedGen && (
-        <GenerationModal key={selectedGen.id} generation={selectedGen} onClose={() => setSelectedGen(null)} onDelete={handleDelete} />
+        <GenerationModal key={selectedGen.id} generation={generations[selectedGen.id] ?? selectedGen}
+          onClose={() => setSelectedGen(null)} onDelete={handleDelete}
+          actions={<ChatDraftActions generation={generations[selectedGen.id] ?? selectedGen} generations={generations}
+            submitting={completingDraftId === selectedGen.id} onComplete={handleCompleteDraft} onView={setSelectedGen} />} />
       )}
     </div>
   );

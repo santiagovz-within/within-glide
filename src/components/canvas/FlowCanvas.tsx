@@ -19,6 +19,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFlowStore } from '@/lib/stores/flowStore';
+import { createCanvasHistory, getCanvasHistoryAction } from '@/lib/canvasHistory';
 import { useMediaLodStore } from '@/lib/stores/mediaLodStore';
 import { useThemeStore } from '@/lib/stores/themeStore';
 import { PromptNode } from './nodes/PromptNode';
@@ -52,7 +53,7 @@ import {
   getNodeMediaUrls,
   getSourceMediaType,
 } from './mediaOutputs';
-import type { NodeType, NodeData, ReferenceVideoNodeData, ImageGenNodeData, ImageToPromptNodeData, MediaInputNodeData, PromptNodeData, PromptTag, VideoGenNodeData } from '@/types';
+import type { NodeType, NodeData, ReferenceVideoNodeData, ImageGenNodeData, ImageToPromptNodeData, MediaInputNodeData, PromptNodeData, PromptTag, GenerationPromptSnapshot, VideoGenNodeData } from '@/types';
 import { getImageReferenceLimit } from '@/lib/api/models';
 import { reconcileMediaPromptTags, reconcilePositionalTags, reconcilePromptTags, remapCopiedPromptTags, getVideoFrameTaggableInputs } from '@/lib/promptTags';
 import { setPendingFile } from '@/lib/utils/pendingFiles';
@@ -130,7 +131,7 @@ const PASTE_CLEAR_FIELDS = new Set([
   'generatedPrompt',
   'selectedImageUrl',
   'gifUrl',
-  'promptConnected',
+  'promptConnected', 'promptHistorySource',
 ]);
 // Input nodes own their media directly (user-uploaded) — keep it on paste.
 const INPUT_NODE_TYPES = new Set(['imageInputNode', 'videoInputNode', 'mediaInputNode', 'promptNode']);
@@ -173,7 +174,7 @@ interface FlowCanvasProps {
 }
 
 export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId = null }: FlowCanvasProps) {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, setNodes, setEdges } = useFlowStore();
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, setNodes } = useFlowStore();
   const theme = useThemeStore((s) => s.theme);
   const allowedTypes = isTestUser ? (['mediaInputNode', 'videoToGifNode'] as import('@/types').NodeType[]) : undefined;
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -183,8 +184,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
   const reactFlowWrapper                = useRef<HTMLDivElement>(null);
   const connectionToastTimer            = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clipboardRef                    = useRef<{ nodes: Node<NodeData>[]; edges: Edge[]; incomingEdges: Edge[]; edgeOrder: string[] } | null>(null);
-  const undoStack                       = useRef<{ nodes: Node<NodeData>[]; edges: Edge[] }[]>([]);
-  const MAX_UNDO                        = 30;
+  const [history]                       = useState(() => createCanvasHistory(useFlowStore));
   const nodesRef                        = useRef(nodes);
   const edgesRef                        = useRef(edges);
   const pendingConnectionRef            = useRef<PendingConnection | null>(null);
@@ -248,6 +248,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
+  useEffect(() => history.subscribe(), [history]);
 
   // Keep tag associations current while retaining missing references for repair.
   useEffect(() => {
@@ -257,18 +258,18 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         const d = node.data as ImageGenNodeData;
         // While a Prompt node feeds this node, the Prompt node owns the text
         // and its positional tags are validated there.
-        if (d.promptConnected) continue;
+        if (d.promptConnected && !d.promptHistorySource) continue;
         const fixed = reconcilePromptTags(node.id, d.prompt ?? '', d.promptTags ?? [], edges);
         if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       } else if (node.type === 'referenceVideoNode') {
         const d = node.data as ReferenceVideoNodeData;
-        if (d.promptConnected) continue;
+        if (d.promptConnected && !d.promptHistorySource) continue;
         const fixed = reconcileMediaPromptTags(d.prompt ?? '', d.promptTags ?? [],
           getReferenceVideoTaggableInputs(node.id, allNodes, edges));
         if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       } else if (node.type === 'videoGenNode') {
         const d = node.data as VideoGenNodeData;
-        if (d.promptConnected) continue;
+        if (d.promptConnected && !d.promptHistorySource) continue;
         const fixed = reconcileMediaPromptTags(d.prompt ?? '', d.promptTags ?? [], getVideoFrameTaggableInputs(node.id, edges, d));
         if (fixed) updateNodeData(node.id, { prompt: fixed.prompt, promptTags: fixed.tags });
       } else if (node.type === 'promptNode') {
@@ -302,7 +303,12 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         (edge) => edge.source === sourceNodeId && edge.sourceHandle === 'prompt'
       );
       for (const edge of connectedEdges) {
-        updateNodeData(edge.target, promptTags ? { prompt, promptTags } : { prompt });
+        const target = useFlowStore.getState().nodes.find(node => node.id === edge.target);
+        // Remounting an unchanged source must not replace a restored version.
+        // Editing the source resumes the live connection.
+        if (target?.data.promptHistorySource && JSON.stringify(target.data.promptHistorySource)
+          === JSON.stringify({ prompt, promptTags: promptTags ?? [] })) continue;
+        updateNodeData(edge.target, { prompt, promptTags: promptTags ?? [], promptHistorySource: undefined });
       }
     }
     document.addEventListener('node:prompt-propagate', handlePromptPropagate);
@@ -363,17 +369,24 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
 
   // ── Copy / Paste / Delete keyboard shortcuts ─────────────────────────────
   useEffect(() => {
+    if (readOnly) return;
     function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.isComposing) return;
       const target = e.target as HTMLElement;
-      const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+      const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT' || target.isContentEditable;
+
+      // Read synchronously: rapid shortcuts can run before React's ref effects.
+      const live = useFlowStore.getState();
+      nodesRef.current = live.nodes;
+      edgesRef.current = live.edges;
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && !inInput) {
         const selectedNodeIds = new Set(nodesRef.current.filter((n) => n.selected).map((n) => n.id));
         const hasSelectedEdges = edgesRef.current.some((e) => e.selected);
         if (selectedNodeIds.size > 0 || hasSelectedEdges) {
           // Snapshot before destructive action so Ctrl+Z can restore it
-          undoStack.current.push({ nodes: nodesRef.current, edges: edgesRef.current });
-          if (undoStack.current.length > MAX_UNDO) undoStack.current.shift();
+          history.record();
 
           // Also remove children of deleted group nodes
           const allToRemove = new Set(selectedNodeIds);
@@ -440,17 +453,17 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
             }
           }
 
-          setNodes(
+          live.setCanvas(
             freshNodes
               .filter((n) => !allToRemove.has(n.id))
               .map((n) => {
                 const upd = nodeUpdates.get(n.id);
                 return upd ? { ...n, data: { ...n.data, ...upd } } : n;
-              })
+              }),
+            edgesRef.current.filter(
+              (edge) => !edge.selected && !allToRemove.has(edge.source) && !allToRemove.has(edge.target)
+            ),
           );
-          setEdges(edgesRef.current.filter(
-            (edge) => !edge.selected && !allToRemove.has(edge.source) && !allToRemove.has(edge.target)
-          ));
           e.preventDefault();
         }
         return;
@@ -461,13 +474,10 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
       if (!ctrlOrCmd) return;
       if (inInput) return;
 
-      // Ctrl/Cmd + Z → undo last delete
-      if (e.key === 'z' && !e.shiftKey) {
-        const prev = undoStack.current.pop();
-        if (prev) {
-          setNodes(prev.nodes);
-          setEdges(prev.edges);
-        }
+      // Cmd/Ctrl+Z undoes; Cmd/Ctrl+Shift+Z (or Ctrl+Y on Windows) redoes.
+      const historyAction = getCanvasHistoryAction(e, isMac);
+      if (historyAction) {
+        history[historyAction]();
         e.preventDefault();
         return;
       }
@@ -522,6 +532,12 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         for (const node of newNodes) {
           if (Array.isArray(node.data.promptTags)) {
             node.data = { ...node.data, promptTags: remapCopiedPromptTags(node.data.promptTags as PromptTag[], idMap, edgeIdMap) };
+          }
+          if (Array.isArray(node.data.generationPromptHistory)) {
+            node.data.generationPromptHistory = (node.data.generationPromptHistory as Array<GenerationPromptSnapshot | null>)
+              .map(snapshot => snapshot ? { ...snapshot,
+                promptTags: remapCopiedPromptTags(snapshot.promptTags, idMap, edgeIdMap),
+              } : null);
           }
         }
 
@@ -608,8 +624,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setNodes, setEdges, groupSelectedNodes]);
+  }, [history, readOnly, groupSelectedNodes]);
 
   // Connection validation — only allow matching port types
   const isValidConnection = useCallback<IsValidConnection<Edge>>(
@@ -937,10 +952,10 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         const sourceNode = useFlowStore.getState().nodes.find((n) => n.id === connection.source);
         if (sourceNode?.type === 'promptNode') {
           const { prompt, promptTags } = sourceNode.data as PromptNodeData;
-          updateNodeData(connection.target, { prompt: prompt ?? '', promptTags: promptTags ?? [], promptConnected: true });
+          updateNodeData(connection.target, { prompt: prompt ?? '', promptTags: promptTags ?? [], promptHistorySource: undefined, promptConnected: true });
         } else if (sourceNode?.type === 'imageToPromptNode') {
           const { generatedPrompt } = sourceNode.data as ImageToPromptNodeData;
-          updateNodeData(connection.target, { prompt: generatedPrompt ?? '', promptConnected: true });
+          updateNodeData(connection.target, { prompt: generatedPrompt ?? '', promptHistorySource: undefined, promptConnected: true });
         }
       }
 
@@ -1301,7 +1316,8 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         nodesDraggable={!readOnly}
         nodesConnectable={!readOnly}
         elementsSelectable={!readOnly}
-        deleteKeyCode={readOnly ? null : 'Delete'}
+        // The keyboard handler owns deletion and its history snapshot.
+        deleteKeyCode={null}
         multiSelectionKeyCode="Shift"
         selectionKeyCode="Shift"
         style={{ background: 'var(--color-bg-darkest)' }}
@@ -1315,7 +1331,7 @@ export function FlowCanvas({ isTestUser = false, readOnly = false, focusNodeId =
         />
         <Panel position="bottom-center">
           <p className="text-xs" style={{ color: 'var(--color-white-muted)' }}>
-            Right-click to add nodes · Shift+click or drag to multi-select · Ctrl+G to group · Delete removes selected
+            Right-click to add nodes · Shift+click or drag to multi-select · Ctrl+G to group · Delete removes selected · Cmd/Ctrl+Z undo · Cmd/Ctrl+Shift+Z redo
           </p>
         </Panel>
       </ReactFlow>

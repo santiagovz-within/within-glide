@@ -69,6 +69,7 @@ export function SeedanceDraftActions({ data, nodeId, nodeType, historyIndex, isG
     void startTrackedVideoGeneration({
       flowId: currentFlow.id, flowTitle: currentFlow.title, nodeId, nodeType, data,
       endpoint: SEEDANCE_DRAFT_COMPLETE_ENDPOINT, submissionUrl: '/api/fal/draft/complete',
+      promptSnapshot: data.generationPromptHistory?.[historyIndex] ?? null,
       payload: { draftGenerationId: result.generationId, sourceType: 'canvas', sourceId: currentFlow.id, nodeId },
     });
   }

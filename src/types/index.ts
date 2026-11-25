@@ -72,6 +72,7 @@ export interface ChatSession {
   id: string;
   user_id: string;
   title: string;
+  kind?: 'image-video' | 'audio';
   thumbnail_url?: string | null;
   created_at: string;
   updated_at: string;
@@ -190,6 +191,12 @@ export interface PromptTag {
   sourceNodeId?: string;
 }
 
+/** The editable prompt frozen when Generate is clicked, before model compilation. */
+export interface GenerationPromptSnapshot {
+  prompt: string;
+  promptTags: PromptTag[];
+}
+
 export interface ImageGenNodeData extends Record<string, unknown> {
   outputFormat?: 'png' | 'jpeg' | 'gif';
   model: string;
@@ -205,6 +212,10 @@ export interface ImageGenNodeData extends Record<string, unknown> {
   generatedImages?: string[];
   generationSlots?: Array<string | null>;
   generationHistory?: string[][];
+  /** Parallel to generationHistory; null means an older prompt has not been loaded. */
+  generationPromptHistory?: Array<GenerationPromptSnapshot | null>;
+  /** Connected prompt before selecting a local historical version. */
+  promptHistorySource?: GenerationPromptSnapshot;
   /** Parallel to `generationSlots`: the failure for each slot that has one. */
   generationErrors?: Array<GenerationFailure | null>;
   status: NodeStatus;
@@ -264,6 +275,10 @@ export interface VideoGenNodeData extends Record<string, unknown> {
   endFrameUrl?: string;
   videoUrl?: string;
   videoHistory?: string[];
+  /** Parallel to videoHistory, independent of the current editable prompt. */
+  generationPromptHistory?: Array<GenerationPromptSnapshot | null>;
+  /** Connected prompt before selecting a local historical version. */
+  promptHistorySource?: GenerationPromptSnapshot;
   /** Parallel to videoHistory; null entries preserve compatibility with older flows. */
   videoHistoryMetadata?: Array<VideoGenerationMetadata | null>;
   status: NodeStatus;
@@ -600,6 +615,9 @@ export interface ChatSettings {
   quality: string;
   numGenerations: number;
   duration: number;
+  videoResolution?: VideoGenNodeData['videoResolution'];
+  generateAudio?: boolean;
+  draftMode?: boolean;
 }
 
 export interface ChatMessageWithGenerations extends ChatMessage {

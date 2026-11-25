@@ -12,6 +12,7 @@ function load(path, dependencies = {}) {
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(
     name => name in dependencies ? dependencies[name]
+    : name === '@/lib/generationPromptHistory' ? load('src/lib/generationPromptHistory.ts')
       : name === '@/lib/api/music' ? load('src/lib/api/music.ts')
       : name === '@/lib/seedanceDraft' ? load('src/lib/seedanceDraft.ts') : require(name), loadedModule, loadedModule.exports,
   );
@@ -909,4 +910,159 @@ test('Music recovery restores the entire batch, then saves audio history on comp
   assert.equal(h.state().jobs['flow:node'], undefined);
   assert.deepEqual(saves[0].data.generatedAudios, ['first.mp3', 'second.mp3']);
   assert.deepEqual(saves[0].data.generationHistory, [['first.mp3', 'second.mp3']]);
+});
+
+const promptTools = load('src/lib/generationPromptHistory.ts');
+const promptSnapshot = text => ({ prompt: text, promptTags: [] });
+function versionSelector(h, lookup = async () => assert.fail('Saved versions should not query the database')) {
+  return load('src/lib/selectGenerationVersion.ts', {
+    '@/lib/stores/flowStore': { useFlowStore: { getState: h.flowState } },
+    '@/lib/supabase/client': { createClient: () => ({}) },
+    '@/lib/canvasGeneration': { findCanvasGeneration: lookup },
+  }).selectGenerationVersion;
+}
+function versionFlow(nodeType, extra = {}) {
+  const image = nodeType === 'imageGenNode';
+  return { id: 'flow', title: 'Flow', flow_data: { nodes: [{ id: 'node', type: nodeType, data: {
+    status: 'completed', prompt: 'second prompt', promptTags: [],
+    generationPromptHistory: [promptSnapshot('first prompt'), promptSnapshot('second prompt')],
+    ...(image ? { generationHistory: [['first.png'], ['second.png']], generatedImages: ['second.png'] }
+      : { videoHistory: ['first.mp4', 'second.mp4'], videoUrl: 'second.mp4' }),
+    ...extra,
+  } }], edges: [] } };
+}
+
+for (const nodeType of ['imageGenNode', 'videoGenNode', 'referenceVideoNode']) {
+  test(`${nodeType}: selecting, editing and generating an old prompt appends a version without changing earlier prompts or assets`, async () => {
+    const h = harness(null);
+    h.flowState().setCurrentFlow(versionFlow(nodeType));
+    const select = versionSelector(h);
+    const data = () => h.flowState().nodes[0].data;
+    let editor;
+    await select('node', 0, signal(), value => { editor = value; });
+    assert.equal(editor, 'first prompt');
+    assert.equal(data().prompt, 'first prompt');
+    const tags = [{ label: 'image1', portIndex: 0, edgeId: 'original-edge' }];
+    h.flowState().updateNodeData('node', { prompt: 'edited @image1', promptTags: tags });
+    let resolveSubmission;
+    const submissions = [], saves = [];
+    globalThis.fetch = async (_url, options) => {
+      if (options.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({ ok: true }); }
+      submissions.push(JSON.parse(options.body));
+      return new Promise(resolve => { resolveSubmission = resolve; });
+    };
+    const image = nodeType === 'imageGenNode';
+    const input = { flowId: 'flow', flowTitle: 'Flow', nodeId: 'node', nodeType,
+      data: data(), endpoint: '/generate', payload: { prompt: 'compiled reference' }, slotCount: 1 };
+    const running = image ? h.startTrackedImageGeneration(input) : h.startTrackedVideoGeneration(input);
+    assert.deepEqual(submissions[0].promptSnapshot, { prompt: 'edited @image1', promptTags: tags });
+    // Keep typing while the provider is working: it must not change the saved snapshot.
+    h.flowState().updateNodeData('node', { prompt: 'unsent draft', promptTags: [] });
+    tags[0].edgeId = 'changed-after-submit';
+    resolveSubmission(json({ mediaUrls: [image ? 'third.png' : 'third.mp4'] }));
+    await running;
+    const expectedSnapshot = { prompt: 'edited @image1', promptTags: [{ label: 'image1', portIndex: 0, edgeId: 'original-edge' }] };
+    assert.deepEqual(data().generationPromptHistory, [promptSnapshot('first prompt'), promptSnapshot('second prompt'), expectedSnapshot]);
+    assert.deepEqual(image ? data().generationHistory : data().videoHistory,
+      image ? [['first.png'], ['second.png'], ['third.png']] : ['first.mp4', 'second.mp4', 'third.mp4']);
+    assert.equal(data().prompt, 'unsent draft');
+    assert.deepEqual(saves[0].data.generationPromptHistory, data().generationPromptHistory);
+    // Simulate a saved-flow reload, then navigate in both directions.
+    h.flowState().setCurrentFlow(JSON.parse(JSON.stringify({ ...h.flowState().currentFlow, flow_data: {
+      nodes: h.flowState().nodes, edges: [],
+    } })));
+    for (const index of [0, 2, 1]) {
+      await select('node', index, signal(), value => { editor = value; });
+      assert.equal(editor, data().generationPromptHistory[index].prompt);
+      assert.deepEqual(data().promptTags, data().generationPromptHistory[index].promptTags);
+    }
+  });
+}
+function signal() { return new AbortController().signal; }
+
+for (const nodeType of ['imageGenNode', 'videoGenNode', 'referenceVideoNode']) {
+  test(`${nodeType}: server recovery restores the submitted prompt independently of newer node text`, async () => {
+    const h = harness(null);
+    const image = nodeType === 'imageGenNode';
+    const nodeData = versionFlow(nodeType).flow_data.nodes[0].data;
+    Object.assign(nodeData, { status: 'processing', prompt: 'changed while away',
+      ...(image ? { pendingRequests: [{ requestId: 'request' }] } : { pendingRequestId: 'request' }) });
+    const saves = [];
+    globalThis.fetch = async (_url, options) => {
+      if (options?.method === 'PATCH') { saves.push(JSON.parse(options.body)); return json({ ok: true }); }
+      return json({ generations: [recovered({ nodeType, nodeData, mediaType: image ? 'image' : 'video',
+        status: 'completed', mediaUrl: 'recovered-output', promptSnapshot: promptSnapshot('submitted prompt') })] });
+    };
+    await h.recoverBackgroundGenerations();
+    assert.deepEqual(saves[0].data.generationPromptHistory.map(entry => entry.prompt),
+      ['first prompt', 'second prompt', 'submitted prompt']);
+  });
+}
+
+test('legacy history retrieves the exact asset prompt, caches it and preserves its connected source', async () => {
+  const h = harness(null);
+  h.flowState().setCurrentFlow(versionFlow('videoGenNode', { generationPromptHistory: undefined, promptConnected: true }));
+  let calls = 0;
+  const select = versionSelector(h, async (_db, url) => {
+    calls++;
+    assert.equal(url, 'first.mp4');
+    return { prompt: 'original submitted text' };
+  });
+  await select('node', 0, signal(), () => {});
+  const data = h.flowState().nodes[0].data;
+  assert.equal(data.prompt, 'original submitted text');
+  assert.deepEqual(data.promptHistorySource, promptSnapshot('second prompt'));
+  assert.equal(data.promptConnected, true);
+  assert.deepEqual(data.generationPromptHistory, [promptSnapshot('original submitted text'), null]);
+  await select('node', 0, signal(), () => {});
+  assert.equal(calls, 1);
+});
+
+for (const change of ['edit', 'switch', 'abort', 'new-generation']) {
+  test(`a delayed legacy lookup cannot replace a newer ${change}`, async () => {
+    const h = harness(null);
+    h.flowState().setCurrentFlow(versionFlow('imageGenNode', { generationPromptHistory: [null, promptSnapshot('second prompt')] }));
+    let resolveLookup;
+    const select = versionSelector(h, () => new Promise(resolve => { resolveLookup = resolve; }));
+    const controller = new AbortController();
+    const loading = select('node', 0, controller.signal, () => {});
+    if (change === 'edit') h.flowState().updateNodeData('node', { prompt: 'typing now' });
+    if (change === 'switch') await select('node', 1, signal(), () => {});
+    if (change === 'abort') controller.abort();
+    if (change === 'new-generation') h.flowState().updateNodeData('node', { generationRunId: 'new-run', prompt: 'new submission' });
+    const promptBefore = h.flowState().nodes[0].data.prompt;
+    resolveLookup({ prompt: 'slow old prompt' });
+    await loading;
+    assert.equal(h.flowState().nodes[0].data.prompt, promptBefore);
+  });
+}
+
+test('partial image batches retain their submitted prompt through failure acknowledgement', async () => {
+  const h = harness(job({ kind: 'image-generation', nodeType: 'imageGenNode', slotCount: 2,
+    slots: ['success.png', null], failedSlots: [1], requests: [], imageHistory: [['old.png']],
+    generationPromptHistory: [promptSnapshot('old prompt')], promptSnapshot: promptSnapshot('partial batch prompt') }));
+  let saved;
+  globalThis.fetch = async (_url, options) => { saved = JSON.parse(options.body).data; return json({ ok: true }); };
+  await h.progressBackgroundGenerations();
+  assert.deepEqual(saved.generationHistory, [['old.png'], ['success.png']]);
+  const acknowledged = { ...saved, ...load('src/lib/imageGenerationResults.ts').acknowledgeImageFailure(saved) };
+  assert.deepEqual(acknowledged.generationPromptHistory, [promptSnapshot('old prompt'), promptSnapshot('partial batch prompt')]);
+  assert.equal(acknowledged.generationHistory.length, 2);
+});
+
+test('stale autosave preserves prompt snapshots alongside their winning assets', () => {
+  const saved = { generationRunId: 'new', status: 'completed', generationHistory: [['new.png']],
+    generationPromptHistory: [promptSnapshot('submitted prompt')] };
+  const merged = reconciliation.mergeGenerationData({ generationRunId: 'old', status: 'processing',
+    generationPromptHistory: [promptSnapshot('stale prompt')], prompt: 'current edit' }, saved, {});
+  assert.deepEqual(merged.generationPromptHistory, saved.generationPromptHistory);
+  assert.equal(merged.prompt, 'current edit');
+});
+
+test('generation records prefer editable snapshots over compiled text and preserve empty prompts', () => {
+  assert.deepEqual(promptTools.savedGenerationPrompt({ prompt: 'compiled text', parameters: {
+    promptSnapshot: { prompt: '@image1', promptTags: [{ label: 'image1', portIndex: 0 }] },
+  } }), { prompt: '@image1', promptTags: [{ label: 'image1', portIndex: 0 }] });
+  assert.deepEqual(promptTools.savedGenerationPrompt({ prompt: '' }), promptSnapshot(''));
+  assert.equal(promptTools.savedGenerationPrompt({ prompt: null }), null);
 });
