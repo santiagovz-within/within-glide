@@ -68,7 +68,6 @@ export default function ImageVideoPage() {
     const { data } = await supabase
       .from('chat_sessions')
       .select('*')
-      .eq('kind', 'image-video')
       .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
     const imageVideoSessions = (data ?? []).filter((session: ChatSession) => session.kind !== 'audio');

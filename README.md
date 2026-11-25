@@ -106,7 +106,7 @@ A companion Figma plugin can receive GIFs sent directly from the canvas. Users g
 
 New flows require a client. Existing flows prompt for a client when reopened. See [Flow client tagging](docs/flow-clients.md) for the required database migration, historical cost attribution, and client spending reports.
 
-Before deploying Audio, apply `supabase/migrations/018_audio_generations.sql` and `supabase/migrations/019_recording_sessions.sql` if they have not already been applied. Existing sessions remain in Image & Video; recording sessions are separated by session kind. Run `npm run test:music` to check model payloads, audio storage, session isolation, and generation recovery. The Audio session UI was brought over from commit `96c1df9` on `santiagovz-within/canvas-flow-node-overlay`.
+Before deploying Audio, apply `supabase/migrations/018_audio_generations.sql` and `supabase/migrations/019_recording_sessions.sql` if they have not already been applied. Existing sessions remain in Image & Video; recording sessions are separated by session kind. Run `npm run test:music` to check model payloads, audio storage, session isolation, and generation recovery.
 
 ---
 

@@ -68,7 +68,6 @@ export interface Generation {
 }
 
 export interface ChatSession {
-  kind?: 'image-video' | 'audio';
   id: string;
   user_id: string;
   title: string;
