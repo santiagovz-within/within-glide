@@ -93,7 +93,8 @@ export async function POST(request: NextRequest) {
           generationMode: 'reference-to-video', endpoint, generationRunId: body.generationRunId,
           promptSnapshot: readPromptSnapshot(body.promptSnapshot),
           aspectRatio: input.aspect_ratio, resolution: input.resolution,
-          duration: input.duration, generateAudio: input.generate_audio ?? input.audio,
+          // Keep duration numeric for history/recovery even though Veo sends "8s".
+          duration: model === 'veo-3-1' ? 8 : input.duration, generateAudio: input.generate_audio ?? input.audio,
           referenceVideoUrls: body.referenceVideoUrls ?? [],
           ...(draft ? { draft: true, input } : {}),
         },
@@ -118,6 +119,8 @@ export async function POST(request: NextRequest) {
       const isMinimaxH3Max = model === 'minimax-h3-max';
       const isMinimaxH3 = model === 'minimax-h3' || isMinimaxH3Max;
       const isWan = model === 'wan-3-prime';
+      const isVeo31 = model === 'veo-3-1';
+      const videoAspectRatio = isVeo31 ? body.aspectRatio ?? (hasImage ? 'auto' : '16:9') : aspectRatio;
       const minimaxName = isMinimaxH3Max ? 'MiniMax H3 Max' : 'MiniMax H3';
       const defaultVideoResolution = isMinimaxH3Max ? '768P' : isMinimaxH3 ? '2K' : isKling || isKling4 ? '1080p' : '720p';
       const requestedVideoResolution = body.videoResolution
@@ -126,10 +129,37 @@ export async function POST(request: NextRequest) {
       const videoResolution = draft ? '480p' : isSeedanceMini && requestedVideoResolution !== '720p'
         ? '720p'
         : requestedVideoResolution;
-      const requestedDuration = body.duration ?? 5;
+      const requestedDuration = body.duration ?? (isVeo31 ? 8 : 5);
       const duration = isSeedance
         ? Math.min(isSeedance25 ? 30 : 15, requestedDuration < 4 ? 5 : requestedDuration)
         : requestedDuration;
+
+      if (isVeo31) {
+        if (typeof prompt !== 'string' || !prompt.trim()) {
+          return NextResponse.json({ error: 'Enter a prompt.' }, { status: 400 });
+        }
+        if (prompt.length > 20_000) {
+          return NextResponse.json({ error: 'Google Veo 3.1 prompts must be at most 20,000 characters.' }, { status: 400 });
+        }
+        if (![4, 6, 8].includes(duration)) {
+          return NextResponse.json({ error: 'Google Veo 3.1 duration must be 4, 6, or 8 seconds.' }, { status: 400 });
+        }
+        if (!(hasImage ? ['auto', '16:9', '9:16'] : ['16:9', '9:16']).includes(videoAspectRatio)) {
+          return NextResponse.json({ error: 'Google Veo 3.1 supports 16:9 and 9:16, or Auto with a start frame.' }, { status: 400 });
+        }
+        if (startFrameUrl !== undefined && (typeof startFrameUrl !== 'string' || !startFrameUrl.trim())) {
+          return NextResponse.json({ error: 'Provide a valid start frame URL.' }, { status: 400 });
+        }
+        if (endFrameUrl) {
+          return NextResponse.json({ error: 'Google Veo 3.1 image-to-video accepts a start frame only. Disconnect the end frame.' }, { status: 400 });
+        }
+        if (generateAudio !== undefined && typeof generateAudio !== 'boolean') {
+          return NextResponse.json({ error: 'Generate audio must be a boolean.' }, { status: 400 });
+        }
+        if (body.negativePrompt !== undefined && typeof body.negativePrompt !== 'string') {
+          return NextResponse.json({ error: 'Negative prompt must be text.' }, { status: 400 });
+        }
+      }
 
       if (isKling4) {
         if (!Number.isInteger(duration) || duration < 3 || duration > 30) {
@@ -187,6 +217,8 @@ export async function POST(request: NextRequest) {
           ? ['480P', '768P']
         : isMinimaxH3
           ? ['768P', '2K']
+          : isVeo31
+            ? ['720p', '1080p', '4k']
           : isSeedance25
             ? ['480p', '720p', '1080p', '4k']
             : isSeedanceMini
@@ -234,7 +266,16 @@ export async function POST(request: NextRequest) {
         : modelConfig.endpoint;
 
       const videoInput: Record<string, unknown> = { prompt };
-      if (isKling4) {
+      if (isVeo31) {
+        Object.assign(videoInput, {
+          aspect_ratio: videoAspectRatio,
+          duration: `${duration}s`,
+          resolution: videoResolution,
+          generate_audio: generateAudio !== false,
+          ...(startFrameUrl ? { image_url: startFrameUrl } : {}),
+          ...(body.negativePrompt ? { negative_prompt: body.negativePrompt } : {}),
+        });
+      } else if (isKling4) {
         Object.assign(videoInput, {
           ...(!hasImage ? { aspect_ratio: aspectRatio } : {}),
           duration,
@@ -313,9 +354,10 @@ export async function POST(request: NextRequest) {
           model,
           prompt,
           parameters: {
-            generationRunId: body.generationRunId, aspectRatio: draft ? videoInput.aspect_ratio ?? 'auto' : aspectRatio,
+            generationRunId: body.generationRunId, aspectRatio: draft ? videoInput.aspect_ratio ?? 'auto' : videoAspectRatio,
             promptSnapshot: readPromptSnapshot(body.promptSnapshot),
             resolution: videoResolution, duration, endpoint,
+            ...(isVeo31 ? { generateAudio: generateAudio !== false } : {}),
             ...(draft ? { draft: true, input: videoInput, generateAudio: generateAudio !== false } : {}),
           },
           reference_image_urls: referenceImageUrls,

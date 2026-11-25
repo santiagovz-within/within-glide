@@ -99,12 +99,16 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
   const storeNodes = useFlowStore(state => state.nodes);
   const startFrameEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'start_frame');
   const endFrameEdge = storeEdges.find(e => e.target === id && e.targetHandle === 'end_frame');
+  const hasUnsupportedEndFrame = !supportsEndFrame && (!!endFrameEdge || !!data.endFrameUrl);
+  const showEndFrame = supportsEndFrame || hasUnsupportedEndFrame;
   const startFrameSource = startFrameEdge ? storeNodes.find(n => n.id === startFrameEdge.source) : undefined;
   const taggableInputs = getVideoFrameTaggableInputs(id, storeEdges, data);
   const promptTags = syncTagsWithText(data.prompt ?? '', data.promptTags ?? [], taggableInputs);
   const missingTags = missingPromptTags(promptTags, taggableInputs);
   const hasPendingInputs = taggableInputs.some(input => !input.url);
-  const inputWarning = missingTags.length
+  const inputWarning = hasUnsupportedEndFrame
+    ? `${videoSettings.model.name} accepts a start frame only. Disconnect the end frame to generate.`
+    : missingTags.length
     ? `Missing reference: ${missingTags.map(tag => `@${tag.label}`).join(', ')}. Reconnect it, wait for its upload, or edit the tag.`
     : hasPendingInputs ? 'Waiting for connected image uploads' : undefined;
 
@@ -155,7 +159,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
     const end = endFrameRowRef.current;
     if (start) setStartFrameHandleTop(start.offsetTop + start.offsetHeight / 2);
     if (end) setEndFrameHandleTop(end.offsetTop + end.offsetHeight / 2);
-  }, [supportsEndFrame, data.startFrameUrl, data.endFrameUrl, supportsAudio, isSeedanceFull, localPrompt, data.promptConnected]);
+  }, [showEndFrame, data.startFrameUrl, data.endFrameUrl, supportsAudio, isSeedanceFull, localPrompt, data.promptConnected]);
 
   function updateData(updates: Partial<VideoGenNodeData>) {
     document.dispatchEvent(new CustomEvent('node:update', {
@@ -204,7 +208,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         aspectRatio: data.aspectRatio,
         duration: selectedDuration,
         startFrameUrl: data.startFrameUrl,
-        endFrameUrl: data.endFrameUrl,
+        endFrameUrl: supportsEndFrame ? data.endFrameUrl : undefined,
         generateAudio: data.generateAudio ?? true,
         videoResolution: selectedResolution,
         draft: draftMode,
@@ -325,7 +329,7 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
         offset={`${startFrameHandleTop}px`}
         connected={!!startFrameEdge}
       />
-      {supportsEndFrame && (
+      {showEndFrame && (
         <TypedHandle
           type="target"
           position={Position.Left}
@@ -333,8 +337,9 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
           portType="image"
           offset={`${endFrameHandleTop}px`}
           connected={!!endFrameEdge}
-          disabled={!startFrameEdge}
-          disabledReason="Connect a Start Frame first — End Frame requires a Start Frame"
+          disabled={!supportsEndFrame || !startFrameEdge}
+          disabledReason={!supportsEndFrame ? `${videoSettings.model.name} accepts a start frame only`
+            : 'Connect a Start Frame first — End Frame requires a Start Frame'}
         />
       )}
 
@@ -426,10 +431,10 @@ export function VideoGenNode({ data, selected, id }: NodeProps & { data: VideoGe
             {data.startFrameUrl && <CanvasImage src={data.startFrameUrl} alt="Start frame" draggable={false}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
           </ReferenceInputRow>
-          {supportsEndFrame && (
+          {showEndFrame && (
             <ReferenceInputRow ref={endFrameRowRef} nodeId={id} edgeId={endFrameEdge?.id}
-              label="End Frame" connected={!!endFrameEdge || !!data.endFrameUrl}
-              canReorder={!!startFrameEdge && !!endFrameEdge} compact>
+              label={supportsEndFrame ? 'End Frame' : 'End Frame (unsupported)'} connected={!!endFrameEdge || !!data.endFrameUrl}
+              canReorder={supportsEndFrame && !!startFrameEdge && !!endFrameEdge} compact>
               {data.endFrameUrl && <CanvasImage src={data.endFrameUrl} alt="End frame" draggable={false}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
             </ReferenceInputRow>

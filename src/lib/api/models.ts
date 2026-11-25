@@ -192,6 +192,17 @@ export const FAL_MODELS = {
     pricing: { kind: 'video-tokens', fps: 24, tokensPerUnit: 1000, resolutionRateMultipliers: { '720p': 1, '1080p': 1, '4k': 0.008 / 0.014 } },
     type: 'video' as const,
   },
+  'veo-3-1': {
+    endpoint: 'fal-ai/veo3.1',
+    imageToVideoEndpoint: 'fal-ai/veo3.1/image-to-video',
+    // Standard-tier rates: https://fal.ai/models/fal-ai/veo3.1 (2026-11-25).
+    pricing: {
+      kind: 'video-seconds-rates',
+      resolutionRatesUsd: { '720p': 0.20, '1080p': 0.20, '4k': 0.40 },
+      audioResolutionRatesUsd: { '720p': 0.40, '1080p': 0.40, '4k': 0.60 },
+    },
+    type: 'video' as const,
+  },
   'seedance-2-5': {
     endpoint: 'bytedance/seedance-2.5/text-to-video',
     imageToVideoEndpoint: 'bytedance/seedance-2.5/image-to-video',
@@ -623,6 +634,18 @@ export const MODELS: Record<string, ModelConfig> = {
     supportsNegativePrompt: false,
     estimatedTimeSeconds: 90,
   },
+  'veo-3-1': {
+    id: 'veo-3-1',
+    name: 'Google Veo 3.1',
+    provider: 'fal',
+    type: 'video',
+    supportedAspectRatios: ['16:9', '9:16'],
+    supportedResolutions: ['720p', '1080p', '4k'],
+    maxBatchSize: 1,
+    supportsImageInput: true,
+    supportsNegativePrompt: true,
+    estimatedTimeSeconds: 120,
+  },
   'seedance-2-5': {
     id: 'seedance-2-5',
     name: 'Seedance 2.5',
@@ -725,6 +748,7 @@ export const VIDEO_MODELS = [
   MODELS['wan-3-prime'],
   MODELS['seedance-2-5'],
   MODELS['seedance-2'],
+  MODELS['veo-3-1'],
   MODELS['kling-4'],
   MODELS['google-omni-flash'],
   MODELS['minimax-h3-max'],

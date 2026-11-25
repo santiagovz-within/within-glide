@@ -21,9 +21,11 @@ export interface ReferenceVideoModel {
   defaultAspectRatio: string;
   defaultResolution: string;
   autoDuration?: 'auto' | 'null';
+  /** Veo encodes seconds as e.g. "8s" instead of a number. */
+  durationSuffix?: 's';
   audioParam?: 'generate_audio' | 'audio';
   imageParam: 'image_urls' | 'reference_image_urls';
-  videoParam: 'video_urls' | 'reference_video_urls';
+  videoParam?: 'video_urls' | 'reference_video_urls';
   maxImages: number;
   maxVideos: number;
   maxReferences: number;
@@ -87,6 +89,24 @@ export const REFERENCE_VIDEO_MODELS: ReferenceVideoModel[] = [
     maxImages: 9, maxVideos: 3, maxReferences: 12,
     referenceHint: 'Refer to images as @Image1, @Image2 and videos as @Video1, @Video2.',
     videoHint: 'MP4/MOV, 2–15s combined, under 50 MB total; approximately 480p–720p.',
+  },
+  {
+    id: 'veo-3-1', name: 'Google Veo 3.1',
+    endpoint: 'fal-ai/veo3.1/reference-to-video',
+    estimatedUnitPrice: 0.20,
+    // Standard-tier rates: https://fal.ai/models/fal-ai/veo3.1 (2026-11-25).
+    pricing: {
+      kind: 'video-seconds-rates',
+      resolutionRatesUsd: { '720p': 0.20, '1080p': 0.20, '4k': 0.40 },
+      audioResolutionRatesUsd: { '720p': 0.40, '1080p': 0.40, '4k': 0.60 },
+    },
+    aspectRatios: ['16:9', '9:16'], resolutions: ['720p', '1080p', '4k'],
+    minDuration: 8, maxDuration: 8, defaultDuration: 8, durationOptions: [8], durationSuffix: 's',
+    defaultAspectRatio: '16:9', defaultResolution: '720p',
+    audioParam: 'generate_audio', imageParam: 'image_urls',
+    maxImages: 3, maxVideos: 0, maxReferences: 3,
+    referenceHint: 'Use up to 3 images for consistent subjects. Images must be at most 8 MB each.',
+    videoHint: 'Google Veo 3.1 accepts image references only. Disconnect video references to generate.',
   },
   {
     id: 'kling-4', name: 'Kling v4',
@@ -182,6 +202,7 @@ export function buildReferenceVideoInput(body: Record<string, unknown>) {
   const draft = validateSeedanceDraft(model.id, body.draft);
   const prompt = body.prompt;
   if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('Enter a prompt.');
+  if (model.id === 'veo-3-1' && prompt.length > 20_000) throw new Error('Google Veo 3.1 prompts must be at most 20,000 characters.');
   const aspectRatio = body.aspectRatio ?? model.defaultAspectRatio;
   const resolution = draft ? '480p' : body.videoResolution ?? model.defaultResolution;
   const duration = body.referenceDuration ?? model.defaultDuration;
@@ -202,12 +223,15 @@ export function buildReferenceVideoInput(body: Record<string, unknown>) {
     if (!Array.isArray(value) || value.some(url => typeof url !== 'string' || !url.trim())) {
       throw new Error(`Provide valid ${kind} reference URLs.`);
     }
-    if (value.length > limit) throw new Error(`${model!.name} accepts up to ${limit} ${kind} references.`);
+    if (value.length > limit) throw new Error(limit === 0
+      ? `${model!.name} accepts image references only. Disconnect video references to generate.`
+      : `${model!.name} accepts up to ${limit} ${kind} references.`);
     return value;
   }
   const imageUrls = readUrls(body.referenceImageUrls, model.maxImages, 'image');
   const videoUrls = readUrls(body.referenceVideoUrls, model.maxVideos, 'video');
-  if (!imageUrls.length && !videoUrls.length) throw new Error('Connect at least one image or video reference.');
+  if (!imageUrls.length && !videoUrls.length) throw new Error(model.maxVideos === 0
+    ? 'Connect at least one image reference.' : 'Connect at least one image or video reference.');
   if (imageUrls.length + videoUrls.length > model.maxReferences) {
     throw new Error(`${model.name} accepts up to ${model.maxReferences} references in total.`);
   }
@@ -217,9 +241,10 @@ export function buildReferenceVideoInput(body: Record<string, unknown>) {
     aspect_ratio: aspectRatio,
     resolution,
     duration: duration === 'auto' ? (model.autoDuration === 'null' ? null : 'auto')
-      : model.autoDuration === 'auto' ? String(duration) : duration,
+      : model.durationSuffix ? `${duration}${model.durationSuffix}`
+        : model.autoDuration === 'auto' ? String(duration) : duration,
     [model.imageParam]: imageUrls,
-    [model.videoParam]: videoUrls,
+    ...(model.videoParam ? { [model.videoParam]: videoUrls } : {}),
     ...(model.audioParam ? { [model.audioParam]: body.generateAudio ?? true } : {}),
     ...(model.id === 'seedance-2-5' ? { task: 'reference' } : {}),
     ...(model.id === 'minimax-h3-max' ? { prompt_expansion_mode: 'balanced' } : {}),

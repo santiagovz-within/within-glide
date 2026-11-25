@@ -39,8 +39,11 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
   const activeJobId = currentFlow ? generationJobId(currentFlow.id, id) : '';
   const isGenerating = useGenerationStore(state => !!state.jobs[activeJobId]);
   const config = getReferenceVideoModel(data.model) ?? REFERENCE_VIDEO_MODELS[0];
+  const supportsVideoReferences = config.maxVideos > 0;
   const draftMode = config.id === 'seedance-2-5' && data.draftMode === true;
   const references = getReferenceVideoInputs(id, nodes, edges);
+  // Keep existing unsupported connections visible so they can be disconnected.
+  const showVideoReferences = supportsVideoReferences || references.videos.length > 0;
   const taggable = getReferenceVideoTaggableInputs(id, nodes, edges);
   const reconciled = data.promptConnected && !data.promptHistorySource ? null : reconcileMediaPromptTags(data.prompt ?? '', data.promptTags ?? [], taggable);
   const prompt = reconciled?.prompt ?? data.prompt ?? '';
@@ -193,8 +196,9 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         offset={`${offsets[0]}px`} connected={!!data.promptConnected} />
       <TypedHandle type="target" position={Position.Left} id={REFERENCE_IMAGE_HANDLE} portType="image"
         offset={`${offsets[1]}px`} connected={references.images.length > 0} title="Connect image references" />
-      <TypedHandle type="target" position={Position.Left} id={REFERENCE_VIDEO_HANDLE} portType="video"
-        offset={`${offsets[2]}px`} connected={references.videos.length > 0} title="Connect video references" />
+      {showVideoReferences && <TypedHandle type="target" position={Position.Left} id={REFERENCE_VIDEO_HANDLE} portType="video"
+        offset={`${offsets[2]}px`} connected={references.videos.length > 0} title="Connect video references"
+        disabled={!supportsVideoReferences} disabledReason={`${config.name} accepts image references only`} />}
 
       {data.promptConnected && !data.promptHistorySource ? (
         <div ref={promptRef} className={cn(glassStyles.glassSurface, glassStyles.promptSection,
@@ -206,8 +210,8 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
         </div>
       ) : (
         <PromptEditor containerRef={promptRef} value={prompt} tags={promptTags} taggable={taggable}
-          placeholder="Describe the video. Type @ to add an image or video reference…"
-          emptyHint="Connect an image or video reference to tag it."
+          placeholder={supportsVideoReferences ? 'Describe the video. Type @ to add an image or video reference…' : 'Describe the video. Type @ to add an image reference…'}
+          emptyHint={supportsVideoReferences ? 'Connect an image or video reference to tag it.' : 'Connect an image reference to tag it.'}
           onChange={({ prompt, tags }) => updateData({ prompt, promptTags: tags })} />
       )}
       <ModelSelect options={REFERENCE_VIDEO_MODELS} value={config.id} onChange={changeModel} />
@@ -230,13 +234,18 @@ export function ReferenceVideoNode({ data, selected, id }: NodeProps & { data: R
           leadingIcon={<AspectRatioGlyph ratio={aspectRatio} />} optionIcon={value => <AspectRatioGlyph ratio={value} />} />
         <NodeSelect label="Seconds to generate" options={durationOptions.map(value => value === 'auto' ? 'Auto' : `${value}s`)}
           value={duration === 'auto' ? 'Auto' : `${duration}s`} leadingIcon={<Clock3 size={10} />}
+          locked={durationOptions.length === 1}
           onChange={value => updateData({ referenceDuration: value === 'Auto' ? 'auto' : Number.parseInt(value, 10) })} />
         <NodeSelect label="Resolution" options={draftMode ? ['480p'] : config.resolutions} value={resolution} locked={draftMode}
           onChange={value => updateData({ videoResolution: value as ReferenceVideoNodeData['videoResolution'] })} />
       </div>
-      <p className={cn(glassStyles.microLabel, 'nodrag')} style={{ textTransform: 'none' }}>Type @ to choose a connected image or video. References are included automatically.</p>
+      <p className={cn(glassStyles.microLabel, 'nodrag')} style={{ textTransform: 'none' }}>
+        {supportsVideoReferences ? 'Type @ to choose a connected image or video. References are included automatically.'
+          : `Type @ to choose a connected image. ${config.referenceHint}`}
+      </p>
 
       {(['image', 'video'] as const).map(kind => {
+        if (kind === 'video' && !showVideoReferences) return null;
         const items = kind === 'image' ? references.images : references.videos;
         const limit = kind === 'image' ? config.maxImages : config.maxVideos;
         const referenceLabel = (index: number) => `@${taggable.find(input => input.edgeId === items[index].edgeId)?.label ?? `${kind}${index + 1}`}`;

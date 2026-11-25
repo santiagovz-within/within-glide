@@ -7,6 +7,7 @@ const LOCKED_RESOLUTIONS: Partial<Record<string, VideoResolution>> = {
   'kling-3-pro': '1080p',
 };
 const DURATIONS: Record<string, number[]> = {
+  'veo-3-1': [4, 6, 8],
   'kling-4': Array.from({ length: 28 }, (_, index) => index + 3),
   'seedance-2': [4, 5, 8, 10, 15],
   'seedance-2-5': [4, 5, 8, 10, 15, 20, 25, 30],
@@ -26,17 +27,18 @@ export function getVideoGenerationSettings(data: Partial<VideoGenNodeData>) {
   const storedResolution = data.videoResolution ?? data.seedanceResolution;
   const resolution = storedResolution && resolutions.includes(storedResolution) ? storedResolution : resolutions[0];
   const durations = DURATIONS[model.id] ?? [3, 5, 8, 10];
-  const requestedDuration = data.duration ?? 5;
+  const defaultDuration = model.id === 'veo-3-1' ? 8 : durations[0];
+  const requestedDuration = data.duration ?? (model.id === 'veo-3-1' ? 8 : 5);
   const fal = FAL_MODELS[model.id as keyof typeof FAL_MODELS];
   const followsInputAspect = !!data.startFrameUrl
     && ['kling-3-pro', 'kling-4', 'minimax-h3', 'minimax-h3-max', 'wan-3-prime'].includes(model.id);
   return {
     model, draftMode, lockedResolution, resolutions, durations, resolution,
-    duration: durations.includes(requestedDuration) ? requestedDuration : durations[0],
+    duration: durations.includes(requestedDuration) ? requestedDuration : defaultDuration,
     aspectRatio: data.aspectRatio && model.supportedAspectRatios.includes(data.aspectRatio)
       ? data.aspectRatio : model.supportedAspectRatios[0],
-    supportsEndFrame: model.id !== 'flux-3',
-    supportsAudio: ['seedance-2', 'seedance-2-5', 'seedance-2-mini', 'flux-3', 'kling-3-pro', 'wan-3-prime'].includes(model.id),
+    supportsEndFrame: !['flux-3', 'veo-3-1'].includes(model.id),
+    supportsAudio: ['seedance-2', 'seedance-2-5', 'seedance-2-mini', 'flux-3', 'kling-3-pro', 'wan-3-prime', 'veo-3-1'].includes(model.id),
     followsInputAspect,
     endpoint: data.startFrameUrl && 'imageToVideoEndpoint' in fal ? fal.imageToVideoEndpoint : fal.endpoint,
   };

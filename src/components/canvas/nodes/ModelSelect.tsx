@@ -67,6 +67,7 @@ const MODEL_SUBTITLES: Record<string, string> = {
   'flux-2-pro': 'DRAFT QUALITY',
   'seedance-2': 'THE BEST VIDEO MODEL',
   'seedance-2-5': 'NEW BEST VIDEO MODEL (UP TO 4K)',
+  'veo-3-1': 'GOOGLE VIDEO WITH AUDIO (UP TO 4K)',
   'minimax-h3-max': 'ULTRA FAST (VIDEOS IN AS LITTLE AS 3s)',
   'flux-3': 'EXCELLENT ALL-AROUND VIDEO MODEL',
   'kling-3-pro': 'VERY GOOD & FAST VIDEO MODEL',
@@ -118,6 +119,7 @@ function ModelIcon({
     case 'flux-2-pro':
       return <Flux size={size} />;
     case 'google-omni-flash':
+    case 'veo-3-1':
       return <Google.Color size={size} />;
     case 'kling-4':
     case 'kling-3-pro':

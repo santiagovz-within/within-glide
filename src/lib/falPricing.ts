@@ -53,6 +53,8 @@ export type FalPricingRule =
       /** Published USD rates when the pricing API base tier is ambiguous. */
       kind: 'video-seconds-rates';
       resolutionRatesUsd: Record<string, number>;
+      /** Rates with generated audio enabled (the provider default). */
+      audioResolutionRatesUsd?: Record<string, number>;
       referenceVideoRatesUsd?: Record<string, number>;
       minimumOutputDurationMultiplier?: number;
       roundSecondsUp?: boolean;
@@ -269,7 +271,9 @@ export function estimateFalCost(
     const referenceDuration = referenceVideoDuration(input.referenceVideos);
     if (referenceDuration === null) return null;
     const hasVideoReferences = referenceDuration > 0;
-    const rate = (hasVideoReferences ? rule.referenceVideoRatesUsd : rule.resolutionRatesUsd)?.[input.resolution ?? ''];
+    const rates = hasVideoReferences ? rule.referenceVideoRatesUsd
+      : input.generateAudio !== false && rule.audioResolutionRatesUsd ? rule.audioResolutionRatesUsd : rule.resolutionRatesUsd;
+    const rate = rates?.[input.resolution ?? ''];
     if (!positive(rate)) return null;
     const seconds = hasVideoReferences
       ? Math.max(input.duration + referenceDuration, input.duration * (rule.minimumOutputDurationMultiplier ?? 1))
