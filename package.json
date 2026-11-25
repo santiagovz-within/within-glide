@@ -11,7 +11,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "setup-gcs-cors": "node --env-file=.env.local scripts/setup-gcs-cors.mjs",
-    "test:music": "node --test scripts/music-generation.test.mjs scripts/generation-recovery.test.mjs",
+    "test:music": "node --test scripts/music-generation.test.mjs scripts/audio-sessions.test.mjs scripts/generation-recovery.test.mjs",
     "test:clients": "node --test scripts/flow-clients.test.mjs scripts/admin-spending.test.mjs"
   },
   "dependencies": {

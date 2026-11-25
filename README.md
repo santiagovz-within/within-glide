@@ -98,12 +98,15 @@ A companion Figma plugin can receive GIFs sent directly from the canvas. Users g
 - **Canvas Flow** — Create and open node-based AI workflows
 - **Gallery** — Browse all generated images and videos with filtering and pagination
 - **Image & Video** — Lightweight prompt-to-image/video interface without the canvas
+- **Audio** — Recording sessions with ElevenLabs Music, Sonilo v1.1, Google Lyria 3.5, MiniMax Music 3, and Stable Audio 2.5. The same models are available in the canvas Music Generation node. Lyria takes length hints in the prompt; MiniMax requires lyrics and accepts a maximum length; Stable Audio supports up to 190 seconds.
 - **Settings** — Profile (username), appearance, Figma integration token
 - **Admin → All Usage** — Generation counts, model usage, user activity, and hourly traffic charts (admin only)
 - **Admin → Users** — User management and approval (admin only)
 - **Admin → Clients** — Add and rename clients used for mandatory flow tagging (admin only)
 
 New flows require a client. Existing flows prompt for a client when reopened. See [Flow client tagging](docs/flow-clients.md) for the required database migration, historical cost attribution, and client spending reports.
+
+Before deploying Audio, apply `supabase/migrations/018_audio_generations.sql` and `supabase/migrations/019_recording_sessions.sql` if they have not already been applied. Existing sessions remain in Image & Video; recording sessions are separated by session kind. Run `npm run test:music` to check model payloads, audio storage, session isolation, and generation recovery. The Audio session UI was brought over from commit `96c1df9` on `santiagovz-within/canvas-flow-node-overlay`.
 
 ---
 

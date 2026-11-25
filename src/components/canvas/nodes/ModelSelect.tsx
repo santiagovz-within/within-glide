@@ -49,6 +49,9 @@ function measureDropdown(trigger: HTMLButtonElement): DropdownPosition {
 }
 
 const MODEL_SUBTITLES: Record<string, string> = {
+  'lyria-3-5': 'MUSIC FROM YOUR DESCRIPTION · MP3',
+  'minimax-music-3': 'SONGS FROM LYRICS · WAV',
+  'stable-audio-2-5': 'MUSIC & SOUND EFFECTS · WAV',
   'elevenlabs-music': 'MUSIC GENERATION · MP3, PCM & OPUS',
   'sonilo-v1-1': 'MUSIC GENERATION · AAC / M4A',
   'nano-banana-2-1': 'IMAGE GENERATION & EDITING (UP TO 4K)',
@@ -89,6 +92,9 @@ function ModelIcon({
   switch (modelId) {
     case 'elevenlabs-music':
       return <AudioLines size={size} />;
+    case 'lyria-3-5': return <Google.Color size={size} />;
+    case 'minimax-music-3': return <Minimax.Color size={size} />;
+    case 'stable-audio-2-5':
     case 'sonilo-v1-1':
       return <Music size={size} />;
     case 'nano-banana-2-1':

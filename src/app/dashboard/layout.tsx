@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { BackgroundGenerationManager } from '@/components/layout/BackgroundGenerationManager';
+import { AudioGenerationManager } from '@/components/audio/AudioGenerationManager';
 
 export default async function DashboardLayout({
   children,
@@ -30,6 +31,7 @@ export default async function DashboardLayout({
     <ThemeProvider>
       <div className="flex h-screen overflow-hidden" style={{ background: 'var(--color-bg-darkest)' }}>
         <BackgroundGenerationManager />
+        <AudioGenerationManager />
         <Sidebar />
         <main className="flex-1 overflow-hidden min-w-0">
           {children}

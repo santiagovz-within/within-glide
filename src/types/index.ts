@@ -68,6 +68,7 @@ export interface Generation {
 }
 
 export interface ChatSession {
+  kind?: 'image-video' | 'audio';
   id: string;
   user_id: string;
   title: string;
@@ -213,6 +214,7 @@ export interface ImageGenNodeData extends Record<string, unknown> {
 }
 
 export interface MusicGenNodeData extends Record<string, unknown> {
+  lyrics?: string;
   model: string;
   duration: number;
   numSounds: number;

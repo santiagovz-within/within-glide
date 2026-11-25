@@ -1,11 +1,12 @@
 'use client';
 
-import { Copy, Download, Heart, Loader2, Play, AlertTriangle } from 'lucide-react';
+import { Copy, Download, Heart, Loader2, Play, AlertTriangle, AudioLines } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Generation } from '@/types';
 import { resolveMediaUrl } from '@/lib/utils/mediaUtils';
 import { downloadFromUrl } from '@/lib/utils/download';
 import { useGenerationLikesStore } from '@/lib/stores/generationLikesStore';
+import { getMusicModel, isRawMusicUrl } from '@/lib/api/music';
 import styles from './ImageVideo.module.css';
 
 interface GenerationCardProps {
@@ -15,6 +16,7 @@ interface GenerationCardProps {
 }
 
 export function getGenerationAspectRatio(gen: Generation): number {
+  if (gen.media_type === 'audio') return 1;
   if (gen.width && gen.height && gen.width > 0 && gen.height > 0 && Number.isFinite(gen.width / gen.height)) {
     return gen.width / gen.height;
   }
@@ -31,13 +33,14 @@ export function GenerationCard({ generation, onClick, onCopyPrompt }: Generation
   const liked = useGenerationLikesStore(state => state.likedIds.includes(generation.id));
   const toggleLike = useGenerationLikesStore(state => state.toggleLike);
   const isVideo = generation.media_type === 'video';
+  const isAudio = generation.media_type === 'audio';
   const pending = generation.status === 'pending' || generation.status === 'processing';
   const failed = generation.status === 'failed';
 
   useEffect(() => {
     let cancelled = false;
     if (!pending && !failed && generation.media_url) {
-      resolveMediaUrl(generation.media_url).then(url => { if (!cancelled) setResolvedUrl(url); });
+      resolveMediaUrl(generation.media_url).then(url => { if (!cancelled) setResolvedUrl(url); }).catch(() => {});
     }
     return () => { cancelled = true; };
   }, [generation.media_url, pending, failed]);
@@ -49,17 +52,27 @@ export function GenerationCard({ generation, onClick, onCopyPrompt }: Generation
           {failed ? <AlertTriangle size={20} style={{ color: 'var(--color-error)' }} /> : <Loader2 size={20} className="animate-spin" />}
           <span>{failed ? 'Generation failed' : 'Generating'}</span>
           {failed && generation.error_message && <span>{generation.error_message}</span>}
+          {isAudio && failed && <button onClick={onClick} className={styles.audioDetails}>View details</button>}
         </div>
       ) : (
         <>
-          <button className={styles.openTile} onClick={onClick} aria-label={`Open ${generation.media_type}: ${generation.prompt || generation.model}`}>
-            {resolvedUrl && (isVideo ? (
+          <button className={isAudio ? styles.audioTile : styles.openTile} onClick={onClick} aria-label={`Open ${generation.media_type}: ${generation.prompt || generation.model}`}>
+            {isAudio ? <>
+              <AudioLines className={styles.audioGlyph} size={40} strokeWidth={1} />
+              <span className={styles.audioPrompt}>{generation.prompt || 'Untitled recording'}</span>
+              <span className={styles.audioMeta}>{getMusicModel(generation.model)?.name ?? generation.model}{generation.duration_seconds ? ` · ${generation.duration_seconds}s` : ''}</span>
+            </> : resolvedUrl && (isVideo ? (
               <video src={resolvedUrl} preload="metadata" muted playsInline />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={resolvedUrl} alt={generation.prompt ?? ''} loading="lazy" />
             ))}
           </button>
+          {isAudio && resolvedUrl && <div className={styles.audioPlayer}>
+            {isRawMusicUrl(resolvedUrl)
+              ? <span>Raw audio · download to listen</span>
+              : <audio src={resolvedUrl} controls preload="none" aria-label={`Play ${generation.prompt || 'recording'}`} />}
+          </div>}
           {isVideo && <Play size={30} className={styles.play} />}
           <div className={styles.tileActions}>
             <button onClick={() => toggleLike(generation.id)} aria-pressed={liked} title={liked ? 'Unlike' : 'Like'} aria-label={liked ? 'Unlike' : 'Like'}><Heart size={15} fill={liked ? 'currentColor' : 'none'} /></button>

@@ -128,8 +128,8 @@ export async function GET(
       }
 
       if (mediaType === 'audio' && existingGeneration) {
-        const audioResult = result.data as { audio?: { url: string }; audios?: Array<{ url: string }> };
-        const url = audioResult.audios?.[0]?.url ?? audioResult.audio?.url;
+        const audioResult = result.data as { audio?: string | { url: string }; audios?: Array<{ url: string }>; duration?: number };
+        const url = audioResult.audios?.[0]?.url ?? (typeof audioResult.audio === 'string' ? audioResult.audio : audioResult.audio?.url);
         if (!url) return await failGeneration(supabase, user.id, requestId, 'FAL returned no audio URL.');
         const response = await fetch(url);
         if (!response.ok) {
@@ -147,6 +147,8 @@ export async function GET(
         const billing = await getFalBillingColumns(endpoint, result.billableUnits);
         const { error } = await supabase.from('generations').update({
           media_url: gcsRef, status: 'completed', parameters: mergeFalBillingParameters(storedParameters, billing),
+          ...(typeof audioResult.duration === 'number' && Number.isFinite(audioResult.duration) && audioResult.duration > 0
+            ? { duration_seconds: audioResult.duration } : {}),
         }).eq('id', existingGeneration.id).eq('user_id', user.id);
         if (error) throw new Error(`Could not save completed music: ${error.message}`);
         await persistFalBillingBestEffort(billing, columns => supabase.from('generations')

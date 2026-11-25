@@ -1,0 +1,43 @@
+.thumbnail {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  contain: strict;
+  content-visibility: auto;
+  background: var(--session-color-4);
+}
+
+/* One tiny painted layer; only its transform animates, with no blur or JS frames. */
+.thumbnail::before {
+  content: '';
+  position: absolute;
+  inset: -35%;
+  background:
+    radial-gradient(ellipse at 25% 25%, var(--session-color-1), transparent 62%),
+    radial-gradient(ellipse at 75% 25%, var(--session-color-2), transparent 62%),
+    radial-gradient(ellipse at 75% 75%, var(--session-color-3), transparent 62%),
+    radial-gradient(ellipse at 25% 75%, var(--session-color-4), transparent 62%),
+    var(--session-color-4);
+  animation: drift var(--session-duration) linear var(--session-phase) infinite;
+}
+
+.thumbnail::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 0.75px rgb(255 255 255 / 16%);
+}
+
+@keyframes drift {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumbnail::before { animation: none; }
+}

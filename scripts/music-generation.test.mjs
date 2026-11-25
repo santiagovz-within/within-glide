@@ -16,7 +16,7 @@ function load(path, dependencies = {}) {
 }
 const music = load('src/lib/api/music.ts');
 const body = (model = 'elevenlabs-music', changes = {}) => ({ model, prompt: 'Warm acoustic guitar', duration: 30,
-  generationSlotCount: 2, slotIndex: 0, ...changes });
+  generationSlotCount: 2, slotIndex: 0, lyrics: '[verse]\nWarm sunshine', ...changes });
 
 test('ElevenLabs sends milliseconds and every documented format without unsupported batching fields', () => {
   const config = music.MUSIC_MODELS[0];
@@ -39,7 +39,7 @@ test('Validation rejects invalid lengths, prompts, formats and batch slots befor
     for (const duration of music.musicLengthOptions(model.id)) {
       assert.doesNotThrow(() => music.buildMusicInput(body(model.id, { duration })));
     }
-    for (const duration of [model.minDuration - 1, 601, 1.5, '30', NaN, Infinity, null]) {
+    for (const duration of model.durationMode === 'prompt' ? [] : [model.minDuration - 1, model.maxDuration + 1, 1.5, '30', NaN, Infinity, null]) {
       assert.throws(() => music.buildMusicInput(body(model.id, { duration })), /Length/);
     }
     for (const generationSlotCount of [0, model.maxBatchSize + 1, 1.5, '2']) {
@@ -47,7 +47,7 @@ test('Validation rejects invalid lengths, prompts, formats and batch slots befor
     }
     for (const slotIndex of [-1, 2, 0.5, '0']) assert.throws(() => music.buildMusicInput(body(model.id, { slotIndex })), /slot/);
     assert.throws(() => music.buildMusicInput(body(model.id, { prompt: ' ' })), /Describe/);
-    assert.throws(() => music.buildMusicInput(body(model.id, { outputFormat: 'wav' })), /format/);
+    assert.throws(() => music.buildMusicInput(body(model.id, { outputFormat: 'not-a-format' })), /format/);
   }
   assert.throws(() => music.buildMusicInput(body('elevenlabs-music', { prompt: 'a'.repeat(4101) })), /4100/);
   assert.throws(() => music.buildMusicInput(body('unknown')), /Unknown/);
@@ -57,6 +57,7 @@ test('Estimates apply billing rounding per track and multiply by batch count', (
     ['elevenlabs-music', 3, 1, 0.6], ['elevenlabs-music', 60, 2, 1.2],
     ['elevenlabs-music', 61, 4, 4.8], ['elevenlabs-music', 600, 4, 24],
     ['sonilo-v1-1', 1, 3, 0.075], ['sonilo-v1-1', 10, 1, 0.025],
+    ['lyria-3-5', 60, 4, 0.4], ['minimax-music-3', 300, 3, 1.8], ['stable-audio-2-5', 190, 4, 0.8],
     ['sonilo-v1-1', 90, 3, 0.675], ['sonilo-v1-1', 600, 3, 4.5],
   ]) assert.ok(Math.abs(music.estimateMusicCost(model, duration, count) - expected) < 0.000001);
 });
@@ -70,11 +71,16 @@ test('Audio formats have correct download types and raw audio detection survives
   assert.equal(music.isRawMusicUrl('https://example.com/song.m4a?token=abc'), false);
 });
 
-function routeHarness({ user = { id: 'user' }, insertFails = false, flowError = false } = {}) {
+function routeHarness({ user = { id: 'user' }, insertFails = false, flowError = false,
+  session = { id: '00000000-0000-0000-0000-000000000001', user_id: 'user', kind: 'audio' }, sessionError = false } = {}) {
   const records = [], submissions = [], attempts = [];
-  const db = { auth: { getUser: async () => ({ data: { user } }) }, from() {
+  const db = { auth: { getUser: async () => ({ data: { user } }) }, from(table) {
+    let matches = !!session;
     const q = { insert(value) { records.push(value); return Promise.resolve({ error: insertFails ? { message: 'audio migration missing' } : null }); },
-      update() { return q; }, eq() { return q; }, then(resolve) { return Promise.resolve({ error: null }).then(resolve); } };
+      select() { return q; }, maybeSingle() { return q; }, update() { return q; },
+      eq(key, value) { if (table === 'chat_sessions' && session?.[key] !== value) matches = false; return q; },
+      then(resolve) { return Promise.resolve({ data: table === 'chat_sessions' && matches ? session : null,
+        error: table === 'chat_sessions' && sessionError ? { message: 'Unavailable' } : null }).then(resolve); } };
     return q;
   } };
   const route = load('src/app/api/fal/music/route.ts', {
@@ -102,12 +108,50 @@ test('Music route queues validated requests with storage policy and recovery met
 });
 test('Unauthorized, invalid, unowned and unsavable requests never reach fal', async () => {
   for (const [options, changes, status] of [[{ user: null }, {}, 401], [{}, { duration: 601 }, 400],
-    [{}, { outputFormat: 'wav' }, 400], [{}, { sourceType: 'chat' }, 400],
+    [{}, { outputFormat: 'wav' }, 400], [{}, { sourceType: 'invalid' }, 400],
     [{ flowError: true }, {}, 500], [{ insertFails: true }, {}, 500]]) {
     const h = routeHarness(options);
     assert.equal((await h.POST(h.request(changes))).status, status);
     assert.equal(h.submissions.length, 0);
   }
+});
+test('Recording sessions use all music models without requiring a canvas node', async () => {
+  for (const model of music.MUSIC_MODELS) {
+    const h = routeHarness();
+    const response = await h.POST(h.request({ sourceType: 'chat', model: model.id, lyrics: '[verse]\nWarm sunshine', nodeId: undefined, previousIdentity: undefined }));
+    assert.equal(response.status, 200);
+    assert.equal(h.records[0].source_type, 'chat');
+    assert.equal(h.records[0].node_id, null);
+    assert.equal(h.records[0].source_id, '00000000-0000-0000-0000-000000000001');
+    assert.equal(h.submissions[0].endpoint, model.endpoint);
+  }
+});
+test('Chat audio rejects missing, foreign and image/video sessions before paid work', async () => {
+  for (const [options, changes, status] of [
+    [{ session: null }, {}, 404],
+    [{ session: { id: '00000000-0000-0000-0000-000000000001', user_id: 'someone-else', kind: 'audio' } }, {}, 404],
+    [{ session: { id: '00000000-0000-0000-0000-000000000001', user_id: 'user', kind: 'image-video' } }, {}, 404],
+    [{ sessionError: true }, {}, 503], [{}, { sourceId: undefined }, 400], [{}, { generationRunId: undefined }, 400],
+  ]) {
+    const h = routeHarness(options);
+    assert.equal((await h.POST(h.request({ sourceType: 'chat', ...changes }))).status, status);
+    assert.equal(h.records.length, 0);
+    assert.equal(h.submissions.length, 0);
+  }
+});
+test('Recording-session migration preserves existing sessions and separates new audio sessions', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE TABLE public.chat_sessions (id text, user_id text, title text, updated_at timestamptz);
+      INSERT INTO public.chat_sessions (id, title) VALUES ('existing', 'Old session');`);
+    const migration = readFileSync(new URL('../supabase/migrations/019_recording_sessions.sql', import.meta.url), 'utf8');
+    await db.exec(migration);
+    await db.exec(migration);
+    await db.exec("INSERT INTO public.chat_sessions (id, kind) VALUES ('recording', 'audio')");
+    assert.deepEqual((await db.query('SELECT id, kind FROM public.chat_sessions ORDER BY id')).rows,
+      [{ id: 'existing', kind: 'image-video' }, { id: 'recording', kind: 'audio' }]);
+    await assert.rejects(db.exec("INSERT INTO public.chat_sessions (kind) VALUES ('invalid')"), /check constraint/);
+  } finally { await db.close(); }
 });
 test('Audio migration preserves image/video/prompt records and validates new media types', async () => {
   const db = new PGlite();
@@ -165,7 +209,7 @@ test('Completion stores original audio bytes, correct extensions, signed URLs an
   globalThis.fetch = async () => new Response(new Uint8Array([1, 2, 3]));
   try {
     for (const [format, extension, contentType] of [['mp3_44100_128', 'mp3', 'audio/mpeg'], ['m4a', 'm4a', 'audio/mp4'],
-      ['opus_48000_128', 'opus', 'audio/ogg'], ['pcm_44100', 'pcm', 'audio/pcm'], ['ulaw_8000', 'ulaw', 'audio/basic'], ['alaw_8000', 'alaw', 'audio/x-alaw']]) {
+      ['wav', 'wav', 'audio/wav'], ['mp3', 'mp3', 'audio/mpeg'], ['opus_48000_128', 'opus', 'audio/ogg'], ['pcm_44100', 'pcm', 'audio/pcm'], ['ulaw_8000', 'ulaw', 'audio/basic'], ['alaw_8000', 'alaw', 'audio/x-alaw']]) {
       const h = audioStatusHarness(format, format === 'm4a' ? { result: { audios: [{ url: 'https://media.example/song.m4a' }] } } : {});
       const response = await h.get();
       assert.equal(response.status, 200);
@@ -194,5 +238,62 @@ test('Audio status denies unowned requests and does not report success when medi
     const h = audioStatusHarness('m4a', { storageFails: true });
     assert.equal((await h.get()).status, 500);
     assert.equal(h.row.status, 'processing');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+
+test('Lyria uses only a prompt, validates 5000 characters, and does not claim an exact duration', () => {
+  const result = music.buildMusicInput(body('lyria-3-5', { duration: undefined }));
+  assert.equal(result.model.endpoint, 'google/lyria-3.5');
+  assert.deepEqual(result.input, { prompt: 'Warm acoustic guitar' });
+  assert.equal(result.duration, null);
+  assert.equal(result.outputFormat, 'mp3');
+  assert.deepEqual(music.musicLengthOptions('lyria-3-5'), []);
+  assert.throws(() => music.buildMusicInput(body('lyria-3-5', { prompt: 'a'.repeat(5001) })), /5000/);
+});
+
+test('MiniMax preserves lyrics after section tags and Stable Audio uses seconds_total', () => {
+  const minimax = music.buildMusicInput(body('minimax-music-3', { duration: 300, lyrics: '[verse] Warm sunshine\n[chorus]\nBlue skies' }));
+  assert.equal(minimax.model.endpoint, 'minimax/music-3');
+  assert.deepEqual(minimax.input, { prompt: 'Warm acoustic guitar', duration: 300, lyrics: '[verse]\nWarm sunshine\n[chorus]\nBlue skies' });
+  assert.equal(minimax.outputFormat, 'wav');
+  assert.throws(() => music.buildMusicInput(body('minimax-music-3', { lyrics: ' ' })), /lyrics/);
+  assert.throws(() => music.buildMusicInput(body('minimax-music-3', { lyrics: undefined })), /lyrics/);
+  const stable = music.buildMusicInput(body('stable-audio-2-5', { duration: 190 }));
+  assert.equal(stable.model.endpoint, 'fal-ai/stable-audio-25/text-to-audio');
+  assert.deepEqual(stable.input, { prompt: 'Warm acoustic guitar', seconds_total: 190 });
+  assert.equal(stable.outputFormat, 'wav');
+  assert.ok(music.musicLengthOptions('stable-audio-2-5').includes(190));
+  assert.ok(!music.musicLengthOptions('stable-audio-2-5').includes(240));
+});
+
+test('New models submit correct payloads from both canvas and recording sessions', async () => {
+  for (const sourceType of ['canvas', 'chat']) {
+    for (const model of ['lyria-3-5', 'minimax-music-3', 'stable-audio-2-5']) {
+      const h = routeHarness();
+      const response = await h.POST(h.request({ sourceType, model }));
+      assert.equal(response.status, 200);
+      assert.equal(h.submissions[0].endpoint, music.getMusicModel(model).endpoint);
+      assert.equal(h.records[0].parameters.outputFormat, model === 'lyria-3-5' ? 'mp3' : 'wav');
+      assert.equal(h.records[0].duration_seconds, model === 'lyria-3-5' ? null : 30);
+      if (model === 'minimax-music-3') assert.equal(h.records[0].parameters.lyrics, '[verse]\nWarm sunshine');
+    }
+  }
+  const h = routeHarness();
+  assert.equal((await h.POST(h.request({ model: 'minimax-music-3', lyrics: '' }))).status, 400);
+  assert.equal(h.submissions.length, 0);
+});
+
+test('Stable Audio string results and MiniMax actual duration are saved as WAV', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(new Uint8Array([82, 73, 70, 70]));
+  try {
+    for (const result of [{ audio: 'https://media.example/audio.wav' }, { audio: { url: 'https://media.example/audio.wav' }, duration: 42 }]) {
+      const h = audioStatusHarness('wav', { result });
+      assert.equal((await h.get()).status, 200);
+      assert.equal(h.uploads[0].contentType, 'audio/wav');
+      assert.equal(h.uploads[0].path, 'user/generation.wav');
+      if (result.duration) assert.equal(h.row.duration_seconds, 42);
+    }
   } finally { globalThis.fetch = originalFetch; }
 });
