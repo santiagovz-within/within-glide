@@ -98,12 +98,15 @@ A companion Figma plugin can receive GIFs sent directly from the canvas. Users g
 - **Canvas Flow** — Create and open node-based AI workflows
 - **Gallery** — Browse all generated images and videos with filtering and pagination
 - **Image & Video** — Lightweight prompt-to-image/video interface without the canvas
+- **Audio** — Recording sessions with ElevenLabs Music and Sonilo, square playback tiles, and model-specific length, batch, format, and cost controls
 - **Settings** — Profile (username), appearance, Figma integration token
 - **Admin → All Usage** — Generation counts, model usage, user activity, and hourly traffic charts (admin only)
 - **Admin → Users** — User management and approval (admin only)
 - **Admin → Clients** — Add and rename clients used for mandatory flow tagging (admin only)
 
 New flows require a client. Existing flows prompt for a client when reopened. See [Flow client tagging](docs/flow-clients.md) for the required database migration, historical cost attribution, and client spending reports.
+
+Before deploying Audio, apply `supabase/migrations/018_audio_generations.sql` (if not already applied) and `supabase/migrations/019_recording_sessions.sql`. Existing sessions remain in Image & Video; recording sessions are stored separately by session kind. Run `npm run test:music` to check audio submission, session isolation, and generation recovery.
 
 ---
 

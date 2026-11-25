@@ -14,6 +14,7 @@ function load(path, dependencies = {}) {
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(
     name => name in dependencies ? dependencies[name]
+    : name === '@/lib/generationPromptHistory' ? load('src/lib/generationPromptHistory.ts')
       : name === '@/lib/flowClients' ? load('src/lib/flowClients.ts')
     : name === '@/lib/seedanceDraft' ? load('src/lib/seedanceDraft.ts') : require(name), loadedModule, loadedModule.exports,
   );
@@ -135,13 +136,15 @@ test('API queues each reference endpoint and persists recoverable metadata; inva
     '@/lib/falPricing': {}, '@/lib/gptImage26': { currentImageModel: model => model },
   });
   for (const [id, endpoint] of expected) {
-    const body = request(id, { generationMode: 'reference-to-video', sourceType: 'canvas', sourceId: 'flow', nodeId: 'node' });
+    const body = request(id, { generationMode: 'reference-to-video', sourceType: 'canvas', sourceId: 'flow', nodeId: 'node',
+      promptSnapshot: { prompt: 'Editable @image1', promptTags: [{ label: 'image1', portIndex: 0 }] } });
     const response = await POST({ json: async () => body });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).endpoint, endpoint);
     assert.equal(submissions.at(-1).endpoint, endpoint);
     assert.equal(submissions.at(-1).headers['storage-test'], 'preserved');
     assert.equal(records.at(-1).parameters.endpoint, endpoint);
+    assert.deepEqual(records.at(-1).parameters.promptSnapshot, body.promptSnapshot);
     assert.deepEqual(records.at(-1).parameters.referenceVideoUrls, body.referenceVideoUrls);
     assert.deepEqual(records.at(-1).reference_image_urls, body.referenceImageUrls);
     assert.equal(records.at(-1).node_id, 'node');
@@ -158,7 +161,7 @@ test('API queues each reference endpoint and persists recoverable metadata; inva
 test('Pending-generation recovery includes the new node and keeps its original endpoint', async () => {
   const endpoint = 'minimax/h3-max/reference-to-video';
   const pending = [{ source_id: 'flow', node_id: 'node', model: 'minimax-h3-max', media_type: 'video',
-    fal_request_id: 'request', parameters: { endpoint }, reference_image_urls: ['a.png'] }];
+    fal_request_id: 'request', prompt: 'Compiled prompt', parameters: { endpoint, promptSnapshot: { prompt: '@image1', promptTags: [] } }, reference_image_urls: ['a.png'] }];
   // The user may have switched models while a request is still running.
   const flows = [{ id: 'flow', title: 'Flow', flow_data: { nodes: [{ id: 'node', type: 'referenceVideoNode', data: { model: 'seedance-2', status: 'processing', pendingRequestId: 'request' } }] } }];
   const admin = { from: table => {
@@ -186,6 +189,7 @@ test('Pending-generation recovery includes the new node and keeps its original e
   assert.equal(generations[0].nodeType, 'referenceVideoNode');
   assert.equal(generations[0].endpoint, endpoint);
   assert.equal(generations[0].requestId, 'request');
+  assert.deepEqual(generations[0].promptSnapshot, { prompt: '@image1', promptTags: [] });
 });
 
 test('Typed media tags use the shared chips and preserve independent image/video indexes', () => {
@@ -465,7 +469,7 @@ test('Kling v4 sits immediately above Omni in both canvas model menus', () => {
     assert.ok(index >= 0);
     assert.equal(menu[index + 1].id, 'google-omni-flash');
   }
-  assert.equal(pricingModels.CHAT_VIDEO_MODELS.some(model => model.id === 'kling-4'), false);
+  assert.deepEqual(pricingModels.CHAT_VIDEO_MODELS, pricingModels.VIDEO_MODELS);
   assert.deepEqual(config.referenceDurationOptions(config.getReferenceVideoModel('kling-4')),
     Array.from({ length: 28 }, (_, index) => index + 3));
 });

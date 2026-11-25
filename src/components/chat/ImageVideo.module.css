@@ -160,6 +160,9 @@
 .frameButton img { width: 44px; height: 36px; object-fit: cover; border-radius: 4px; }
 .error { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; color: #f87171; font-size: 12px; }
 .error span { flex: 1; }
+.videoOptions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; margin: 0 0 14px 50px; }
+.videoOptions > div { min-width: 180px; max-width: 320px; }
+.audioOption { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: #bbb; }
 .warning { display: flex; align-items: center; gap: 4px; color: #eab308; font-size: 12px; }
 
 .tile {
@@ -180,6 +183,13 @@
 .tile button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
 .status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; color: var(--color-white-muted); font-size: 12px; overflow-y: auto; }
 .play { position: absolute; left: 10px; bottom: 10px; padding: 7px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; pointer-events: none; }
+.audioTile { position: absolute; inset: 0 0 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 20px; cursor: pointer; color: var(--color-white); background: radial-gradient(ellipse at 50% 20%, var(--port-tint-audio), transparent 75%); }
+.audioGlyph { flex-shrink: 0; color: var(--port-icon-inactive-audio); }
+.audioPrompt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.audioMeta { font-size: 10px; color: var(--color-white-muted); }
+.audioPlayer { position: absolute; bottom: 14px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: center; min-height: 36px; font-size: 11px; color: var(--color-white-muted); }
+.audioPlayer audio { width: 100%; height: 36px; min-width: 0; }
+.audioDetails { text-decoration: underline; cursor: pointer; }
 .toast { position: absolute; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: 8px; background: var(--color-bg-elevated); border: var(--border-default); color: var(--color-white); font-size: 12px; pointer-events: none; }
 
 @container (max-width: 600px) {
@@ -188,7 +198,9 @@
   .controls { gap: 6px; }
   .actions { gap: 6px; }
   .generate { min-width: 120px; }
-  .references { margin-left: 0; }
+  .audioTile { gap: 6px; padding: 10px; }
+  .audioGlyph { width: 28px; height: 28px; }
+  .references, .videoOptions { margin-left: 0; }
 }
 
 @container (max-width: 260px) {

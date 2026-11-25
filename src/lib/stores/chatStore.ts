@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { ChatSession, ChatMessage, Generation, ChatMode, ChatSettings } from '@/types';
 import { getDefaultImageModel, getDefaultVideoModel } from '@/lib/api/models';
+import { normalizeChatSettings } from '@/lib/chatGeneration';
 
 interface ChatStore {
   sessions: ChatSession[];
@@ -85,7 +86,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       : getDefaultVideoModel().id;
     set({
       mode,
-      settings: { ...get().settings, model: defaultModel },
+      settings: normalizeChatSettings(mode, { ...get().settings, model: defaultModel, draftMode: false }),
       referenceImages: [],
     });
   },
@@ -105,9 +106,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     quality: 'medium',
     numGenerations: 1,
     duration: 5,
+    videoResolution: '720p',
+    generateAudio: true,
+    draftMode: false,
   },
   updateSettings: (updates) =>
-    set({ settings: { ...get().settings, ...updates } }),
+    set({ settings: normalizeChatSettings(get().mode, { ...get().settings, ...updates }) }),
 
   isGenerating: false,
   setIsGenerating: (v) => set({ isGenerating: v }),

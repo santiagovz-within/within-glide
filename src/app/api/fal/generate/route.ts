@@ -11,6 +11,7 @@ import { getCustomImageSize, type FalPricingRule } from '@/lib/falPricing';
 import { currentImageModel, getGptImage26Size, gptImage26Output } from '@/lib/gptImage26';
 import type { GenerateImageRequest } from '@/types';
 import { validateSeedanceDraft } from '@/lib/seedanceDraft';
+import { readPromptSnapshot } from '@/lib/generationPromptHistory';
 
 fal.config({ credentials: process.env.FAL_KEY });
 
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
         prompt,
         parameters: {
           generationMode: 'reference-to-video', endpoint, generationRunId: body.generationRunId,
+          promptSnapshot: readPromptSnapshot(body.promptSnapshot),
           aspectRatio: input.aspect_ratio, resolution: input.resolution,
           duration: input.duration, generateAudio: input.generate_audio ?? input.audio,
           referenceVideoUrls: body.referenceVideoUrls ?? [],
@@ -312,6 +314,7 @@ export async function POST(request: NextRequest) {
           prompt,
           parameters: {
             generationRunId: body.generationRunId, aspectRatio: draft ? videoInput.aspect_ratio ?? 'auto' : aspectRatio,
+            promptSnapshot: readPromptSnapshot(body.promptSnapshot),
             resolution: videoResolution, duration, endpoint,
             ...(draft ? { draft: true, input: videoInput, generateAudio: generateAudio !== false } : {}),
           },
@@ -431,6 +434,7 @@ export async function POST(request: NextRequest) {
           prompt,
           parameters: {
             generationRunId: body.generationRunId, aspectRatio, resolution, endpoint, slotIndex: body.slotIndex,
+            promptSnapshot: readPromptSnapshot(body.promptSnapshot),
             ...(outputSettings ? { outputFormat: outputSettings.output_format,
               ...(outputSettings.output_format === 'gif' ? {
                 frameCount: outputSettings.frame_count, frameDurationMs: outputSettings.frame_duration_ms,

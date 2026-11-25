@@ -1,0 +1,5 @@
+.promptIcon { flex-shrink: 0; margin-top: 9px; color: rgba(255, 255, 255, 0.5); }
+.format { width: 222px; max-width: 100%; min-width: 0; }
+.cost { margin-left: 3px; font-size: 11px; opacity: 0.65; font-variant-numeric: tabular-nums; }
+.notice { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 14px; color: var(--color-white-muted); font-size: 12px; }
+.notice button { text-decoration: underline; cursor: pointer; }

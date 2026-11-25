@@ -70,11 +70,16 @@ test('Audio formats have correct download types and raw audio detection survives
   assert.equal(music.isRawMusicUrl('https://example.com/song.m4a?token=abc'), false);
 });
 
-function routeHarness({ user = { id: 'user' }, insertFails = false, flowError = false } = {}) {
+function routeHarness({ user = { id: 'user' }, insertFails = false, flowError = false,
+  session = { id: '00000000-0000-0000-0000-000000000001', user_id: 'user', kind: 'audio' }, sessionError = false } = {}) {
   const records = [], submissions = [], attempts = [];
-  const db = { auth: { getUser: async () => ({ data: { user } }) }, from() {
+  const db = { auth: { getUser: async () => ({ data: { user } }) }, from(table) {
+    let matches = !!session;
     const q = { insert(value) { records.push(value); return Promise.resolve({ error: insertFails ? { message: 'audio migration missing' } : null }); },
-      update() { return q; }, eq() { return q; }, then(resolve) { return Promise.resolve({ error: null }).then(resolve); } };
+      select() { return q; }, maybeSingle() { return q; }, update() { return q; },
+      eq(key, value) { if (table === 'chat_sessions' && session?.[key] !== value) matches = false; return q; },
+      then(resolve) { return Promise.resolve({ data: table === 'chat_sessions' && matches ? session : null,
+        error: table === 'chat_sessions' && sessionError ? { message: 'Unavailable' } : null }).then(resolve); } };
     return q;
   } };
   const route = load('src/app/api/fal/music/route.ts', {
@@ -102,12 +107,50 @@ test('Music route queues validated requests with storage policy and recovery met
 });
 test('Unauthorized, invalid, unowned and unsavable requests never reach fal', async () => {
   for (const [options, changes, status] of [[{ user: null }, {}, 401], [{}, { duration: 601 }, 400],
-    [{}, { outputFormat: 'wav' }, 400], [{}, { sourceType: 'chat' }, 400],
+    [{}, { outputFormat: 'wav' }, 400], [{}, { sourceType: 'invalid' }, 400],
     [{ flowError: true }, {}, 500], [{ insertFails: true }, {}, 500]]) {
     const h = routeHarness(options);
     assert.equal((await h.POST(h.request(changes))).status, status);
     assert.equal(h.submissions.length, 0);
   }
+});
+test('Recording sessions use both music models without requiring a canvas node', async () => {
+  for (const model of music.MUSIC_MODELS) {
+    const h = routeHarness();
+    const response = await h.POST(h.request({ sourceType: 'chat', model: model.id, nodeId: undefined, previousIdentity: undefined }));
+    assert.equal(response.status, 200);
+    assert.equal(h.records[0].source_type, 'chat');
+    assert.equal(h.records[0].node_id, null);
+    assert.equal(h.records[0].source_id, '00000000-0000-0000-0000-000000000001');
+    assert.equal(h.submissions[0].endpoint, model.endpoint);
+  }
+});
+test('Chat audio rejects missing, foreign and image/video sessions before paid work', async () => {
+  for (const [options, changes, status] of [
+    [{ session: null }, {}, 404],
+    [{ session: { id: '00000000-0000-0000-0000-000000000001', user_id: 'someone-else', kind: 'audio' } }, {}, 404],
+    [{ session: { id: '00000000-0000-0000-0000-000000000001', user_id: 'user', kind: 'image-video' } }, {}, 404],
+    [{ sessionError: true }, {}, 503], [{}, { sourceId: undefined }, 400], [{}, { generationRunId: undefined }, 400],
+  ]) {
+    const h = routeHarness(options);
+    assert.equal((await h.POST(h.request({ sourceType: 'chat', ...changes }))).status, status);
+    assert.equal(h.records.length, 0);
+    assert.equal(h.submissions.length, 0);
+  }
+});
+test('Recording-session migration preserves existing sessions and separates new audio sessions', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE TABLE public.chat_sessions (id text, user_id text, title text, updated_at timestamptz);
+      INSERT INTO public.chat_sessions (id, title) VALUES ('existing', 'Old session');`);
+    const migration = readFileSync(new URL('../supabase/migrations/019_recording_sessions.sql', import.meta.url), 'utf8');
+    await db.exec(migration);
+    await db.exec(migration);
+    await db.exec("INSERT INTO public.chat_sessions (id, kind) VALUES ('recording', 'audio')");
+    assert.deepEqual((await db.query('SELECT id, kind FROM public.chat_sessions ORDER BY id')).rows,
+      [{ id: 'existing', kind: 'image-video' }, { id: 'recording', kind: 'audio' }]);
+    await assert.rejects(db.exec("INSERT INTO public.chat_sessions (kind) VALUES ('invalid')"), /check constraint/);
+  } finally { await db.close(); }
 });
 test('Audio migration preserves image/video/prompt records and validates new media types', async () => {
   const db = new PGlite();

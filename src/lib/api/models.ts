@@ -733,10 +733,7 @@ export const VIDEO_MODELS = [
   MODELS['minimax-h3'],
   MODELS['seedance-2-mini'],
 ];
-// The new endpoint-specific controls are currently implemented on the canvas node.
-export const CHAT_VIDEO_MODELS = VIDEO_MODELS.filter(
-  m => !['kling-4', 'google-omni-flash', 'flux-3', 'minimax-h3', 'minimax-h3-max', 'seedance-2-5', 'wan-3-prime'].includes(m.id),
-);
+export const CHAT_VIDEO_MODELS = VIDEO_MODELS;
 export const UPSCALE_MODELS = Object.values(MODELS).filter(m => m.type === 'upscale');
 
 /** Models whose connected images steer style only (no image-to-image). */
@@ -778,7 +775,7 @@ export function getModel(id: string): ModelConfig | undefined {
 }
 
 export function getDefaultImageModel(): ModelConfig {
-  return MODELS['nano-banana-2'];
+  return MODELS['nano-banana-2-1'];
 }
 
 export function getDefaultVideoModel(): ModelConfig {

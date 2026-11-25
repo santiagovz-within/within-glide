@@ -6,6 +6,7 @@ import { GoogleGenAI } from '@google/genai';
 import { GOOGLE_IMAGE_MODELS } from '@/lib/api/models';
 import { getSignedReadUrl } from '@/lib/gcs';
 import { uploadMediaToGCS } from '@/lib/mediaDerivatives';
+import { readPromptSnapshot } from '@/lib/generationPromptHistory';
 
 interface GenerateBody extends GenerationAttemptInput {
   model: string;
@@ -96,7 +97,7 @@ export async function POST(request: NextRequest) {
           node_id: nodeId,
           model,
           prompt,
-          parameters: { aspectRatio, referenceCount: imageParts.length },
+          parameters: { aspectRatio, referenceCount: imageParts.length, promptSnapshot: readPromptSnapshot(body.promptSnapshot) },
           media_type: 'image',
           media_url: gcsRef,
           status: 'completed',

@@ -2,6 +2,7 @@
 
 import { currentImageModel, getGptImage26Size, type GptImageOutputFormat } from '@/lib/gptImage26';
 import { GenerationPreview } from './GenerationPreview';
+import { useGenerationHistoryPrompt } from '@/lib/useGenerationHistoryPrompt';
 
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Aperture, Download, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
@@ -77,6 +78,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   const [rowsStartTop, setRowsStartTop] = useState(220);
 
   const [localPrompt, setLocalPrompt] = useState(() => data.prompt ?? '');
+  const { restoreVersion, restoringPrompt, promptHistoryError } = useGenerationHistoryPrompt(id, setLocalPrompt);
   const isFocused = useRef(false);
   const taggableInputs = getTaggableInputs(id, storeEdges, data.inputImageUrls);
   const promptTags = syncTagsWithText(data.prompt ?? '', data.promptTags ?? [], taggableInputs);
@@ -156,13 +158,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   function navigateHistory(idx: number) {
     setHistIdx(idx);
-    const images = genHistory[idx] ?? [];
-    useFlowStore.getState().updateNodeData(id, { generatedImages: images });
-    if (images[0]) {
-      document.dispatchEvent(new CustomEvent('node:image-propagate', {
-        detail: { sourceNodeId: id, imageUrl: images[0] },
-      }));
-    }
+    restoreVersion(idx);
   }
 
   function handleModelChange(newModel: string) {
@@ -211,7 +207,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
   }
 
   function handleGenerate() {
-    if (isGenerating || !currentFlow) return;
+    if (isGenerating || restoringPrompt || !currentFlow) return;
 
     if (hasPendingInputs) {
       setTagError('A connected image is still uploading or has no media. Wait for it before generating.');
@@ -261,7 +257,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       flowId: currentFlow.id,
       flowTitle: currentFlow.title,
       nodeId: id,
-      data,
+      data: { ...data, promptTags },
       endpoint,
       payload,
       slotCount,
@@ -358,10 +354,11 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
 
   const footer = (
     <div className={glassStyles.footerStack}>
+      {(restoringPrompt || promptHistoryError) && <p className={glassStyles.microLabel} role="status">{restoringPrompt ? 'Restoring prompt…' : promptHistoryError}</p>}
       {hasPendingInputs && <p className={glassStyles.microLabel}>Waiting for connected image uploads</p>}
       <button
         onClick={handleGenerate}
-        disabled={isGenerating || hasFailure || hasPendingInputs || (data.status === 'processing' && hasPendingRequests)}
+        disabled={isGenerating || restoringPrompt || hasFailure || hasPendingInputs || (data.status === 'processing' && hasPendingRequests)}
         title={hasFailure ? 'Change the prompt or inputs, then confirm below to regenerate' : undefined}
         className={cn(
           glassStyles.glassSurface,
@@ -472,7 +469,7 @@ export function ImageGenNode({ data, selected, id }: NodeProps & { data: ImageGe
       ))}
 
       {/* ── Inline prompt ────────────────────────────────────── */}
-      {data.promptConnected ? (
+      {data.promptConnected && !data.promptHistorySource ? (
         <div
           ref={promptSectionRef}
           className={cn(

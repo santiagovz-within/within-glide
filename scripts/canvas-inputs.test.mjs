@@ -12,6 +12,7 @@ function load(path, dependencies = {}) {
   const loadedModule = { exports: {} };
   new Function('require', 'module', 'exports', outputText)(
     name => name in dependencies ? dependencies[name]
+    : name === '@/lib/generationPromptHistory' ? load('src/lib/generationPromptHistory.ts')
       : name === '@/lib/seedanceDraft' ? load('src/lib/seedanceDraft.ts') : require(name), loadedModule, loadedModule.exports,
   );
   return loadedModule.exports;

@@ -2,7 +2,7 @@
 const GENERATION_KEYS = [
   'status', 'generationRunId', 'resolvedRequestIds', 'pendingRequests', 'pendingRequestId',
   'pendingEndpoint', 'generationSlots', 'generationErrors', 'generatedImages', 'generatedAudios',
-  'generationHistory', 'videoUrl', 'videoHistory', 'videoHistoryMetadata', 'errorMessage', 'errorRequestId',
+  'generationHistory', 'generationPromptHistory', 'videoUrl', 'videoHistory', 'videoHistoryMetadata', 'errorMessage', 'errorRequestId',
 ] as const;
 
 type Data = Record<string, unknown>;

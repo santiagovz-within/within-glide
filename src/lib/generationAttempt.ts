@@ -1,6 +1,6 @@
 import type { createClient } from '@/lib/supabase/server';
 import { generationIdentity } from '@/lib/generationReconciliation';
-import type { FlowData } from '@/types';
+import type { FlowData, GenerationPromptSnapshot } from '@/types';
 
 export interface GenerationAttemptInput {
   sourceType: 'canvas' | 'chat';
@@ -9,6 +9,7 @@ export interface GenerationAttemptInput {
   generationRunId?: string;
   previousIdentity?: string;
   generationSlotCount?: number;
+  promptSnapshot?: GenerationPromptSnapshot | null;
 }
 
 /** Reserve an exact attempt before paid work starts, independently of autosave. */

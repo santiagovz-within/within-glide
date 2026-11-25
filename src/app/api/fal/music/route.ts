@@ -19,18 +19,29 @@ export async function POST(request: NextRequest) {
     try {
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('Invalid music request.');
       settings = buildMusicInput(body);
-      if (body.sourceType !== 'canvas' || !isClientId(body.sourceId) || typeof body.nodeId !== 'string'
-        || !isClientId(body.generationRunId) || typeof body.previousIdentity !== 'string') throw new Error('A saved canvas node is required.');
+      if (!isClientId(body.sourceId) || !isClientId(body.generationRunId)) throw new Error('A saved session or canvas is required.');
+      if (body.sourceType === 'canvas') {
+        if (typeof body.nodeId !== 'string' || typeof body.previousIdentity !== 'string') throw new Error('A saved canvas node is required.');
+      } else if (body.sourceType !== 'chat') {
+        throw new Error('Invalid music source.');
+      }
     } catch (error) {
       return NextResponse.json({ error: (error as Error).message }, { status: 400 });
     }
     const { model, input, duration, outputFormat } = settings;
-    const headers = await getFalStorageHeaders({ userId: user.id, sourceType: 'canvas', sourceId: body.sourceId });
+    if (body.sourceType === 'chat') {
+      const { data: session, error } = await supabase.from('chat_sessions').select('id')
+        .eq('id', body.sourceId).eq('user_id', user.id).eq('kind', 'audio').maybeSingle();
+      if (error) throw new FlowClientError('Could not verify the recording session.', 503);
+      if (!session) throw new FlowClientError('Recording session not found.', 404);
+    }
+    const headers = await getFalStorageHeaders({ userId: user.id, sourceType: body.sourceType, sourceId: body.sourceId });
     await registerGenerationAttempt(supabase, user.id, body);
     // Reserve storage before starting paid work (also catches a missing audio migration).
     const id = crypto.randomUUID();
     const { error: insertError } = await supabase.from('generations').insert({
-      id, user_id: user.id, source_type: 'canvas', source_id: body.sourceId, node_id: body.nodeId,
+      id, user_id: user.id, source_type: body.sourceType, source_id: body.sourceId,
+      node_id: body.sourceType === 'canvas' ? body.nodeId : null,
       model: model.id, prompt: input.prompt, media_type: 'audio', media_url: '', status: 'pending',
       duration_seconds: duration,
       parameters: { endpoint: model.endpoint, duration, outputFormat, slotIndex: body.slotIndex,

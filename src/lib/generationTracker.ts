@@ -2,6 +2,7 @@
 
 import type {
   GenerationFailure,
+  GenerationPromptSnapshot,
   ImageGenNodeData,
   MusicGenNodeData,
   NodeData,
@@ -14,6 +15,7 @@ import { playSuccessSound } from '@/lib/utils/sound';
 import { generationIdentity, isTerminalNode } from '@/lib/generationReconciliation';
 import { preserveImageBatch } from '@/lib/imageGenerationResults';
 import { appendVideoResult } from '@/lib/seedanceDraft';
+import { snapshotGenerationPrompt, withPromptHistoryEntry } from '@/lib/generationPromptHistory';
 import {
   generationJobId,
   type BackgroundGenerationJob,
@@ -39,6 +41,7 @@ interface VideoGenerationResponse {
 }
 
 interface RecoveredGeneration {
+  promptSnapshot?: GenerationPromptSnapshot | null;
   flowId: string;
   flowTitle: string;
   nodeId: string;
@@ -92,6 +95,7 @@ function submissionMetadata(job: BackgroundGenerationJob) {
     generationRunId: job.runId,
     previousIdentity: job.previousIdentity,
     generationSlotCount: job.slotCount,
+    promptSnapshot: job.promptSnapshot,
   };
 }
 
@@ -131,6 +135,8 @@ function initialJob(input: {
   slotCount: number;
   previousIdentity?: string;
   imageHistory?: string[][];
+  promptSnapshot?: GenerationPromptSnapshot | null;
+  generationPromptHistory?: Array<GenerationPromptSnapshot | null>;
   videoHistory?: string[];
   videoHistoryMetadata?: Array<VideoGenerationMetadata | null>;
 }): BackgroundGenerationJob {
@@ -261,12 +267,21 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
   if (job.kind === 'image-generation' || job.kind === 'music-generation') {
     const history = (currentData as ImageGenNodeData | undefined)?.generationHistory
       ?? job.imageHistory;
+    const generationHistory = preserveImageBatch(history, completedMedia);
+    const promptHistory = job.kind === 'image-generation' ? {
+      generationPromptHistory: withPromptHistoryEntry(
+        (currentData as ImageGenNodeData | undefined)?.generationPromptHistory ?? job.generationPromptHistory,
+        generationHistory.length, generationHistory !== history ? generationHistory.length - 1 : -1,
+        job.promptSnapshot,
+      ),
+    } : {};
     return failed
       ? {
           [job.kind === 'music-generation' ? 'generatedAudios' : 'generatedImages']: completedMedia,
           generationSlots: job.slots,
           generationErrors: failuresBySlot(job),
-          generationHistory: preserveImageBatch(history, completedMedia),
+          generationHistory,
+          ...promptHistory,
           status: 'error',
           errorMessage: errorMessageForJob(job),
           pendingRequests: undefined,
@@ -275,7 +290,8 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
           [job.kind === 'music-generation' ? 'generatedAudios' : 'generatedImages']: completedMedia,
           generationSlots: undefined,
           generationErrors: undefined,
-          generationHistory: preserveImageBatch(history, completedMedia),
+          generationHistory,
+          ...promptHistory,
           status: 'completed',
           errorMessage: undefined,
           pendingRequests: undefined,
@@ -295,11 +311,19 @@ function buildFinalData(job: BackgroundGenerationJob): Partial<NodeData> | null 
   if (job.kind === 'video-generation') {
     const history = (currentData as VideoGenNodeData | undefined)?.videoHistory
       ?? job.videoHistory;
+    const result = job.requests.find(request => request.status === 'completed')?.videoMetadata;
+    const versions = appendVideoResult(history,
+      (currentData as VideoGenNodeData | undefined)?.videoHistoryMetadata ?? job.videoHistoryMetadata,
+      completedMedia[0], result);
+    const resultIndex = result ? versions.videoHistoryMetadata.findIndex(entry => entry?.generationId === result.generationId)
+      : versions.videoHistory.length - 1;
     return {
       videoUrl: completedMedia[0],
-      ...appendVideoResult(history,
-        (currentData as VideoGenNodeData | undefined)?.videoHistoryMetadata ?? job.videoHistoryMetadata,
-        completedMedia[0], job.requests.find(request => request.status === 'completed')?.videoMetadata),
+      ...versions,
+      generationPromptHistory: withPromptHistoryEntry(
+        (currentData as VideoGenNodeData | undefined)?.generationPromptHistory ?? job.generationPromptHistory,
+        versions.videoHistory.length, resultIndex, job.promptSnapshot,
+      ),
       status: 'completed',
       errorMessage: undefined,
       errorRequestId: undefined,
@@ -628,6 +652,8 @@ export async function recoverBackgroundGenerations() {
             kind,
             slotCount: recoveredSlotCount,
             imageHistory: imageData.generationHistory ?? [],
+            promptSnapshot: first.promptSnapshot,
+            generationPromptHistory: imageData.generationPromptHistory,
             videoHistory: videoData.videoHistory ?? [],
             videoHistoryMetadata: videoData.videoHistoryMetadata,
           }),
@@ -639,6 +665,9 @@ export async function recoverBackgroundGenerations() {
         });
       } else if (existing.flowTitle !== first.flowTitle) {
         useGenerationStore.getState().patchJob(jobId, { flowTitle: first.flowTitle });
+      }
+      if (existing && !existing.promptSnapshot && first.promptSnapshot) {
+        useGenerationStore.getState().patchJob(jobId, { promptSnapshot: first.promptSnapshot });
       }
 
       relevantGenerations.forEach((generation, index) => {
@@ -702,6 +731,10 @@ async function startTrackedBatchGeneration(input: {
     kind: input.kind,
     slotCount: input.slotCount,
     imageHistory: input.data.generationHistory ?? [],
+    ...(input.kind === 'image-generation' ? {
+      promptSnapshot: snapshotGenerationPrompt(input.data as ImageGenNodeData),
+      generationPromptHistory: (input.data as ImageGenNodeData).generationPromptHistory,
+    } : {}),
     previousIdentity: generationIdentity(input.data),
   });
   useGenerationStore.getState().startJob(job);
@@ -780,6 +813,8 @@ export async function startTrackedVideoGeneration(input: {
   endpoint: string;
   payload: Record<string, unknown>;
   submissionUrl?: string;
+  /** Draft completion uses the saved draft's prompt, even after the editor changes. */
+  promptSnapshot?: GenerationPromptSnapshot | null;
 }) {
   // Synchronous guard also covers rapid double clicks before React re-renders.
   if (useGenerationStore.getState().jobs[generationJobId(input.flowId, input.nodeId)]) return;
@@ -792,6 +827,8 @@ export async function startTrackedVideoGeneration(input: {
     slotCount: 1,
     videoHistory: input.data.videoHistory ?? [],
     videoHistoryMetadata: input.data.videoHistoryMetadata,
+    promptSnapshot: input.promptSnapshot === undefined ? snapshotGenerationPrompt(input.data) : input.promptSnapshot,
+    generationPromptHistory: input.data.generationPromptHistory,
     previousIdentity: generationIdentity(input.data),
   });
   useGenerationStore.getState().startJob(job);
